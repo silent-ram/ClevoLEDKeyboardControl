@@ -63,7 +63,7 @@ public sealed class KeyboardSettings
             Effect.Color = StaticColor;
         }
 
-        if (Effect.Type == EffectType.Rainbow)
+        if (migrateLegacyMode && Effect.Type == EffectType.Rainbow)
         {
             Effect.Step = RainbowStep;
             Effect.IntervalMs = RefreshIntervalMs;
