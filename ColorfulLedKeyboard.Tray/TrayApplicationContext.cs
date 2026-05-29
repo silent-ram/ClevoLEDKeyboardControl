@@ -8,7 +8,13 @@ namespace ColorfulLedKeyboard.Tray;
 public sealed class TrayApplicationContext : ApplicationContext
 {
     private readonly SettingsStore _settingsStore;
+    private readonly UpdateChecker _updateChecker = new();
+    private readonly TypingPulseHook _typingPulseHook = new();
     private readonly NotifyIcon _notifyIcon;
+    private readonly System.Windows.Forms.Timer _foregroundTimer = new() { Interval = 1000 };
+    private string? _balloonReleaseUrl;
+    private string? _lastForegroundProcess;
+    private DateTimeOffset _lastForegroundStateSaved = DateTimeOffset.MinValue;
     private KeyboardSettings _settings;
 
     public TrayApplicationContext(SettingsStore settingsStore)
@@ -25,6 +31,12 @@ public sealed class TrayApplicationContext : ApplicationContext
         };
 
         _notifyIcon.DoubleClick += (_, _) => PickStaticColor();
+        _notifyIcon.BalloonTipClicked += (_, _) => OpenBalloonRelease();
+        _foregroundTimer.Tick += (_, _) => UpdateForegroundAppState();
+        _foregroundTimer.Start();
+        _typingPulseHook.SetEnabled(_settings.TypingPulse.Enabled);
+        UpdateForegroundAppState();
+        _ = CheckForUpdatesOnStartupAsync();
     }
 
     protected override void Dispose(bool disposing)
@@ -33,6 +45,9 @@ public sealed class TrayApplicationContext : ApplicationContext
         {
             _notifyIcon.Visible = false;
             _notifyIcon.Dispose();
+            _foregroundTimer.Stop();
+            _foregroundTimer.Dispose();
+            _typingPulseHook.Dispose();
         }
 
         base.Dispose(disposing);
@@ -63,6 +78,16 @@ public sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add(settingsItem);
 
         menu.Items.Add(BuildServiceMenu());
+        menu.Items.Add(BuildExperimentalMenu());
+
+        var update = new ToolStripMenuItem("检查更新");
+        update.Click += async (_, _) => await CheckForUpdatesManuallyAsync();
+        menu.Items.Add(update);
+
+        var about = new ToolStripMenuItem("关于...");
+        about.Click += (_, _) => OpenAbout();
+        menu.Items.Add(about);
+
         menu.Items.Add(new ToolStripSeparator());
 
         var exit = new ToolStripMenuItem("退出托盘");
@@ -141,6 +166,12 @@ public sealed class TrayApplicationContext : ApplicationContext
     private ToolStripMenuItem BuildBrightnessMenu()
     {
         var brightness = new ToolStripMenuItem($"亮度 ({_settings.Brightness}%)");
+        if (_settings.Effect.Type == EffectType.Music || _settings.TypingPulse.Enabled)
+        {
+            brightness.Enabled = false;
+            brightness.Text = "亮度 (由当前模式控制)";
+        }
+
         foreach (var value in new[] { 25, 50, 75, 100 })
         {
             var item = new ToolStripMenuItem($"{value}%")
@@ -198,6 +229,17 @@ public sealed class TrayApplicationContext : ApplicationContext
         service.DropDownItems.Add(restart);
         service.DropDownItems.Add(folder);
         return service;
+    }
+
+    private ToolStripMenuItem BuildExperimentalMenu()
+    {
+        var experimental = new ToolStripMenuItem("实验性功能");
+
+        var zoneTest = new ToolStripMenuItem("分区控制测试");
+        zoneTest.Click += (_, _) => RunZoneTest();
+
+        experimental.DropDownItems.Add(zoneTest);
+        return experimental;
     }
 
     private void AddSpeedItem(ToolStripMenuItem parent, string label, int step, int intervalMs)
@@ -278,6 +320,105 @@ public sealed class TrayApplicationContext : ApplicationContext
         RefreshMenu();
     }
 
+    private static void OpenAbout()
+    {
+        using var form = new AboutForm();
+        form.ShowDialog();
+    }
+
+    private void UpdateForegroundAppState()
+    {
+        var processName = ForegroundWindowProcessName.GetName();
+        if (string.IsNullOrWhiteSpace(processName) ||
+            (string.Equals(processName, _lastForegroundProcess, StringComparison.OrdinalIgnoreCase) &&
+             DateTimeOffset.UtcNow - _lastForegroundStateSaved < TimeSpan.FromSeconds(3)))
+        {
+            return;
+        }
+
+        _lastForegroundProcess = processName;
+        ForegroundAppState.Save(processName);
+        _lastForegroundStateSaved = DateTimeOffset.UtcNow;
+    }
+
+    private async Task CheckForUpdatesOnStartupAsync()
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(5));
+            var interval = _settingsStore.Load().Update.CheckInterval;
+            var result = await _updateChecker.CheckAsync(force: false, interval);
+            if (result.Status == UpdateCheckStatus.Available)
+            {
+                ShowUpdateAvailable(result, passive: true);
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private async Task CheckForUpdatesManuallyAsync()
+    {
+        try
+        {
+            var result = await _updateChecker.CheckAsync(force: true, UpdateCheckInterval.Daily);
+            if (result.Status == UpdateCheckStatus.Available)
+            {
+                ShowUpdateAvailable(result, passive: false);
+                return;
+            }
+
+            MessageBox.Show(
+                $"当前已是最新版本。\n\n当前版本：{result.CurrentVersion.ToString(3)}",
+                "ClevoRGBControl",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        {
+            MessageBox.Show(
+                $"检查更新失败：{ex.Message}",
+                "ClevoRGBControl",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
+    }
+
+    private void ShowUpdateAvailable(UpdateCheckResult result, bool passive)
+    {
+        var latest = result.LatestVersion?.ToString(3) ?? "未知";
+        if (passive)
+        {
+            _balloonReleaseUrl = result.ReleaseUrl;
+            _notifyIcon.BalloonTipTitle = "ClevoRGBControl 有新版本";
+            _notifyIcon.BalloonTipText = $"最新版本：{latest}。点击这里打开下载页面。";
+            _notifyIcon.ShowBalloonTip(8000);
+            return;
+        }
+
+        var choice = MessageBox.Show(
+            $"发现新版本：{latest}\n当前版本：{result.CurrentVersion.ToString(3)}\n\n是否打开下载页面？",
+            "ClevoRGBControl",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Information);
+
+        if (choice == DialogResult.Yes)
+        {
+            UpdateChecker.OpenReleases();
+        }
+    }
+
+    private void OpenBalloonRelease()
+    {
+        if (string.IsNullOrWhiteSpace(_balloonReleaseUrl))
+        {
+            return;
+        }
+
+        UpdateChecker.OpenUrl(_balloonReleaseUrl);
+    }
+
     private void ApplyEffect(Action<KeyboardSettings> update)
     {
         if (TryUpdateSettings(update))
@@ -293,6 +434,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             _settings = _settingsStore.Load();
             update(_settings);
             _settingsStore.Save(_settings);
+            _typingPulseHook.SetEnabled(_settings.TypingPulse.Enabled);
             return true;
         }
         catch (UnauthorizedAccessException)
@@ -314,6 +456,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     private void RefreshMenu()
     {
         _settings = _settingsStore.Load();
+        _typingPulseHook.SetEnabled(_settings.TypingPulse.Enabled);
         var oldMenu = _notifyIcon.ContextMenuStrip;
         _notifyIcon.ContextMenuStrip = BuildMenu();
         oldMenu?.Dispose();
@@ -372,6 +515,43 @@ public sealed class TrayApplicationContext : ApplicationContext
         {
             MessageBox.Show(
                 $"需要管理员权限重启服务：{ex.Message}",
+                "ClevoRGBControl",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
+    }
+
+    private static void RunZoneTest()
+    {
+        var exe = Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "Experimental",
+            "ColorfulLedKeyboard.ZoneTest.exe");
+        exe = Path.GetFullPath(exe);
+
+        if (!File.Exists(exe))
+        {
+            MessageBox.Show(
+                $"找不到实验性工具：{exe}",
+                "ClevoRGBControl",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(exe)
+            {
+                UseShellExecute = true,
+                WorkingDirectory = Path.GetDirectoryName(exe)
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"无法启动分区控制测试：{ex.Message}",
                 "ClevoRGBControl",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Warning);

@@ -31,7 +31,8 @@ public sealed class LightingFrameGenerator
     private RgbColor Rainbow(double elapsedMs)
     {
         var degreesPerSecond = Math.Clamp(_settings.Effect.Step, 1, 20) * 9;
-        var hue = elapsedMs / 1000d * degreesPerSecond;
+        var absoluteSeconds = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000d;
+        var hue = absoluteSeconds * degreesPerSecond;
         return RgbColor.FromHsv(hue, 1, 1);
     }
 

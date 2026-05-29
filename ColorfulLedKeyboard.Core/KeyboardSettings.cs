@@ -20,6 +20,12 @@ public sealed class KeyboardSettings
 
     public ScheduleSettings Schedule { get; set; } = new();
 
+    public AppProfileSettings AppProfiles { get; set; } = new();
+
+    public TypingPulseSettings TypingPulse { get; set; } = new();
+
+    public UpdateSettings Update { get; set; } = new();
+
     public KeyboardSettings Normalize(bool migrateLegacyMode = false)
     {
         Brightness = Math.Clamp(Brightness, 0, 100);
@@ -74,6 +80,12 @@ public sealed class KeyboardSettings
         IdleDim.Normalize();
         Schedule ??= new ScheduleSettings();
         Schedule.Normalize();
+        AppProfiles ??= new AppProfileSettings();
+        AppProfiles.Normalize();
+        TypingPulse ??= new TypingPulseSettings();
+        TypingPulse.Normalize();
+        Update ??= new UpdateSettings();
+        Update.Normalize();
         Mode = Effect.Type switch
         {
             EffectType.Static => KeyboardMode.Static,
@@ -122,6 +134,33 @@ public sealed class KeyboardSettings
                     Brightness = rule.Brightness,
                     Effect = CloneEffect(rule.Effect)
                 }).ToList()
+            },
+            AppProfiles = new AppProfileSettings
+            {
+                Enabled = AppProfiles.Enabled,
+                Rules = AppProfiles.Rules.Select(rule => new AppProfileRule
+                {
+                    Name = rule.Name,
+                    ProcessName = rule.ProcessName,
+                    Enabled = rule.Enabled,
+                    AutoColorEnabled = rule.AutoColorEnabled,
+                    IconColor = rule.IconColor,
+                    Brightness = rule.Brightness,
+                    TargetEffect = rule.TargetEffect,
+                    ManualColor = rule.ManualColor
+                }).ToList()
+            },
+            TypingPulse = new TypingPulseSettings
+            {
+                Enabled = TypingPulse.Enabled,
+                BaseBrightness = TypingPulse.BaseBrightness,
+                PeakBrightness = TypingPulse.PeakBrightness,
+                HoldMs = TypingPulse.HoldMs,
+                FadeMs = TypingPulse.FadeMs
+            },
+            Update = new UpdateSettings
+            {
+                CheckInterval = Update.CheckInterval
             }
         }.Normalize();
     }
@@ -140,6 +179,8 @@ public sealed class KeyboardSettings
             Music = new MusicSettings
             {
                 LevelColorEnabled = effect.Music.LevelColorEnabled,
+                PresetName = effect.Music.PresetName,
+                ResponseMode = effect.Music.ResponseMode,
                 LowColor = effect.Music.LowColor,
                 HighColor = effect.Music.HighColor,
                 Sensitivity = effect.Music.Sensitivity,
@@ -147,7 +188,26 @@ public sealed class KeyboardSettings
                 ReleaseMs = effect.Music.ReleaseMs,
                 BaseBrightness = effect.Music.BaseBrightness,
                 PeakBrightness = effect.Music.PeakBrightness,
-                IntervalMs = effect.Music.IntervalMs
+                IntervalMs = effect.Music.IntervalMs,
+                NoiseGate = effect.Music.NoiseGate,
+                BeatThreshold = effect.Music.BeatThreshold,
+                PeakHoldMs = effect.Music.PeakHoldMs,
+                CustomPresets = effect.Music.CustomPresets.Select(preset => new MusicPreset
+                {
+                    Name = preset.Name,
+                    ResponseMode = preset.ResponseMode,
+                    LowColor = preset.LowColor,
+                    HighColor = preset.HighColor,
+                    Sensitivity = preset.Sensitivity,
+                    AttackMs = preset.AttackMs,
+                    ReleaseMs = preset.ReleaseMs,
+                    BaseBrightness = preset.BaseBrightness,
+                    PeakBrightness = preset.PeakBrightness,
+                    IntervalMs = preset.IntervalMs,
+                    NoiseGate = preset.NoiseGate,
+                    BeatThreshold = preset.BeatThreshold,
+                    PeakHoldMs = preset.PeakHoldMs
+                }).ToList()
             },
             Sequence = effect.Sequence.Select(item => new SequenceColor
             {

@@ -86,7 +86,7 @@ public class Worker : BackgroundService
                 }
             }
 
-            var color = generator.Next();
+            var color = ApplyTypingPulse(generator.Next(), settings);
             if (color != lastColor)
             {
                 _device.SetAllZones(color);
@@ -95,6 +95,12 @@ public class Worker : BackgroundService
 
             if (settings.Effect.Type is EffectType.Static or EffectType.Off)
             {
+                if (settings.Effect.Type == EffectType.Static && settings.TypingPulse.Enabled)
+                {
+                    await Task.Delay(40, stoppingToken);
+                    continue;
+                }
+
                 await WaitForSettingsChangeAsync(1000, stoppingToken);
                 _settingsChanged = true;
                 return;
@@ -127,9 +133,12 @@ public class Worker : BackgroundService
             }
 
             var level = _audioLevelMeter.GetPeakLevel();
-            var brightness = controller.NextBrightness(music, level);
-            var sourceColor = music.LevelColorEnabled
-                ? RgbColor.Lerp(lowColor, highColor, Math.Clamp(level * music.Sensitivity, 0, 1))
+            var envelope = controller.NextEnvelope(music, level);
+            var musicBrightness = music.BaseBrightness +
+                (music.PeakBrightness - music.BaseBrightness) * Math.Pow(envelope, 0.65);
+            var brightness = ApplyTypingPulseBrightness((int)Math.Round(musicBrightness), settings);
+            var sourceColor = music.ResponseMode == MusicResponseMode.LevelColor
+                ? RgbColor.Lerp(lowColor, highColor, envelope)
                 : baseColor;
             var color = sourceColor.Scale(brightness);
 
@@ -153,10 +162,66 @@ public class Worker : BackgroundService
         return RgbColor.FromHex(settings.StaticColor);
     }
 
+    private static RgbColor ApplyTypingPulse(RgbColor color, KeyboardSettings settings)
+    {
+        var target = ApplyTypingPulseBrightness(settings.Brightness, settings);
+        if (target <= settings.Brightness)
+        {
+            return color;
+        }
+
+        return ScaleBrightnessRatio(color, settings.Brightness, target);
+    }
+
+    private static int ApplyTypingPulseBrightness(int currentBrightness, KeyboardSettings settings)
+    {
+        var pulse = settings.TypingPulse.Normalize();
+        if (!pulse.Enabled)
+        {
+            return currentBrightness;
+        }
+
+        var state = TypingPulseState.Load();
+        if (state is null)
+        {
+            return currentBrightness;
+        }
+
+        var elapsedMs = (DateTimeOffset.UtcNow - state.LastKeyUtc).TotalMilliseconds;
+        if (elapsedMs < 0 || elapsedMs > pulse.HoldMs + pulse.FadeMs)
+        {
+            return currentBrightness;
+        }
+
+        var pulseBrightness = pulse.PeakBrightness;
+        if (elapsedMs > pulse.HoldMs)
+        {
+            var progress = Math.Clamp((elapsedMs - pulse.HoldMs) / Math.Max(1, pulse.FadeMs), 0, 1);
+            pulseBrightness = (int)Math.Round(pulse.PeakBrightness - (pulse.PeakBrightness - pulse.BaseBrightness) * progress);
+        }
+
+        return Math.Max(currentBrightness, pulseBrightness);
+    }
+
+    private static RgbColor ScaleBrightnessRatio(RgbColor color, int fromBrightness, int toBrightness)
+    {
+        if (fromBrightness <= 0)
+        {
+            return color;
+        }
+
+        var ratio = Math.Clamp(toBrightness, 0, 100) / (double)Math.Clamp(fromBrightness, 1, 100);
+        return new RgbColor(
+            (byte)Math.Clamp(Math.Round(color.R * ratio), 0, 255),
+            (byte)Math.Clamp(Math.Round(color.G * ratio), 0, 255),
+            (byte)Math.Clamp(Math.Round(color.B * ratio), 0, 255));
+    }
+
     private static KeyboardSettings BuildRuntimeSettings(KeyboardSettings settings)
     {
         var runtime = settings.CloneForRuntime();
         ApplySchedule(runtime);
+        ApplyAppProfiles(runtime);
         ApplyIdleDim(runtime);
         return runtime.Normalize();
     }
@@ -173,12 +238,50 @@ public class Worker : BackgroundService
             next.Effect.PeriodMs != current.Effect.PeriodMs ||
             next.Effect.MinimumBrightness != current.Effect.MinimumBrightness ||
             next.Effect.HardBlink != current.Effect.HardBlink ||
+            !MusicEquals(next.Effect.Music, current.Effect.Music) ||
             next.Effect.Sequence.Count != current.Effect.Sequence.Count ||
             next.Effect.Sequence.Zip(current.Effect.Sequence).Any(pair =>
                 pair.First.Color != pair.Second.Color ||
                 pair.First.HoldMs != pair.Second.HoldMs ||
                 pair.First.TransitionMs != pair.Second.TransitionMs ||
                 pair.First.Breathing != pair.Second.Breathing);
+    }
+
+    private static bool MusicEquals(MusicSettings left, MusicSettings right)
+    {
+        return left.LevelColorEnabled == right.LevelColorEnabled &&
+            left.PresetName == right.PresetName &&
+            left.ResponseMode == right.ResponseMode &&
+            left.LowColor == right.LowColor &&
+            left.HighColor == right.HighColor &&
+            Math.Abs(left.Sensitivity - right.Sensitivity) < 0.001 &&
+            left.AttackMs == right.AttackMs &&
+            left.ReleaseMs == right.ReleaseMs &&
+            left.BaseBrightness == right.BaseBrightness &&
+            left.PeakBrightness == right.PeakBrightness &&
+            left.IntervalMs == right.IntervalMs &&
+            Math.Abs(left.NoiseGate - right.NoiseGate) < 0.001 &&
+            Math.Abs(left.BeatThreshold - right.BeatThreshold) < 0.001 &&
+            left.PeakHoldMs == right.PeakHoldMs &&
+            left.CustomPresets.Count == right.CustomPresets.Count &&
+            left.CustomPresets.Zip(right.CustomPresets).All(pair => MusicPresetEquals(pair.First, pair.Second));
+    }
+
+    private static bool MusicPresetEquals(MusicPreset left, MusicPreset right)
+    {
+        return left.Name == right.Name &&
+            left.ResponseMode == right.ResponseMode &&
+            left.LowColor == right.LowColor &&
+            left.HighColor == right.HighColor &&
+            Math.Abs(left.Sensitivity - right.Sensitivity) < 0.001 &&
+            left.AttackMs == right.AttackMs &&
+            left.ReleaseMs == right.ReleaseMs &&
+            left.BaseBrightness == right.BaseBrightness &&
+            left.PeakBrightness == right.PeakBrightness &&
+            left.IntervalMs == right.IntervalMs &&
+            Math.Abs(left.NoiseGate - right.NoiseGate) < 0.001 &&
+            Math.Abs(left.BeatThreshold - right.BeatThreshold) < 0.001 &&
+            left.PeakHoldMs == right.PeakHoldMs;
     }
 
     private async Task FlashStartupAsync(CancellationToken stoppingToken)
@@ -218,6 +321,36 @@ public class Worker : BackgroundService
         settings.Effect = rule.Effect;
     }
 
+    private static void ApplyAppProfiles(KeyboardSettings settings)
+    {
+        if (!settings.AppProfiles.Enabled || settings.AppProfiles.Rules.Count == 0)
+        {
+            return;
+        }
+
+        var foreground = ForegroundAppState.Load();
+        if (foreground is null || DateTimeOffset.UtcNow - foreground.UpdatedUtc > TimeSpan.FromSeconds(10))
+        {
+            return;
+        }
+
+        var processName = foreground.ProcessName;
+        if (string.IsNullOrWhiteSpace(processName))
+        {
+            return;
+        }
+
+        var rule = settings.AppProfiles.Rules.FirstOrDefault(item => item.Matches(processName));
+        if (rule is null)
+        {
+            return;
+        }
+
+        settings.Enabled = true;
+        settings.Brightness = rule.Brightness;
+        settings.Effect = rule.BuildEffect();
+    }
+
     private static void ApplyIdleDim(KeyboardSettings settings)
     {
         if (!settings.IdleDim.Enabled)
@@ -242,16 +375,24 @@ public class Worker : BackgroundService
     private void EnsureConfigWatcher()
     {
         Directory.CreateDirectory(AppPaths.ProgramDataDirectory);
-        _watcher = new FileSystemWatcher(AppPaths.ProgramDataDirectory, AppPaths.SettingsFileName)
+        _watcher = new FileSystemWatcher(AppPaths.ProgramDataDirectory)
         {
             NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.CreationTime | NotifyFilters.Size | NotifyFilters.FileName,
             EnableRaisingEvents = true
         };
 
-        _watcher.Changed += (_, _) => _settingsChanged = true;
-        _watcher.Created += (_, _) => _settingsChanged = true;
-        _watcher.Deleted += (_, _) => _settingsChanged = true;
-        _watcher.Renamed += (_, _) => _settingsChanged = true;
+        _watcher.Changed += (_, args) => MarkSettingsChanged(args.Name);
+        _watcher.Created += (_, args) => MarkSettingsChanged(args.Name);
+        _watcher.Deleted += (_, args) => MarkSettingsChanged(args.Name);
+        _watcher.Renamed += (_, args) => MarkSettingsChanged(args.Name);
+    }
+
+    private void MarkSettingsChanged(string? fileName)
+    {
+        if (string.Equals(fileName, AppPaths.SettingsFileName, StringComparison.OrdinalIgnoreCase))
+        {
+            _settingsChanged = true;
+        }
     }
 
     private async Task WaitForSettingsChangeAsync(int pollIntervalMs, CancellationToken stoppingToken)

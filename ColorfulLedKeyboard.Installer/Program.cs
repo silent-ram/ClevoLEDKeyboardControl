@@ -17,6 +17,7 @@ internal static class Program
     private const string PayloadResourceName = "payload.zip";
     private const string UninstallKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\ClevoRGBControl";
     private const string LegacyUninstallKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\ColorfulLedKeyboard";
+    private const string DriverDllName = "InsydeDCHU.dll";
 
     private static readonly string InstallDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
@@ -24,8 +25,13 @@ internal static class Program
 
     private static readonly string ServiceDirectory = Path.Combine(InstallDirectory, "Service");
     private static readonly string TrayDirectory = Path.Combine(InstallDirectory, "Tray");
+    private static readonly string ExperimentalDirectory = Path.Combine(InstallDirectory, "Experimental");
     private static readonly string ServiceExe = Path.Combine(ServiceDirectory, "ColorfulLedKeyboard.Service.exe");
     private static readonly string TrayExe = Path.Combine(TrayDirectory, "ColorfulLedKeyboard.Tray.exe");
+    private static readonly string ControlCenterDriverPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+        "ControlCenter",
+        DriverDllName);
     private static readonly string ProgramDataDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
         "ClevoRGBControl");
@@ -70,7 +76,7 @@ internal static class Program
             }
 
             Install();
-            Show($"{AppName} has been installed.\n\nCopy InsydeDCHU.dll to:\n{ServiceDirectory}\n\nThe tray app will start automatically for the current user.");
+            Show(BuildInstallSuccessMessage());
             return 0;
         }
         catch (Exception ex)
@@ -87,6 +93,7 @@ internal static class Program
         Directory.CreateDirectory(InstallDirectory);
         ExtractPayload();
         EnsureProgramDataPermissions();
+        TryInstallDriverDll();
 
         if (!File.Exists(ServiceExe))
         {
@@ -100,6 +107,47 @@ internal static class Program
         AddTrayStartup();
         RegisterUninstaller();
         StartTray();
+    }
+
+    private static bool TryInstallDriverDll()
+    {
+        var serviceDestination = Path.Combine(ServiceDirectory, DriverDllName);
+        if (File.Exists(ControlCenterDriverPath))
+        {
+            Directory.CreateDirectory(ServiceDirectory);
+            File.Copy(ControlCenterDriverPath, serviceDestination, overwrite: true);
+            CopyDriverToExperimental(serviceDestination);
+            return true;
+        }
+
+        if (File.Exists(serviceDestination))
+        {
+            CopyDriverToExperimental(serviceDestination);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static void CopyDriverToExperimental(string sourcePath)
+    {
+        if (!Directory.Exists(ExperimentalDirectory) || !File.Exists(sourcePath))
+        {
+            return;
+        }
+
+        File.Copy(sourcePath, Path.Combine(ExperimentalDirectory, DriverDllName), overwrite: true);
+    }
+
+    private static string BuildInstallSuccessMessage()
+    {
+        var destination = Path.Combine(ServiceDirectory, DriverDllName);
+        if (File.Exists(destination))
+        {
+            return $"{AppName} has been installed.\n\n{DriverDllName} was installed automatically.\n\nThe tray app will start automatically for the current user.";
+        }
+
+        return $"{AppName} has been installed.\n\n{DriverDllName} was not found in:\n{Path.GetDirectoryName(ControlCenterDriverPath)}\n\nPlease copy {DriverDllName} to:\n{ServiceDirectory}\n\nThe tray app will start automatically for the current user.";
     }
 
     private static void Uninstall()
@@ -199,7 +247,7 @@ internal static class Program
             ?? throw new InvalidOperationException("Failed to create uninstall registry key.");
 
         key.SetValue("DisplayName", AppName);
-        key.SetValue("DisplayVersion", "1.0.0");
+        key.SetValue("DisplayVersion", Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.1");
         key.SetValue("Publisher", "ClevoRGBControl");
         key.SetValue("InstallLocation", InstallDirectory);
         key.SetValue("DisplayIcon", setupPath);
