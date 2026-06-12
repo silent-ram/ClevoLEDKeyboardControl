@@ -30,6 +30,7 @@ public sealed class DchuKeyboardDevice
     /// <summary>
     /// 9-bit 三通道紧致颜色编码，每通道取最高 3 bit。
     /// 位字段排布：bit 0..2 = R 高 3 bit，bit 3..5 = G 高 3 bit，bit 6..8 = B 高 3 bit。
+    /// 返回值始终在 [0, 0x1FF] 范围内（9 位有效），SetColor 内部依赖此契约省略掩码。
     /// 推导自 DSDT 的 SCMD 0x67 Local0 还原算法，详见 dchu-protocol-findings.md。
     /// </summary>
     internal static int Pack9BitColor(RgbColor color)
