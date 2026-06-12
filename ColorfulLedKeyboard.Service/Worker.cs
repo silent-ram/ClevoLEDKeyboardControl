@@ -69,7 +69,7 @@ public class Worker : BackgroundService
     {
         try
         {
-            _device.SetAllZones(RgbColor.Black);
+            _device.SetColor(RgbColor.Black);
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or SEHException)
         {
@@ -105,7 +105,7 @@ public class Worker : BackgroundService
             var color = ApplyNotificationFlash(generator.Next(brightness), settings);
             if (color != lastColor)
             {
-                _device.SetAllZones(color);
+                _device.SetColor(color);
                 lastColor = color;
             }
 
@@ -168,7 +168,7 @@ public class Worker : BackgroundService
 
             if (color != lastColor)
             {
-                _device.SetAllZones(color);
+                _device.SetColor(color);
                 lastColor = color;
             }
 
@@ -335,9 +335,9 @@ public class Worker : BackgroundService
         {
             for (var i = 0; i < 2; i++)
             {
-                _device.SetAllZones(new RgbColor(255, 255, 255));
+                _device.SetColor(new RgbColor(255, 255, 255));
                 await Task.Delay(120, stoppingToken);
-                _device.SetAllZones(RgbColor.Black);
+                _device.SetColor(RgbColor.Black);
                 await Task.Delay(120, stoppingToken);
             }
         }
