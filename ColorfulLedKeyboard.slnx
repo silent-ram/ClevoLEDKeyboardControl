@@ -4,5 +4,4 @@
   <Project Path="ColorfulLedKeyboard.Service/ColorfulLedKeyboard.Service.csproj" />
   <Project Path="ColorfulLedKeyboard.Tests/ColorfulLedKeyboard.Tests.csproj" />
   <Project Path="ColorfulLedKeyboard.Tray/ColorfulLedKeyboard.Tray.csproj" />
-  <Project Path="ColorfulLedKeyboard.ZoneTest/ColorfulLedKeyboard.ZoneTest.csproj" />
 </Solution>
