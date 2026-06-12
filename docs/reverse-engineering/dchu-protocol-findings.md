@@ -1,7 +1,7 @@
 # DCHU 协议反向工程结果（P955ET1）
 
 > 日期：2026-06-12  
-> 数据源：本机 `HKLM\HARDWARE\ACPI\DSDT/SSD*`、`InsydeDCHU.dll`、`DCHUService.exe`、ZoneTest 实机观察
+> 数据源：本机 `HKLM\HARDWARE\ACPI\DSDT/SSD*`、`InsydeDCHU.dll`、`DCHUService.exe`、伪 zone 工具实机观察（该工具已于本次重构中删除，实测结论见第八节）
 
 ## 一、传输栈
 
