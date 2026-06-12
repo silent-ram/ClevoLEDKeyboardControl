@@ -313,15 +313,17 @@ public sealed class CoreSettingsTests
     }
 
     [Fact]
-    public void AppProfileRule_Normalize_AllowsMusicMode()
+    public void AppProfileRule_Normalize_RejectsMusicAndUnsupportedEffects()
     {
+        // Music 已不再是合法的 TargetEffect（由 OperatingMode 表达）。
+        // 任何非 Static/Breathing 的 TargetEffect 都应被规范化回 Static。
         var rule = new AppProfileRule
         {
             ProcessName = "Spotify.exe",
-            TargetEffect = EffectType.Music
+            TargetEffect = (EffectType)5
         }.Normalize();
 
-        Assert.Equal(EffectType.Music, rule.TargetEffect);
+        Assert.Equal(EffectType.Static, rule.TargetEffect);
     }
 
     [Fact]
@@ -526,9 +528,10 @@ public sealed class CoreSettingsTests
         var settings = new KeyboardSettings
         {
             Brightness = 70,
+            OperatingMode = OperatingMode.Music,
             Effect = new LightingEffectSettings
             {
-                Type = EffectType.Music,
+                Type = EffectType.Static,
                 Music = new MusicSettings
                 {
                     BaseBrightness = 5,
@@ -546,9 +549,10 @@ public sealed class CoreSettingsTests
     {
         var settings = new KeyboardSettings
         {
+            OperatingMode = OperatingMode.Music,
             Effect = new LightingEffectSettings
             {
-                Type = EffectType.Music,
+                Type = EffectType.Static,
                 CustomSequenceColorsEnabled = true,
                 Music = new MusicSettings
                 {
