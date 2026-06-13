@@ -843,9 +843,10 @@ public sealed class SettingsForm : Form
 
     private void UpdateEffectConfigurationVisibility()
     {
+        var off = _modeOff.Checked;
         var effect = SelectedEffectType(EffectType.Rainbow);
-        var singleColor = effect is EffectType.Static or EffectType.Breathing;
-        var sequenceVisible = effect is EffectType.Rainbow or EffectType.Sequence or EffectType.Pulse or EffectType.Heartbeat;
+        var singleColor = !off && (effect is EffectType.Static or EffectType.Breathing);
+        var sequenceVisible = !off && (effect is EffectType.Rainbow or EffectType.Sequence or EffectType.Pulse or EffectType.Heartbeat);
 
         _effectColor.Visible = singleColor;
         if (_speedRow is not null)
@@ -860,11 +861,11 @@ public sealed class SettingsForm : Form
             EffectType.Heartbeat => "心跳周期",
             _ => "呼吸周期"
         };
-        _period.Visible = effect is EffectType.Rainbow or EffectType.Breathing or EffectType.Sequence or EffectType.Pulse or EffectType.Heartbeat;
-        _minimumBrightness.Visible = effect == EffectType.Breathing;
+        _period.Visible = !off && (effect is EffectType.Rainbow or EffectType.Breathing or EffectType.Sequence or EffectType.Pulse or EffectType.Heartbeat);
+        _minimumBrightness.Visible = !off && effect == EffectType.Breathing;
         if (_hardBlinkRow is not null)
         {
-            _hardBlinkRow.Visible = effect == EffectType.Breathing;
+            _hardBlinkRow.Visible = !off && effect == EffectType.Breathing;
         }
 
         if (_sequenceSection is not null)
@@ -886,7 +887,7 @@ public sealed class SettingsForm : Form
         }
 
         _sequence.Visible = sequenceVisible;
-        var presetVisible = effect is EffectType.Static or EffectType.Rainbow or EffectType.Breathing or EffectType.Sequence or EffectType.Pulse or EffectType.Heartbeat;
+        var presetVisible = !off && (effect is EffectType.Static or EffectType.Rainbow or EffectType.Breathing or EffectType.Sequence or EffectType.Pulse or EffectType.Heartbeat);
         if (_effectPresetSection is not null)
         {
             _effectPresetSection.Visible = presetVisible;
@@ -909,8 +910,21 @@ public sealed class SettingsForm : Form
 
         if (_modeHint is not null)
         {
-            _modeHint.Visible = _modeOff.Checked;
-            _modeHint.Text = _modeOff.Checked ? "关闭模式不会显示灯效参数。" : "";
+            if (off)
+            {
+                _modeHint.Visible = true;
+                _modeHint.Text = "关闭模式不会显示灯效参数。";
+            }
+            else if (_modeMusic.Checked)
+            {
+                _modeHint.Visible = true;
+                _modeHint.Text = "音乐模式由音乐页配置，灯效参数已禁用。";
+            }
+            else
+            {
+                _modeHint.Visible = false;
+                _modeHint.Text = "";
+            }
         }
     }
 
@@ -1993,7 +2007,7 @@ public sealed class SettingsForm : Form
     {
         if (_loadingSettings) return;
         UpdateModeAvailability();
-
+        UpdateEffectConfigurationVisibility();
         if (_modeMusic.Checked)
         {
             // 切到音乐模式：自动跳到"音乐"导航页
