@@ -26,6 +26,8 @@ public sealed class TrayApplicationContext : ApplicationContext
         _settings = _settingsStore.Load();
         _notificationFlashMonitor = new NotificationFlashMonitor(_settingsStore);
 
+        EnsureServiceRunning();
+
         _notifyIcon = new NotifyIcon
         {
             Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? SystemIcons.Application,
@@ -68,18 +70,9 @@ public sealed class TrayApplicationContext : ApplicationContext
     {
         var menu = new ContextMenuStrip();
 
-        var enabled = new ToolStripMenuItem("启用灯效") { Checked = _settings.Enabled };
-        enabled.Click += (_, _) =>
-        {
-            if (TryUpdateSettings(settings => settings.Enabled = !settings.Enabled, rememberCurrent: false))
-            {
-                RefreshMenu();
-            }
-        };
-
-        menu.Items.Add(enabled);
         menu.Items.Add(BuildEffectMenu());
         menu.Items.Add(BuildMusicModeMenu());
+        menu.Items.Add(BuildOffMenuItem());
         menu.Items.Add(BuildBrightnessMenu());
         menu.Items.Add(new ToolStripSeparator());
 
@@ -99,8 +92,8 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         menu.Items.Add(new ToolStripSeparator());
 
-        var exit = new ToolStripMenuItem("退出托盘");
-        exit.Click += (_, _) => ExitThread();
+        var exit = new ToolStripMenuItem("退出");
+        exit.Click += (_, _) => ExitApplication();
         menu.Items.Add(exit);
 
         return menu;
@@ -110,7 +103,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     {
         var effect = new ToolStripMenuItem("效果")
         {
-            Checked = _settings.OperatingMode == OperatingMode.Lighting
+            Checked = _settings.Enabled && _settings.OperatingMode == OperatingMode.Lighting
         };
 
         AddEffectPresetMenu(effect, EffectType.Static, "固定颜色");
@@ -127,7 +120,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     {
         var music = new ToolStripMenuItem("音乐模式")
         {
-            Checked = _settings.OperatingMode == OperatingMode.Music
+            Checked = _settings.Enabled && _settings.OperatingMode == OperatingMode.Music
         };
 
         foreach (var preset in MusicSettings.BuiltInPresets.Concat(_settings.Effect.Music.CustomPresets))
@@ -135,7 +128,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             var presetCopy = CloneMusicPreset(preset);
             var item = new ToolStripMenuItem(presetCopy.Name)
             {
-                Checked = _settings.OperatingMode == OperatingMode.Music &&
+                Checked = _settings.Enabled && _settings.OperatingMode == OperatingMode.Music &&
                     string.Equals(_settings.Effect.Music.PresetName, presetCopy.Name, StringComparison.OrdinalIgnoreCase)
             };
             item.Click += (_, _) => ApplyEffect(settings =>
@@ -150,11 +143,27 @@ public sealed class TrayApplicationContext : ApplicationContext
         return music;
     }
 
+    private ToolStripMenuItem BuildOffMenuItem()
+    {
+        var off = new ToolStripMenuItem("关闭")
+        {
+            Checked = !_settings.Enabled
+        };
+        off.Click += (_, _) =>
+        {
+            if (TryUpdateSettings(settings => settings.Enabled = false, rememberCurrent: false))
+            {
+                RefreshMenu();
+            }
+        };
+        return off;
+    }
+
     private void AddEffectPresetMenu(ToolStripMenuItem parent, EffectType effectType, string label)
     {
         var mode = new ToolStripMenuItem(label)
         {
-            Checked = _settings.OperatingMode == OperatingMode.Lighting && _settings.Effect.Type == effectType
+            Checked = _settings.Enabled && _settings.OperatingMode == OperatingMode.Lighting && _settings.Effect.Type == effectType
         };
 
         var softwareDefault = new ToolStripMenuItem("软件默认配置");
@@ -576,6 +585,114 @@ public sealed class TrayApplicationContext : ApplicationContext
                 "ClevoLEDKeyboardControl",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Warning);
+        }
+    }
+
+    private void ExitApplication()
+    {
+        StopServiceForExit();
+        ExitThread();
+    }
+
+    private static void StopServiceForExit()
+    {
+        try
+        {
+            using var controller = new ServiceController(AppPaths.ServiceName);
+            if (controller.Status == ServiceControllerStatus.Stopped ||
+                controller.Status == ServiceControllerStatus.StopPending)
+            {
+                return;
+            }
+
+            controller.Stop();
+            controller.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(20));
+        }
+        catch (UnauthorizedAccessException)
+        {
+            StopServiceElevated();
+        }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == 5)
+        {
+            StopServiceElevated();
+        }
+        catch (InvalidOperationException ex) when (ex.InnerException is Win32Exception { NativeErrorCode: 5 })
+        {
+            StopServiceElevated();
+        }
+        catch
+        {
+            // 服务可能未安装或已停止，忽略以保证退出顺畅
+        }
+    }
+
+    private static void StopServiceElevated()
+    {
+        try
+        {
+            var command = $"Stop-Service -Name {AppPaths.ServiceName} -Force";
+            using var process = Process.Start(new ProcessStartInfo("powershell.exe", $"-NoProfile -ExecutionPolicy Bypass -Command \"{command}\"")
+            {
+                UseShellExecute = true,
+                Verb = "runas",
+                WindowStyle = ProcessWindowStyle.Hidden
+            });
+            process?.WaitForExit(15000);
+        }
+        catch
+        {
+            // 用户取消 UAC 或失败时，忽略——我们仍然要退出托盘
+        }
+    }
+
+    private static void EnsureServiceRunning()
+    {
+        try
+        {
+            using var controller = new ServiceController(AppPaths.ServiceName);
+            if (controller.Status == ServiceControllerStatus.Running ||
+                controller.Status == ServiceControllerStatus.StartPending)
+            {
+                return;
+            }
+
+            controller.Start();
+            controller.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(20));
+        }
+        catch (UnauthorizedAccessException)
+        {
+            StartServiceElevated();
+        }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == 5)
+        {
+            StartServiceElevated();
+        }
+        catch (InvalidOperationException ex) when (ex.InnerException is Win32Exception { NativeErrorCode: 5 })
+        {
+            StartServiceElevated();
+        }
+        catch
+        {
+            // 服务未安装或其他错误时不打扰用户
+        }
+    }
+
+    private static void StartServiceElevated()
+    {
+        try
+        {
+            var command = $"Start-Service -Name {AppPaths.ServiceName}";
+            using var process = Process.Start(new ProcessStartInfo("powershell.exe", $"-NoProfile -ExecutionPolicy Bypass -Command \"{command}\"")
+            {
+                UseShellExecute = true,
+                Verb = "runas",
+                WindowStyle = ProcessWindowStyle.Hidden
+            });
+            process?.WaitForExit(15000);
+        }
+        catch
+        {
+            // 用户取消 UAC 或失败时不打扰
         }
     }
 
