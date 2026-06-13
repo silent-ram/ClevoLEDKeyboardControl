@@ -1,10 +1,13 @@
 using System.Diagnostics;
+using System.Reflection;
 
 namespace ColorfulLedKeyboard.Tray;
 
 public sealed class AboutForm : Form
 {
     private const string RepositoryUrl = "https://github.com/silent-ram/ClevoLEDKeyboardControl";
+    private const string IssuesUrl = "https://github.com/silent-ram/ClevoLEDKeyboardControl/issues";
+
     public AboutForm()
     {
         Text = "关于 ClevoLEDKeyboardControl";
@@ -12,7 +15,7 @@ public sealed class AboutForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(480, 230);
+        ClientSize = new Size(480, 280);
 
         BuildUi();
     }
@@ -27,44 +30,84 @@ public sealed class AboutForm : Form
             Size = new Size(360, 28)
         };
 
-        var description = new Label
+        var version = new Label
         {
-            Text = "Clevo 系列键盘 RGB 控制工具，支持固定颜色、RGB 循环、单色呼吸、循环呼吸和音乐灯效。",
-            Location = new Point(24, 56),
-            Size = new Size(420, 48)
+            Text = $"v{ReadVersion()}",
+            Location = new Point(24, 50),
+            Size = new Size(360, 22)
         };
 
-        var timing = new Label
+        var description = new Label
         {
-            Text = "RGB 循环使用停留时长控制；呼吸模式使用呼吸周期控制。",
-            Location = new Point(24, 104),
+            Text = "面向 Clevo 兼容机型的键盘背光灯效控制程序。",
+            Location = new Point(24, 80),
             Size = new Size(420, 24)
+        };
+
+        var maintainer = new Label
+        {
+            Text = "Maintained by silent-ram",
+            Location = new Point(24, 110),
+            Size = new Size(420, 22)
+        };
+
+        var thirdParty = new Label
+        {
+            Text = "Uses InsydeDCHU.dll (Clevo OEM)",
+            Location = new Point(24, 134),
+            Size = new Size(420, 22)
         };
 
         var github = new LinkLabel
         {
             Text = "GitHub 仓库",
-            Location = new Point(24, 145),
-            Size = new Size(360, 24)
+            Location = new Point(24, 168),
+            Size = new Size(160, 22)
         };
         github.LinkClicked += (_, _) => OpenUrl(RepositoryUrl);
+
+        var issues = new LinkLabel
+        {
+            Text = "反馈 / 报告问题",
+            Location = new Point(24, 196),
+            Size = new Size(200, 22)
+        };
+        issues.LinkClicked += (_, _) => OpenUrl(IssuesUrl);
 
         var close = new Button
         {
             Text = "关闭",
             DialogResult = DialogResult.OK,
-            Location = new Point(368, 184),
+            Location = new Point(368, 234),
             Size = new Size(88, 30)
         };
 
         Controls.Add(title);
+        Controls.Add(version);
         Controls.Add(description);
-        Controls.Add(timing);
+        Controls.Add(maintainer);
+        Controls.Add(thirdParty);
         Controls.Add(github);
+        Controls.Add(issues);
         Controls.Add(close);
 
         AcceptButton = close;
         CancelButton = close;
+    }
+
+    private static string ReadVersion()
+    {
+        var assembly = Assembly.GetExecutingAssembly();
+        var informational = assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+        if (!string.IsNullOrWhiteSpace(informational))
+        {
+            // 去掉 +commitHash 后缀（如果有）
+            var plus = informational.IndexOf('+');
+            return plus > 0 ? informational[..plus] : informational;
+        }
+
+        return assembly.GetName().Version?.ToString(3) ?? "0.0.0";
     }
 
     private static void OpenUrl(string url)

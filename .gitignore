@@ -22,3 +22,6 @@ ColorfulLedKeyboard.Installer/Payload/payload.zip
 
 # Vendor driver (not redistributable, fetched at install time from OEM Control Center)
 assets/driver/*.dll
+
+# Reverse engineering work area (large ACPI binary/DSL dumps, not needed at build time)
+reverse/

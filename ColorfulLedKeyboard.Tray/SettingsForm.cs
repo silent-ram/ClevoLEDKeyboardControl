@@ -19,6 +19,10 @@ public sealed class SettingsForm : Form
     private const int DefaultRainbowHoldMs = EffectPresetSettings.DefaultPeriodMs;
     private const string SoftwareDefaultPresetName = "软件默认配置";
     private readonly SettingsStore _settingsStore;
+    private readonly RadioButton _modeLighting = new() { Text = "灯效模式", AutoSize = true };
+    private readonly RadioButton _modeMusic = new() { Text = "音乐模式", AutoSize = true };
+    private readonly RadioButton _modeOff = new() { Text = "关闭", AutoSize = true };
+    private ListBox? _navigation;
     private readonly ComboBox _effectType = new();
     private readonly SliderRow _brightness = new("全局亮度", 0, 100, "%");
     private readonly ComboBox _speed = new();
@@ -31,6 +35,7 @@ public sealed class SettingsForm : Form
     private Panel? _speedRow;
     private Panel? _customColorsRow;
     private Panel? _hardBlinkRow;
+    private Panel? _effectTypeRow;
     private Label? _sequenceSection;
     private Label? _sequenceSummary;
     private Label? _modeHint;
@@ -146,6 +151,7 @@ public sealed class SettingsForm : Form
             BorderStyle = BorderStyle.None,
             Font = new Font(SystemFonts.MessageBoxFont ?? Control.DefaultFont, FontStyle.Regular)
         };
+        _navigation = navigation;
 
         var pages = new Panel { Dock = DockStyle.Fill };
         var content = new TableLayoutPanel
@@ -265,8 +271,25 @@ public sealed class SettingsForm : Form
     private Panel BuildGeneralPage()
     {
         var page = CreatePage();
+
+        var modeRow = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.LeftToRight,
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 8),
+            Width = ContentWidth
+        };
+        modeRow.Controls.Add(new Label { Text = "模式：", AutoSize = true, Margin = new Padding(0, 6, 8, 0) });
+        modeRow.Controls.Add(_modeLighting);
+        modeRow.Controls.Add(_modeMusic);
+        modeRow.Controls.Add(_modeOff);
+        _modeLighting.CheckedChanged += (_, _) => OnModeChanged();
+        _modeMusic.CheckedChanged += (_, _) => OnModeChanged();
+        _modeOff.CheckedChanged += (_, _) => OnModeChanged();
+        page.Controls.Add(modeRow);
+
         _effectType.DropDownStyle = ComboBoxStyle.DropDownList;
-        _effectType.Items.AddRange(["固定颜色", "RGB 循环", "单色呼吸", "循环呼吸", "脉冲", "心跳", "音乐模式", "关闭"]);
+        _effectType.Items.AddRange(["固定颜色", "RGB 循环", "单色呼吸", "循环呼吸", "脉冲", "心跳"]);
 
         _speed.DropDownStyle = ComboBoxStyle.DropDownList;
         _speed.Items.AddRange(["非常慢", "慢", "正常", "快", "很快"]);
@@ -316,7 +339,8 @@ public sealed class SettingsForm : Form
         _effectPresetNameRow = Row("当前预设", _effectPresetName);
         _effectPresetButtonsRow = ButtonRow(_effectSavePreset, _effectCreatePreset, _effectDeletePreset);
 
-        page.Controls.Add(Row("当前效果", _effectType));
+        _effectTypeRow = Row("当前效果", _effectType);
+        page.Controls.Add(_effectTypeRow);
         page.Controls.Add(_brightness);
         page.Controls.Add(_effectColor);
         page.Controls.Add(_speedRow);
@@ -512,6 +536,9 @@ public sealed class SettingsForm : Form
         var settings = _settingsStore.Load();
         try
         {
+            _modeLighting.Checked = settings.Enabled && settings.OperatingMode == OperatingMode.Lighting;
+            _modeMusic.Checked = settings.Enabled && settings.OperatingMode == OperatingMode.Music;
+            _modeOff.Checked = !settings.Enabled;
             _effectType.SelectedIndex = settings.Effect.Type switch
             {
                 EffectType.Static => 0,
@@ -520,8 +547,6 @@ public sealed class SettingsForm : Form
                 EffectType.Sequence => 3,
                 EffectType.Pulse => 4,
                 EffectType.Heartbeat => 5,
-                EffectType.Music => 6,
-                EffectType.Off => 7,
                 _ => 1
             };
 
@@ -587,6 +612,8 @@ public sealed class SettingsForm : Form
         {
             _loadingSettings = false;
         }
+
+        UpdateModeAvailability();
     }
 
     private void SaveSettings()
@@ -594,7 +621,11 @@ public sealed class SettingsForm : Form
         try
         {
             var settings = _settingsStore.Load();
-            settings.Enabled = true;
+            settings.Enabled = !_modeOff.Checked;
+            if (!_modeOff.Checked)
+            {
+                settings.OperatingMode = _modeMusic.Checked ? OperatingMode.Music : OperatingMode.Lighting;
+            }
             if (_effectChangedByUser)
             {
                 settings.Effect.Type = SelectedEffectType(settings.Effect.Type);
@@ -608,6 +639,11 @@ public sealed class SettingsForm : Form
             settings.Effect.CustomSequenceColorsEnabled = selectedEffect == EffectType.Rainbow;
             settings.Effect.Sequence = BuildSequenceColors(selectedEffect);
             RememberEffect(settings, settings.Effect);
+            if (settings.Effect.Type != EffectType.Off)
+            {
+                settings.SavedEffects ??= new EffectMemorySettings();
+                settings.SavedEffects.LastUsedLightingEffect = settings.Effect.Type;
+            }
 
             settings.Effect.Music.PresetName = SelectedMusicPresetName();
             settings.Effect.Music.ResponseMode = _musicResponseMode.SelectedIndex == 1
@@ -772,8 +808,6 @@ public sealed class SettingsForm : Form
         3 => EffectType.Sequence,
         4 => EffectType.Pulse,
         5 => EffectType.Heartbeat,
-        6 => EffectType.Music,
-        7 => EffectType.Off,
         _ => fallback
     };
 
@@ -785,17 +819,15 @@ public sealed class SettingsForm : Form
         EffectType.Sequence => 3,
         EffectType.Pulse => 4,
         EffectType.Heartbeat => 5,
-        EffectType.Music => 6,
-        EffectType.Off => 7,
         _ => 1
     };
 
     private void UpdateBrightnessAvailability()
     {
         var effect = SelectedEffectType(EffectType.Rainbow);
-        var brightnessEnabled = effect is not EffectType.Music and not EffectType.Off;
-        _brightness.Enabled = brightnessEnabled;
-        _brightness.Visible = brightnessEnabled;
+        var brightnessEnabled = effect != EffectType.Off;
+        _brightness.Enabled = brightnessEnabled && !_modeMusic.Checked && !_modeOff.Checked;
+        _brightness.Visible = brightnessEnabled && !_modeMusic.Checked && !_modeOff.Checked;
         _brightness.BackColor = _brightness.Enabled ? SystemColors.Window : SystemColors.Control;
     }
 
@@ -813,10 +845,19 @@ public sealed class SettingsForm : Form
 
     private void UpdateEffectConfigurationVisibility()
     {
+        var off = _modeOff.Checked;
+        var music = _modeMusic.Checked;
+        var hideEffectParams = off || music;
         var effect = SelectedEffectType(EffectType.Rainbow);
-        var singleColor = effect is EffectType.Static or EffectType.Breathing;
-        var sequenceVisible = effect is EffectType.Rainbow or EffectType.Sequence or EffectType.Pulse or EffectType.Heartbeat;
+        var singleColor = !hideEffectParams && (effect is EffectType.Static or EffectType.Breathing);
+        var sequenceVisible = !hideEffectParams && (effect is EffectType.Rainbow or EffectType.Sequence or EffectType.Pulse or EffectType.Heartbeat);
 
+        if (_effectTypeRow is not null)
+        {
+            _effectTypeRow.Visible = !hideEffectParams;
+        }
+
+        _brightness.Visible = !hideEffectParams && effect != EffectType.Off;
         _effectColor.Visible = singleColor;
         if (_speedRow is not null)
         {
@@ -830,11 +871,16 @@ public sealed class SettingsForm : Form
             EffectType.Heartbeat => "心跳周期",
             _ => "呼吸周期"
         };
-        _period.Visible = effect is EffectType.Rainbow or EffectType.Breathing or EffectType.Sequence or EffectType.Pulse or EffectType.Heartbeat;
-        _minimumBrightness.Visible = effect == EffectType.Breathing;
+        _period.Visible = !hideEffectParams && (effect is EffectType.Rainbow or EffectType.Breathing or EffectType.Sequence or EffectType.Pulse or EffectType.Heartbeat);
+        _minimumBrightness.Visible = !hideEffectParams && effect == EffectType.Breathing;
         if (_hardBlinkRow is not null)
         {
-            _hardBlinkRow.Visible = effect == EffectType.Breathing;
+            _hardBlinkRow.Visible = !hideEffectParams && effect == EffectType.Breathing;
+        }
+
+        if (_customColorsRow is not null)
+        {
+            _customColorsRow.Visible = !hideEffectParams && _customColorsRow.Controls.OfType<Control>().Any(c => c.Visible);
         }
 
         if (_sequenceSection is not null)
@@ -856,7 +902,7 @@ public sealed class SettingsForm : Form
         }
 
         _sequence.Visible = sequenceVisible;
-        var presetVisible = effect is EffectType.Static or EffectType.Rainbow or EffectType.Breathing or EffectType.Sequence or EffectType.Pulse or EffectType.Heartbeat;
+        var presetVisible = !hideEffectParams && (effect is EffectType.Static or EffectType.Rainbow or EffectType.Breathing or EffectType.Sequence or EffectType.Pulse or EffectType.Heartbeat);
         if (_effectPresetSection is not null)
         {
             _effectPresetSection.Visible = presetVisible;
@@ -879,13 +925,21 @@ public sealed class SettingsForm : Form
 
         if (_modeHint is not null)
         {
-            _modeHint.Visible = effect is EffectType.Music or EffectType.Off;
-            _modeHint.Text = effect switch
+            if (off)
             {
-                EffectType.Music => "音乐模式参数在左侧“音乐”页面配置。",
-                EffectType.Off => "关闭模式不会显示灯效参数。",
-                _ => ""
-            };
+                _modeHint.Visible = true;
+                _modeHint.Text = "关闭模式不会显示灯效参数。";
+            }
+            else if (music)
+            {
+                _modeHint.Visible = true;
+                _modeHint.Text = "音乐模式由音乐页配置，灯效参数已禁用。";
+            }
+            else
+            {
+                _modeHint.Visible = false;
+                _modeHint.Text = "";
+            }
         }
     }
 
@@ -1960,10 +2014,61 @@ public sealed class SettingsForm : Form
         EffectType.Sequence => "循环呼吸",
         EffectType.Pulse => "脉冲",
         EffectType.Heartbeat => "心跳",
-        EffectType.Music => "音乐模式",
         EffectType.Off => "关闭",
         _ => effect.ToString()
     };
+
+    private void OnModeChanged()
+    {
+        if (_loadingSettings) return;
+        UpdateModeAvailability();
+        UpdateEffectConfigurationVisibility();
+        if (_modeMusic.Checked)
+        {
+            // 切到音乐模式：自动跳到"音乐"导航页
+            if (_navigation is not null)
+            {
+                for (var i = 0; i < _navigation.Items.Count; i++)
+                {
+                    var label = _navigation.Items[i]?.ToString();
+                    if (string.Equals(label, "音乐", StringComparison.Ordinal))
+                    {
+                        _navigation.SelectedIndex = i;
+                        break;
+                    }
+                }
+            }
+        }
+        else if (_modeLighting.Checked)
+        {
+            // 切回灯效模式：从 LastUsedLightingEffect 恢复
+            var settings = _settingsStore.Load();
+            var lastEffect = settings.SavedEffects?.LastUsedLightingEffect ?? EffectType.Static;
+            if (lastEffect == EffectType.Off) lastEffect = EffectType.Static;
+            _effectType.SelectedIndex = EffectTypeToIndex(lastEffect);
+        }
+        // 关闭模式：什么都不做，仅 UpdateModeAvailability 会禁用其他控件
+    }
+
+    private void UpdateModeAvailability()
+    {
+        var music = _modeMusic.Checked;
+        var off = _modeOff.Checked;
+        var lightingEditable = !music && !off;
+        _effectType.Enabled = lightingEditable;
+        UpdateBrightnessAvailability();
+        _effectColor.Enabled = lightingEditable;
+        _period.Enabled = lightingEditable;
+        _minimumBrightness.Enabled = lightingEditable;
+        _hardBlink.Enabled = lightingEditable;
+        _sequence.Enabled = lightingEditable;
+        _customColors.Enabled = lightingEditable;
+        _effectPreset.Enabled = lightingEditable;
+        _effectPresetName.Enabled = lightingEditable;
+        _effectSavePreset.Enabled = lightingEditable;
+        _effectCreatePreset.Enabled = lightingEditable;
+        _effectDeletePreset.Enabled = lightingEditable;
+    }
 
     private static TextBox DiagnosticTextBox()
     {
@@ -2402,7 +2507,7 @@ internal sealed class AppProfileEditor : UserControl
         Controls.Add(_pickProcess);
 
         _effectType.DropDownStyle = ComboBoxStyle.DropDownList;
-        _effectType.Items.AddRange(["固定颜色", "单色呼吸", "音乐模式"]);
+        _effectType.Items.AddRange(["固定颜色", "单色呼吸"]);
         _effectType.Location = new Point(ControlLeft, 222);
         _effectType.Width = 300;
         _effectType.Height = 30;
@@ -2611,14 +2716,12 @@ internal sealed class AppProfileEditor : UserControl
     private static int EffectToIndex(EffectType effect) => effect switch
     {
         EffectType.Breathing => 1,
-        EffectType.Music => 2,
         _ => 0
     };
 
     private static EffectType IndexToEffect(int index) => index switch
     {
         1 => EffectType.Breathing,
-        2 => EffectType.Music,
         _ => EffectType.Static
     };
 

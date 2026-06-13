@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
@@ -36,6 +37,15 @@ internal static class Program
     private static readonly string ProgramDataDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
         "ClevoLEDKeyboardControl");
+
+    private static readonly string StartMenuShortcutPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu),
+        "Programs",
+        "ClevoLEDKeyboardControl.lnk");
+
+    private static readonly string DesktopShortcutPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory),
+        "ClevoLEDKeyboardControl.lnk");
 
     [STAThread]
     private static int Main(string[] args)
@@ -146,6 +156,7 @@ internal static class Program
 
         AddTrayStartup();
         RegisterUninstaller();
+        CreateUserShortcuts();  // 失败不抛，仅返回 false
     }
 
     private static bool TryInstallDriverDll()
@@ -292,6 +303,7 @@ internal static class Program
         StopAndDeleteServiceIfPresent(LegacyServiceName);
         StopAndDeleteServiceIfPresent(LegacyServiceNameClevoRgb);
         RemoveTrayStartup();
+        RemoveUserShortcuts();
         UnregisterUninstaller();
         KillTray();
 
@@ -553,6 +565,90 @@ internal static class Program
     {
         using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", writable: true);
         key?.DeleteValue(AppName, throwOnMissingValue: false);
+    }
+
+    private static void CreateShortcut(string lnkPath, string targetPath, string arguments,
+        string workingDirectory, string description)
+    {
+        var shellType = Type.GetTypeFromProgID("WScript.Shell")
+            ?? throw new InvalidOperationException("WScript.Shell COM is not available.");
+        dynamic shell = Activator.CreateInstance(shellType)!;
+        try
+        {
+            dynamic shortcut = shell.CreateShortcut(lnkPath);
+            try
+            {
+                shortcut.TargetPath = targetPath;
+                shortcut.Arguments = arguments;
+                shortcut.WorkingDirectory = workingDirectory;
+                shortcut.Description = description;
+                shortcut.IconLocation = $"{targetPath},0";
+                shortcut.WindowStyle = 1;
+                shortcut.Save();
+            }
+            finally
+            {
+                Marshal.FinalReleaseComObject(shortcut);
+            }
+        }
+        finally
+        {
+            Marshal.FinalReleaseComObject(shell);
+        }
+    }
+
+    private static bool CreateUserShortcuts()
+    {
+        if (!File.Exists(TrayExe))
+        {
+            return false;
+        }
+
+        var workingDir = Path.GetDirectoryName(TrayExe) ?? InstallDirectory;
+        var success = true;
+
+        foreach (var lnkPath in new[] { StartMenuShortcutPath, DesktopShortcutPath })
+        {
+            try
+            {
+                // 确保目标目录存在
+                var dir = Path.GetDirectoryName(lnkPath);
+                if (!string.IsNullOrWhiteSpace(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+                CreateShortcut(
+                    lnkPath,
+                    TrayExe,
+                    "--settings",
+                    workingDir,
+                    "ClevoLEDKeyboardControl - 键盘 RGB 灯控制");
+            }
+            catch (Exception ex) when (ex is COMException or InvalidOperationException or UnauthorizedAccessException or IOException)
+            {
+                success = false;
+            }
+        }
+
+        return success;
+    }
+
+    private static void RemoveUserShortcuts()
+    {
+        foreach (var lnkPath in new[] { StartMenuShortcutPath, DesktopShortcutPath })
+        {
+            try
+            {
+                if (File.Exists(lnkPath))
+                {
+                    File.Delete(lnkPath);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // 卸载时无法删除快捷方式不阻塞主流程
+            }
+        }
     }
 
     private static void StartTray()

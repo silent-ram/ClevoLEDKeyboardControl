@@ -14,6 +14,8 @@ public sealed class KeyboardSettings
 
     public int Brightness { get; set; } = 70;
 
+    public OperatingMode OperatingMode { get; set; } = OperatingMode.Lighting;
+
     public LightingEffectSettings Effect { get; set; } = new();
 
     public EffectMemorySettings SavedEffects { get; set; } = new();
@@ -52,6 +54,11 @@ public sealed class KeyboardSettings
             Mode = KeyboardMode.Rainbow;
         }
 
+        if (!Enum.IsDefined(OperatingMode))
+        {
+            OperatingMode = OperatingMode.Lighting;
+        }
+
         Effect ??= new LightingEffectSettings();
 
         if (migrateLegacyMode && Effect.Type == EffectType.Rainbow && Mode != KeyboardMode.Rainbow)
@@ -62,11 +69,25 @@ public sealed class KeyboardSettings
                 KeyboardMode.Breathing => EffectType.Breathing,
                 KeyboardMode.Sequence => EffectType.Sequence,
                 KeyboardMode.Off => EffectType.Off,
-                KeyboardMode.Music => EffectType.Music,
                 KeyboardMode.Pulse => EffectType.Pulse,
                 KeyboardMode.Heartbeat => EffectType.Heartbeat,
                 _ => Effect.Type
             };
+        }
+
+        // 旧版本可能保存了 EffectType.Music = 5（已删除）；
+        // 这里精确识别值 5 把灯效降回 Static，并把顶层模式切到 Music，保留用户"在音乐模式"的语义。
+        // 注意：旧 JSON 中 "Effect.Type": "Music" 字符串由 SettingsStore 预扫描负责（Task 6），
+        // 此处仅兜底\"反序列化得到整数 5\" 这条路径。
+        if ((int)Effect.Type == 5)
+        {
+            Effect.Type = EffectType.Static;
+            OperatingMode = OperatingMode.Music;
+        }
+        else if (!Enum.IsDefined(Effect.Type))
+        {
+            // 其他未知值（未来扩展或被破坏的数据）仅静默回退灯效，不动 OperatingMode。
+            Effect.Type = EffectType.Static;
         }
 
         if (migrateLegacyMode &&
@@ -107,7 +128,6 @@ public sealed class KeyboardSettings
             EffectType.Breathing => KeyboardMode.Breathing,
             EffectType.Sequence => KeyboardMode.Sequence,
             EffectType.Off => KeyboardMode.Off,
-            EffectType.Music => KeyboardMode.Music,
             EffectType.Pulse => KeyboardMode.Pulse,
             EffectType.Heartbeat => KeyboardMode.Heartbeat,
             _ => Mode
@@ -125,6 +145,7 @@ public sealed class KeyboardSettings
         return new KeyboardSettings
         {
             Enabled = Enabled,
+            OperatingMode = OperatingMode,
             Mode = Mode,
             StaticColor = StaticColor,
             RainbowStep = RainbowStep,
@@ -138,7 +159,8 @@ public sealed class KeyboardSettings
                 Breathing = CloneEffect(SavedEffects.Breathing),
                 Sequence = CloneEffect(SavedEffects.Sequence),
                 Pulse = CloneEffect(SavedEffects.Pulse),
-                Heartbeat = CloneEffect(SavedEffects.Heartbeat)
+                Heartbeat = CloneEffect(SavedEffects.Heartbeat),
+                LastUsedLightingEffect = SavedEffects.LastUsedLightingEffect
             },
             EffectPresets = CloneEffectPresets(EffectPresets),
             IdleDim = new IdleDimSettings
@@ -334,6 +356,13 @@ public sealed class EffectMemorySettings
     public LightingEffectSettings Heartbeat { get; set; } =
         EffectPresetSettings.CreateSoftwareDefault(EffectType.Heartbeat);
 
+    /// <summary>
+    /// 最后一次用户切到的灯效类型（不含 Off）。
+    /// 当用户从音乐模式切回灯效模式时，UI 会从此字段恢复 Effect.Type，让"切回"体验连贯。
+    /// 老版本升级时缺失此字段，默认为 Static。
+    /// </summary>
+    public EffectType LastUsedLightingEffect { get; set; } = EffectType.Static;
+
     public EffectMemorySettings Normalize()
     {
         Static = NormalizeForType(Static, EffectType.Static);
@@ -343,6 +372,11 @@ public sealed class EffectMemorySettings
         Sequence = NormalizeForType(Sequence, EffectType.Sequence);
         Pulse = NormalizeForType(Pulse, EffectType.Pulse);
         Heartbeat = NormalizeForType(Heartbeat, EffectType.Heartbeat);
+        // 旧版本升级或损坏的配置可能落到无效值（如已废弃的 Music=5），统一回退到 Static。
+        if (!Enum.IsDefined(LastUsedLightingEffect) || LastUsedLightingEffect == EffectType.Off)
+        {
+            LastUsedLightingEffect = EffectType.Static;
+        }
         return this;
     }
 

@@ -128,7 +128,7 @@ public sealed class DchuKeyboardDevice
 4. **`DchuKeyboardDeviceTests.Pack9BitColor_PureGreen_TopThreeBitsInMidField`** — 纯绿 → 0x038
 5. **`DchuKeyboardDeviceTests.Pack9BitColor_PureBlue_TopThreeBitsInHighField`** — 纯蓝 → 0x1C0
 6. **`DchuKeyboardDeviceTests.Pack9BitColor_QuantizesLowBits`** — (0x1F, 0x1F, 0x1F)（每通道低 5 bit）→ 0（量化掉）
-7. **`DchuKeyboardDeviceTests.Pack9BitColor_PreservesTopThreeBitsPerChannel`** — (0xE0, 0xC0, 0xA0)（高 3 bit 分别是 0b111/0b110/0b101）→ 7 | (6<<3) | (5<<6) = 0x1B7
+7. **`DchuKeyboardDeviceTests.Pack9BitColor_PreservesTopThreeBitsPerChannel`** — (0xE0, 0xC0, 0xA0)（高 3 bit 分别是 0b111/0b110/0b101）→ 7 | (6<<3) | (5<<6) = 0x177
 
 `Pack9BitColor` 标记为 `internal` 并通过 `[InternalsVisibleTo("ColorfulLedKeyboard.Tests")]`（如果 Core 项目还没加，本次添加）。
 

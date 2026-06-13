@@ -42,7 +42,7 @@ public sealed class AppProfileRule
         IconColor = LightingEffectSettings.NormalizeHex(IconColor, "#FFFFFF");
         ManualColor = LightingEffectSettings.NormalizeHex(ManualColor, "#FFFFFF");
         Brightness = Math.Clamp(Brightness, 0, 100);
-        if (TargetEffect is not EffectType.Static and not EffectType.Breathing and not EffectType.Music)
+        if (TargetEffect is not EffectType.Static and not EffectType.Breathing)
         {
             TargetEffect = EffectType.Static;
         }
