@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net8.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ColorfulLedKeyboard.Core\ColorfulLedKeyboard.Core.csproj" />
+    <ProjectReference Include="..\ColorfulLedKeyboard.Service\ColorfulLedKeyboard.Service.csproj" />
   </ItemGroup>
 
 </Project>
