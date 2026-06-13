@@ -35,6 +35,7 @@ public sealed class SettingsForm : Form
     private Panel? _speedRow;
     private Panel? _customColorsRow;
     private Panel? _hardBlinkRow;
+    private Panel? _effectTypeRow;
     private Label? _sequenceSection;
     private Label? _sequenceSummary;
     private Label? _modeHint;
@@ -338,7 +339,8 @@ public sealed class SettingsForm : Form
         _effectPresetNameRow = Row("当前预设", _effectPresetName);
         _effectPresetButtonsRow = ButtonRow(_effectSavePreset, _effectCreatePreset, _effectDeletePreset);
 
-        page.Controls.Add(Row("当前效果", _effectType));
+        _effectTypeRow = Row("当前效果", _effectType);
+        page.Controls.Add(_effectTypeRow);
         page.Controls.Add(_brightness);
         page.Controls.Add(_effectColor);
         page.Controls.Add(_speedRow);
@@ -844,10 +846,18 @@ public sealed class SettingsForm : Form
     private void UpdateEffectConfigurationVisibility()
     {
         var off = _modeOff.Checked;
+        var music = _modeMusic.Checked;
+        var hideEffectParams = off || music;
         var effect = SelectedEffectType(EffectType.Rainbow);
-        var singleColor = !off && (effect is EffectType.Static or EffectType.Breathing);
-        var sequenceVisible = !off && (effect is EffectType.Rainbow or EffectType.Sequence or EffectType.Pulse or EffectType.Heartbeat);
+        var singleColor = !hideEffectParams && (effect is EffectType.Static or EffectType.Breathing);
+        var sequenceVisible = !hideEffectParams && (effect is EffectType.Rainbow or EffectType.Sequence or EffectType.Pulse or EffectType.Heartbeat);
 
+        if (_effectTypeRow is not null)
+        {
+            _effectTypeRow.Visible = !hideEffectParams;
+        }
+
+        _brightness.Visible = !hideEffectParams && effect != EffectType.Off;
         _effectColor.Visible = singleColor;
         if (_speedRow is not null)
         {
@@ -861,11 +871,16 @@ public sealed class SettingsForm : Form
             EffectType.Heartbeat => "心跳周期",
             _ => "呼吸周期"
         };
-        _period.Visible = !off && (effect is EffectType.Rainbow or EffectType.Breathing or EffectType.Sequence or EffectType.Pulse or EffectType.Heartbeat);
-        _minimumBrightness.Visible = !off && effect == EffectType.Breathing;
+        _period.Visible = !hideEffectParams && (effect is EffectType.Rainbow or EffectType.Breathing or EffectType.Sequence or EffectType.Pulse or EffectType.Heartbeat);
+        _minimumBrightness.Visible = !hideEffectParams && effect == EffectType.Breathing;
         if (_hardBlinkRow is not null)
         {
-            _hardBlinkRow.Visible = !off && effect == EffectType.Breathing;
+            _hardBlinkRow.Visible = !hideEffectParams && effect == EffectType.Breathing;
+        }
+
+        if (_customColorsRow is not null)
+        {
+            _customColorsRow.Visible = !hideEffectParams && _customColorsRow.Controls.OfType<Control>().Any(c => c.Visible);
         }
 
         if (_sequenceSection is not null)
@@ -887,7 +902,7 @@ public sealed class SettingsForm : Form
         }
 
         _sequence.Visible = sequenceVisible;
-        var presetVisible = !off && (effect is EffectType.Static or EffectType.Rainbow or EffectType.Breathing or EffectType.Sequence or EffectType.Pulse or EffectType.Heartbeat);
+        var presetVisible = !hideEffectParams && (effect is EffectType.Static or EffectType.Rainbow or EffectType.Breathing or EffectType.Sequence or EffectType.Pulse or EffectType.Heartbeat);
         if (_effectPresetSection is not null)
         {
             _effectPresetSection.Visible = presetVisible;
@@ -915,7 +930,7 @@ public sealed class SettingsForm : Form
                 _modeHint.Visible = true;
                 _modeHint.Text = "关闭模式不会显示灯效参数。";
             }
-            else if (_modeMusic.Checked)
+            else if (music)
             {
                 _modeHint.Visible = true;
                 _modeHint.Text = "音乐模式由音乐页配置，灯效参数已禁用。";
