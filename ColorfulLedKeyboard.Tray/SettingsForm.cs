@@ -21,6 +21,7 @@ public sealed class SettingsForm : Form
     private readonly SettingsStore _settingsStore;
     private readonly RadioButton _modeLighting = new() { Text = "灯效模式", AutoSize = true };
     private readonly RadioButton _modeMusic = new() { Text = "音乐模式", AutoSize = true };
+    private readonly RadioButton _modeOff = new() { Text = "关闭", AutoSize = true };
     private ListBox? _navigation;
     private readonly ComboBox _effectType = new();
     private readonly SliderRow _brightness = new("全局亮度", 0, 100, "%");
@@ -280,12 +281,14 @@ public sealed class SettingsForm : Form
         modeRow.Controls.Add(new Label { Text = "模式：", AutoSize = true, Margin = new Padding(0, 6, 8, 0) });
         modeRow.Controls.Add(_modeLighting);
         modeRow.Controls.Add(_modeMusic);
+        modeRow.Controls.Add(_modeOff);
         _modeLighting.CheckedChanged += (_, _) => OnModeChanged();
         _modeMusic.CheckedChanged += (_, _) => OnModeChanged();
+        _modeOff.CheckedChanged += (_, _) => OnModeChanged();
         page.Controls.Add(modeRow);
 
         _effectType.DropDownStyle = ComboBoxStyle.DropDownList;
-        _effectType.Items.AddRange(["固定颜色", "RGB 循环", "单色呼吸", "循环呼吸", "脉冲", "心跳", "关闭"]);
+        _effectType.Items.AddRange(["固定颜色", "RGB 循环", "单色呼吸", "循环呼吸", "脉冲", "心跳"]);
 
         _speed.DropDownStyle = ComboBoxStyle.DropDownList;
         _speed.Items.AddRange(["非常慢", "慢", "正常", "快", "很快"]);
@@ -531,8 +534,9 @@ public sealed class SettingsForm : Form
         var settings = _settingsStore.Load();
         try
         {
-            _modeLighting.Checked = settings.OperatingMode == OperatingMode.Lighting;
-            _modeMusic.Checked = settings.OperatingMode == OperatingMode.Music;
+            _modeLighting.Checked = settings.Enabled && settings.OperatingMode == OperatingMode.Lighting;
+            _modeMusic.Checked = settings.Enabled && settings.OperatingMode == OperatingMode.Music;
+            _modeOff.Checked = !settings.Enabled;
             _effectType.SelectedIndex = settings.Effect.Type switch
             {
                 EffectType.Static => 0,
@@ -541,7 +545,6 @@ public sealed class SettingsForm : Form
                 EffectType.Sequence => 3,
                 EffectType.Pulse => 4,
                 EffectType.Heartbeat => 5,
-                EffectType.Off => 6,
                 _ => 1
             };
 
@@ -616,8 +619,11 @@ public sealed class SettingsForm : Form
         try
         {
             var settings = _settingsStore.Load();
-            settings.Enabled = true;
-            settings.OperatingMode = _modeMusic.Checked ? OperatingMode.Music : OperatingMode.Lighting;
+            settings.Enabled = !_modeOff.Checked;
+            if (!_modeOff.Checked)
+            {
+                settings.OperatingMode = _modeMusic.Checked ? OperatingMode.Music : OperatingMode.Lighting;
+            }
             if (_effectChangedByUser)
             {
                 settings.Effect.Type = SelectedEffectType(settings.Effect.Type);
@@ -800,7 +806,6 @@ public sealed class SettingsForm : Form
         3 => EffectType.Sequence,
         4 => EffectType.Pulse,
         5 => EffectType.Heartbeat,
-        6 => EffectType.Off,
         _ => fallback
     };
 
@@ -812,7 +817,6 @@ public sealed class SettingsForm : Form
         EffectType.Sequence => 3,
         EffectType.Pulse => 4,
         EffectType.Heartbeat => 5,
-        EffectType.Off => 6,
         _ => 1
     };
 
@@ -820,8 +824,8 @@ public sealed class SettingsForm : Form
     {
         var effect = SelectedEffectType(EffectType.Rainbow);
         var brightnessEnabled = effect != EffectType.Off;
-        _brightness.Enabled = brightnessEnabled && !_modeMusic.Checked;
-        _brightness.Visible = brightnessEnabled && !_modeMusic.Checked;
+        _brightness.Enabled = brightnessEnabled && !_modeMusic.Checked && !_modeOff.Checked;
+        _brightness.Visible = brightnessEnabled && !_modeMusic.Checked && !_modeOff.Checked;
         _brightness.BackColor = _brightness.Enabled ? SystemColors.Window : SystemColors.Control;
     }
 
@@ -905,8 +909,8 @@ public sealed class SettingsForm : Form
 
         if (_modeHint is not null)
         {
-            _modeHint.Visible = effect == EffectType.Off;
-            _modeHint.Text = effect == EffectType.Off ? "关闭模式不会显示灯效参数。" : "";
+            _modeHint.Visible = _modeOff.Checked;
+            _modeHint.Text = _modeOff.Checked ? "关闭模式不会显示灯效参数。" : "";
         }
     }
 
@@ -2006,7 +2010,7 @@ public sealed class SettingsForm : Form
                 }
             }
         }
-        else
+        else if (_modeLighting.Checked)
         {
             // 切回灯效模式：从 LastUsedLightingEffect 恢复
             var settings = _settingsStore.Load();
@@ -2014,24 +2018,27 @@ public sealed class SettingsForm : Form
             if (lastEffect == EffectType.Off) lastEffect = EffectType.Static;
             _effectType.SelectedIndex = EffectTypeToIndex(lastEffect);
         }
+        // 关闭模式：什么都不做，仅 UpdateModeAvailability 会禁用其他控件
     }
 
     private void UpdateModeAvailability()
     {
         var music = _modeMusic.Checked;
-        _effectType.Enabled = !music;
+        var off = _modeOff.Checked;
+        var lightingEditable = !music && !off;
+        _effectType.Enabled = lightingEditable;
         UpdateBrightnessAvailability();
-        _effectColor.Enabled = !music;
-        _period.Enabled = !music;
-        _minimumBrightness.Enabled = !music;
-        _hardBlink.Enabled = !music;
-        _sequence.Enabled = !music;
-        _customColors.Enabled = !music;
-        _effectPreset.Enabled = !music;
-        _effectPresetName.Enabled = !music;
-        _effectSavePreset.Enabled = !music;
-        _effectCreatePreset.Enabled = !music;
-        _effectDeletePreset.Enabled = !music;
+        _effectColor.Enabled = lightingEditable;
+        _period.Enabled = lightingEditable;
+        _minimumBrightness.Enabled = lightingEditable;
+        _hardBlink.Enabled = lightingEditable;
+        _sequence.Enabled = lightingEditable;
+        _customColors.Enabled = lightingEditable;
+        _effectPreset.Enabled = lightingEditable;
+        _effectPresetName.Enabled = lightingEditable;
+        _effectSavePreset.Enabled = lightingEditable;
+        _effectCreatePreset.Enabled = lightingEditable;
+        _effectDeletePreset.Enabled = lightingEditable;
     }
 
     private static TextBox DiagnosticTextBox()

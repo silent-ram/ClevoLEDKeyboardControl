@@ -70,9 +70,18 @@ public sealed class TrayApplicationContext : ApplicationContext
     {
         var menu = new ContextMenuStrip();
 
+        var enabled = new ToolStripMenuItem("启用灯效") { Checked = _settings.Enabled };
+        enabled.Click += (_, _) =>
+        {
+            if (TryUpdateSettings(settings => settings.Enabled = !settings.Enabled, rememberCurrent: false))
+            {
+                RefreshMenu();
+            }
+        };
+
+        menu.Items.Add(enabled);
         menu.Items.Add(BuildEffectMenu());
         menu.Items.Add(BuildMusicModeMenu());
-        menu.Items.Add(BuildOffMenuItem());
         menu.Items.Add(BuildBrightnessMenu());
         menu.Items.Add(new ToolStripSeparator());
 
@@ -101,9 +110,9 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private ToolStripMenuItem BuildEffectMenu()
     {
-        var effect = new ToolStripMenuItem("效果")
+        var effect = new ToolStripMenuItem("灯效模式")
         {
-            Checked = _settings.Enabled && _settings.OperatingMode == OperatingMode.Lighting
+            Checked = _settings.OperatingMode == OperatingMode.Lighting
         };
 
         AddEffectPresetMenu(effect, EffectType.Static, "固定颜色");
@@ -120,7 +129,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     {
         var music = new ToolStripMenuItem("音乐模式")
         {
-            Checked = _settings.Enabled && _settings.OperatingMode == OperatingMode.Music
+            Checked = _settings.OperatingMode == OperatingMode.Music
         };
 
         foreach (var preset in MusicSettings.BuiltInPresets.Concat(_settings.Effect.Music.CustomPresets))
@@ -128,7 +137,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             var presetCopy = CloneMusicPreset(preset);
             var item = new ToolStripMenuItem(presetCopy.Name)
             {
-                Checked = _settings.Enabled && _settings.OperatingMode == OperatingMode.Music &&
+                Checked = _settings.OperatingMode == OperatingMode.Music &&
                     string.Equals(_settings.Effect.Music.PresetName, presetCopy.Name, StringComparison.OrdinalIgnoreCase)
             };
             item.Click += (_, _) => ApplyEffect(settings =>
@@ -143,27 +152,11 @@ public sealed class TrayApplicationContext : ApplicationContext
         return music;
     }
 
-    private ToolStripMenuItem BuildOffMenuItem()
-    {
-        var off = new ToolStripMenuItem("关闭")
-        {
-            Checked = !_settings.Enabled
-        };
-        off.Click += (_, _) =>
-        {
-            if (TryUpdateSettings(settings => settings.Enabled = false, rememberCurrent: false))
-            {
-                RefreshMenu();
-            }
-        };
-        return off;
-    }
-
     private void AddEffectPresetMenu(ToolStripMenuItem parent, EffectType effectType, string label)
     {
         var mode = new ToolStripMenuItem(label)
         {
-            Checked = _settings.Enabled && _settings.OperatingMode == OperatingMode.Lighting && _settings.Effect.Type == effectType
+            Checked = _settings.OperatingMode == OperatingMode.Lighting && _settings.Effect.Type == effectType
         };
 
         var softwareDefault = new ToolStripMenuItem("软件默认配置");
