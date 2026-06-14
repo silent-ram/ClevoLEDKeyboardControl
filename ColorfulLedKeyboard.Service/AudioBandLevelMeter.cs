@@ -20,7 +20,7 @@ internal sealed class AudioBandLevelMeter : IDisposable
     private readonly AudioSourceProvider _source;
     private string _lastKnownDeviceId = "";
     private DateTimeOffset _lastCaptureResetAt = DateTimeOffset.MinValue;
-    private DateTimeOffset _lastEnsureAttemptAt = DateTimeOffset.MinValue;
+    private DateTimeOffset _ensureCooldownUntil = DateTimeOffset.MinValue;
     private WasapiLoopbackCapture? _capture;
     private float[] _samples = [];
     private int _sampleRate = 48000;
@@ -56,8 +56,8 @@ internal sealed class AudioBandLevelMeter : IDisposable
             return;
         }
 
-        // 设备真变了：清空节流时间戳，让重建路径立刻可用
-        _lastEnsureAttemptAt = DateTimeOffset.MinValue;
+        // 设备真变了：清空构造冷却让重建路径立刻可用
+        _ensureCooldownUntil = DateTimeOffset.MinValue;
 
         // ResetCapture 会调用 NAudio 的 StopRecording，必须脱离 COM 回调线程
         System.Threading.ThreadPool.QueueUserWorkItem(_ => ResetCapture());
@@ -202,13 +202,13 @@ internal sealed class AudioBandLevelMeter : IDisposable
         // Status==Hfp 时直接返回；Active / Switching / Unavailable 都尝试开。
         if (_source.Status == AudioSourceStatus.Hfp) return;
 
-        // 5 秒节流：避免每帧都重试导致 NAudio 抖动；上次 reset / 上次尝试 5 秒内不重试。
-        var now = DateTimeOffset.UtcNow;
-        if (_lastEnsureAttemptAt != DateTimeOffset.MinValue && (now - _lastEnsureAttemptAt).TotalSeconds < 5)
+        // 仅在"上一次构造抛异常"后短暂节流 1 秒，避免设备真坏时每帧重试。
+        // 正常的暂停/恢复路径不会触发这个分支：RecordingStopped → ResetCapture
+        // 不会设置 _ensureCooldownUntil，下一帧立刻重建。
+        if (_ensureCooldownUntil != DateTimeOffset.MinValue && DateTimeOffset.UtcNow < _ensureCooldownUntil)
         {
             return;
         }
-        _lastEnsureAttemptAt = now;
 
         var device = _source.CurrentDevice;
         if (device is null) return;
@@ -220,10 +220,12 @@ internal sealed class AudioBandLevelMeter : IDisposable
             _capture.DataAvailable += OnDataAvailable;
             _capture.RecordingStopped += (_, _) => ResetCapture();
             _capture.StartRecording();
+            _ensureCooldownUntil = DateTimeOffset.MinValue;
         }
         catch
         {
             ResetCapture();
+            _ensureCooldownUntil = DateTimeOffset.UtcNow.AddSeconds(1);
         }
     }
 
