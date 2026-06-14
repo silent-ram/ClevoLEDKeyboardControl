@@ -17,10 +17,10 @@ internal sealed class AudioBandLevelMeter : IDisposable
 
     private readonly object _sync = new();
     private readonly BandState[] _bandStates = AdaptiveBands.Select(_ => new BandState()).ToArray();
+    private readonly AudioSourceProvider _source;
     private WasapiLoopbackCapture? _capture;
     private float[] _samples = [];
     private int _sampleRate = 48000;
-    private DateTimeOffset _nextRetry = DateTimeOffset.MinValue;
     private DateTimeOffset _lastAdaptiveUpdate = DateTimeOffset.MinValue;
     private double _adaptiveNoise;
     private double _rmsAverage = 0.08;
@@ -30,6 +30,23 @@ internal sealed class AudioBandLevelMeter : IDisposable
     private DateTimeOffset _lastBeatAt = DateTimeOffset.MinValue;
     private double _beatIntervalMs = 260;
     private bool _gateOpen;
+
+    public AudioBandLevelMeter(AudioSourceProvider source)
+    {
+        _source = source;
+        _source.SourceChanged += OnSourceChanged;
+    }
+
+    private void OnSourceChanged(object? sender, AudioSourceChangedEventArgs e)
+    {
+        // 任何状态变化都先停 capture，下一帧懒重建（仅 Active 时才会真正重建）
+        ResetCapture();
+    }
+
+    public void PauseCapture()
+    {
+        ResetCapture();
+    }
 
     public float GetLevel(int lowHz, int highHz)
     {
@@ -153,19 +170,21 @@ internal sealed class AudioBandLevelMeter : IDisposable
 
     public void Dispose()
     {
+        _source.SourceChanged -= OnSourceChanged;
         ResetCapture();
     }
 
     private void EnsureCapture()
     {
-        if (_capture is not null || DateTimeOffset.UtcNow < _nextRetry)
-        {
-            return;
-        }
+        if (_capture is not null) return;
+        if (_source.Status != AudioSourceStatus.Active) return;
+
+        var device = _source.CurrentDevice;
+        if (device is null) return;
 
         try
         {
-            _capture = new WasapiLoopbackCapture();
+            _capture = new WasapiLoopbackCapture(device);
             _sampleRate = _capture.WaveFormat.SampleRate;
             _capture.DataAvailable += OnDataAvailable;
             _capture.RecordingStopped += (_, _) => ResetCapture();
@@ -174,7 +193,6 @@ internal sealed class AudioBandLevelMeter : IDisposable
         catch
         {
             ResetCapture();
-            _nextRetry = DateTimeOffset.UtcNow.AddSeconds(5);
         }
     }
 
@@ -207,6 +225,8 @@ internal sealed class AudioBandLevelMeter : IDisposable
         {
             return;
         }
+
+        _source.ReportSamples();
 
         var format = capture.WaveFormat;
         var channels = Math.Max(1, format.Channels);
