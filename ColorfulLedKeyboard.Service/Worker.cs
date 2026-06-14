@@ -21,6 +21,10 @@ public class Worker : BackgroundService
         _audioLevelMeter = new SystemAudioLevelMeter(_audioSource);
         _audioBandLevelMeter = new AudioBandLevelMeter(_audioSource);
         _audioSource.SourceChanged += OnAudioSourceChanged;
+
+        // 订阅完事件后立刻刷一次状态：让初始（启动那一刻）的设备状态也走 OnAudioSourceChanged
+        // 写到文件里，否则 Tray 在用户首次切设备前都看不到任何状态，UI 显示"检测中…"。
+        _audioSource.RefreshNow();
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

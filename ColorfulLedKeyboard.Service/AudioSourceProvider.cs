@@ -96,11 +96,35 @@ public sealed class AudioSourceProvider : IDisposable
         System.Threading.Interlocked.Exchange(ref _hasSample, 1);
     }
 
-    /// <summary>Worker 进入 Music 模式那一刻调一次，强刷状态文件。</summary>
+    /// <summary>Worker 进入 Music 模式那一刻调一次，强刷状态文件。
+    /// 即使 status 没变化也强制 fire 一次事件——这是它和 ResolveAndPublish 的关键差异。</summary>
     public void RefreshNow()
     {
         if (_disposed) return;
-        ResolveAndPublish(transitional: false);
+        DeviceSnapshot? snapshot;
+        try
+        {
+            snapshot = _probe.GetDefaultRenderDevice();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "AudioSourceProvider RefreshNow resolve threw");
+            snapshot = null;
+        }
+
+        // 先用 ApplySnapshot 让状态机就位（如果有变化它会自然 fire）
+        ApplySnapshot(snapshot, fireEvent: true);
+
+        // 然后强制再发一次当前状态，确保订阅者（Worker → status file）至少能拿到一次快照
+        AudioSourceStatus statusNow;
+        string nameNow, idNow;
+        lock (_stateLock)
+        {
+            statusNow = _status;
+            nameNow = _deviceFriendlyName;
+            idNow = _deviceId;
+        }
+        RaiseSourceChanged(statusNow, nameNow, idNow);
     }
 
     /// <summary>测试入口：模拟 IMMNotificationClient.OnDefaultDeviceChanged。</summary>
