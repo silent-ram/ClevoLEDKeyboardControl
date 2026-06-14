@@ -7,15 +7,24 @@ public class Worker : BackgroundService
 {
     private readonly SettingsStore _settingsStore = new();
     private readonly DchuKeyboardDevice _device = new();
-    private readonly SystemAudioLevelMeter _audioLevelMeter = new();
-    private readonly AudioBandLevelMeter _audioBandLevelMeter = new();
+    private readonly AudioSourceProvider _audioSource;
+    private readonly SystemAudioLevelMeter _audioLevelMeter;
+    private readonly AudioBandLevelMeter _audioBandLevelMeter;
     private readonly ILogger<Worker> _logger;
     private FileSystemWatcher? _watcher;
     private volatile bool _settingsChanged = true;
 
-    public Worker(ILogger<Worker> logger)
+    public Worker(ILogger<Worker> logger, ILoggerFactory loggerFactory)
     {
         _logger = logger;
+        _audioSource = new AudioSourceProvider(loggerFactory.CreateLogger<AudioSourceProvider>());
+        _audioLevelMeter = new SystemAudioLevelMeter(_audioSource);
+        _audioBandLevelMeter = new AudioBandLevelMeter(_audioSource);
+        _audioSource.SourceChanged += OnAudioSourceChanged;
+
+        // 订阅完事件后立刻刷一次状态：让初始（启动那一刻）的设备状态也走 OnAudioSourceChanged
+        // 写到文件里，否则 Tray 在用户首次切设备前都看不到任何状态，UI 显示"检测中…"。
+        _audioSource.RefreshNow();
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -57,12 +66,27 @@ public class Worker : BackgroundService
         }
     }
 
-    public override Task StopAsync(CancellationToken cancellationToken)
+    public override async Task StopAsync(CancellationToken cancellationToken)
     {
         _watcher?.Dispose();
-        _audioLevelMeter.Dispose();
-        _audioBandLevelMeter.Dispose();
-        return base.StopAsync(cancellationToken);
+        _audioSource.SourceChanged -= OnAudioSourceChanged;
+
+        // NAudio 在某些路径下 StopRecording / Dispose 可能阻塞（COM 回调链路死锁）
+        // 加 5 秒超时保护，超时则放弃 dispose 让进程自然终结
+        var disposeTask = Task.Run(() =>
+        {
+            try { _audioBandLevelMeter.Dispose(); } catch (Exception ex) { _logger.LogWarning(ex, "AudioBandLevelMeter.Dispose threw"); }
+            try { _audioLevelMeter.Dispose(); } catch (Exception ex) { _logger.LogWarning(ex, "SystemAudioLevelMeter.Dispose threw"); }
+            try { _audioSource.Dispose(); } catch (Exception ex) { _logger.LogWarning(ex, "AudioSourceProvider.Dispose threw"); }
+        });
+
+        var completed = await Task.WhenAny(disposeTask, Task.Delay(TimeSpan.FromSeconds(5), cancellationToken));
+        if (completed != disposeTask)
+        {
+            _logger.LogWarning("Audio dispose timed out after 5s; proceeding with shutdown anyway");
+        }
+
+        await base.StopAsync(cancellationToken);
     }
 
     private void TryTurnOffKeyboard()
@@ -142,37 +166,50 @@ public class Worker : BackgroundService
         var nextRuntimeRefresh = DateTimeOffset.UtcNow.AddSeconds(1);
         RgbColor? lastColor = null;
 
-        while (!stoppingToken.IsCancellationRequested && !_settingsChanged)
+        // 进入音乐模式立刻刷一次状态文件，避免 Tray 看到陈旧值
+        _audioSource.RefreshNow();
+
+        try
         {
-            if (DateTimeOffset.UtcNow >= nextRuntimeRefresh)
+            while (!stoppingToken.IsCancellationRequested && !_settingsChanged)
             {
-                nextRuntimeRefresh = DateTimeOffset.UtcNow.AddSeconds(1);
-                if (ShouldRebuildRuntimeSettings(settings))
+                if (DateTimeOffset.UtcNow >= nextRuntimeRefresh)
                 {
-                    _settingsChanged = true;
-                    return;
+                    nextRuntimeRefresh = DateTimeOffset.UtcNow.AddSeconds(1);
+                    if (ShouldRebuildRuntimeSettings(settings))
+                    {
+                        _settingsChanged = true;
+                        return;
+                    }
                 }
+
+                // 永远调 meter（同 v1.3）：静音 → envelope=0 → 灯自然降到 BaseBrightness 颜色保持。
+                // HFP 屏蔽在 meter 内部处理（Status==Hfp 时 EnsureCapture 跳过、不激活 SCO）。
+                var level = music.EqEnabled
+                    ? Math.Max(_audioBandLevelMeter.GetAdaptiveBeatLevel(music), _audioLevelMeter.GetPeakLevel() * 0.12f)
+                    : _audioLevelMeter.GetPeakLevel();
+                var systemVolume = _audioLevelMeter.GetMasterVolumeScalar();
+                var frame = controller.Next(music, level, systemVolume, musicColors.Count);
+                var envelope = frame.Envelope;
+                var musicBrightness = music.BaseBrightness +
+                    (music.PeakBrightness - music.BaseBrightness) * Math.Pow(envelope, 0.55);
+                var brightness = (int)Math.Clamp(Math.Round(musicBrightness), music.BaseBrightness, music.PeakBrightness);
+                var sourceColor = musicColors[frame.ColorIndex % musicColors.Count];
+                var color = ApplyNotificationFlash(sourceColor.Scale(brightness), settings);
+
+                if (color != lastColor)
+                {
+                    _device.SetColor(color);
+                    lastColor = color;
+                }
+
+                await Task.Delay(music.IntervalMs, stoppingToken);
             }
-
-            var level = music.EqEnabled
-                ? Math.Max(_audioBandLevelMeter.GetAdaptiveBeatLevel(music), _audioLevelMeter.GetPeakLevel() * 0.12f)
-                : _audioLevelMeter.GetPeakLevel();
-            var systemVolume = _audioLevelMeter.GetMasterVolumeScalar();
-            var frame = controller.Next(music, level, systemVolume, musicColors.Count);
-            var envelope = frame.Envelope;
-            var musicBrightness = music.BaseBrightness +
-                (music.PeakBrightness - music.BaseBrightness) * Math.Pow(envelope, 0.55);
-            var brightness = (int)Math.Clamp(Math.Round(musicBrightness), music.BaseBrightness, music.PeakBrightness);
-            var sourceColor = musicColors[frame.ColorIndex % musicColors.Count];
-            var color = ApplyNotificationFlash(sourceColor.Scale(brightness), settings);
-
-            if (color != lastColor)
-            {
-                _device.SetColor(color);
-                lastColor = color;
-            }
-
-            await Task.Delay(music.IntervalMs, stoppingToken);
+        }
+        finally
+        {
+            _audioBandLevelMeter.PauseCapture();
+            _audioLevelMeter.PauseDevice();
         }
     }
 
@@ -448,5 +485,28 @@ public class Worker : BackgroundService
         {
             await Task.Delay(pollIntervalMs, stoppingToken);
         }
+    }
+
+    private void OnAudioSourceChanged(object? sender, AudioSourceChangedEventArgs e)
+    {
+        // 这个回调可能在 NAudio COM 回调线程里触发；文件 IO 必须脱离它
+        var snapshot = new AudioSourceStatusInfo
+        {
+            Status = e.Status,
+            DeviceFriendlyName = e.DeviceFriendlyName,
+            DeviceId = e.DeviceId,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+        {
+            try
+            {
+                AudioSourceStatusFile.Write(snapshot);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to write audio source status file");
+            }
+        });
     }
 }

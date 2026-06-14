@@ -17,10 +17,13 @@ internal sealed class AudioBandLevelMeter : IDisposable
 
     private readonly object _sync = new();
     private readonly BandState[] _bandStates = AdaptiveBands.Select(_ => new BandState()).ToArray();
+    private readonly AudioSourceProvider _source;
+    private string _lastKnownDeviceId = "";
+    private DateTimeOffset _lastCaptureResetAt = DateTimeOffset.MinValue;
+    private DateTimeOffset _ensureCooldownUntil = DateTimeOffset.MinValue;
     private WasapiLoopbackCapture? _capture;
     private float[] _samples = [];
     private int _sampleRate = 48000;
-    private DateTimeOffset _nextRetry = DateTimeOffset.MinValue;
     private DateTimeOffset _lastAdaptiveUpdate = DateTimeOffset.MinValue;
     private double _adaptiveNoise;
     private double _rmsAverage = 0.08;
@@ -30,6 +33,40 @@ internal sealed class AudioBandLevelMeter : IDisposable
     private DateTimeOffset _lastBeatAt = DateTimeOffset.MinValue;
     private double _beatIntervalMs = 260;
     private bool _gateOpen;
+
+    public AudioBandLevelMeter(AudioSourceProvider source)
+    {
+        _source = source;
+        _source.SourceChanged += OnSourceChanged;
+    }
+
+    private void OnSourceChanged(object? sender, AudioSourceChangedEventArgs e)
+    {
+        // 只在两种情况下重建 capture：
+        //   1. device id 真变了（切换音频源）
+        //   2. 进入 Hfp 状态（避免在 16kHz/Mono 端点上抓 loopback）
+        // 同设备的 Active↔Unavailable 状态切换不要停 capture，否则恢复时永远拿不到样本。
+        var prevId = _lastKnownDeviceId;
+        var newId = e.DeviceId ?? "";
+        var deviceChanged = !string.Equals(prevId, newId, StringComparison.Ordinal);
+        _lastKnownDeviceId = newId;
+
+        if (!deviceChanged && e.Status != AudioSourceStatus.Hfp)
+        {
+            return;
+        }
+
+        // 设备真变了：清空构造冷却让重建路径立刻可用
+        _ensureCooldownUntil = DateTimeOffset.MinValue;
+
+        // ResetCapture 会调用 NAudio 的 StopRecording，必须脱离 COM 回调线程
+        System.Threading.ThreadPool.QueueUserWorkItem(_ => ResetCapture());
+    }
+
+    public void PauseCapture()
+    {
+        ResetCapture();
+    }
 
     public float GetLevel(int lowHz, int highHz)
     {
@@ -153,28 +190,42 @@ internal sealed class AudioBandLevelMeter : IDisposable
 
     public void Dispose()
     {
+        _source.SourceChanged -= OnSourceChanged;
         ResetCapture();
     }
 
     private void EnsureCapture()
     {
-        if (_capture is not null || DateTimeOffset.UtcNow < _nextRetry)
+        if (_capture is not null) return;
+
+        // HFP 屏蔽：通话端点不开 capture，避免激活 SCO 链路影响通话音质。
+        // Status==Hfp 时直接返回；Active / Switching / Unavailable 都尝试开。
+        if (_source.Status == AudioSourceStatus.Hfp) return;
+
+        // 仅在"上一次构造抛异常"后短暂节流 1 秒，避免设备真坏时每帧重试。
+        // 正常的暂停/恢复路径不会触发这个分支：RecordingStopped → ResetCapture
+        // 不会设置 _ensureCooldownUntil，下一帧立刻重建。
+        if (_ensureCooldownUntil != DateTimeOffset.MinValue && DateTimeOffset.UtcNow < _ensureCooldownUntil)
         {
             return;
         }
 
+        var device = _source.CurrentDevice;
+        if (device is null) return;
+
         try
         {
-            _capture = new WasapiLoopbackCapture();
+            _capture = new WasapiLoopbackCapture(device);
             _sampleRate = _capture.WaveFormat.SampleRate;
             _capture.DataAvailable += OnDataAvailable;
             _capture.RecordingStopped += (_, _) => ResetCapture();
             _capture.StartRecording();
+            _ensureCooldownUntil = DateTimeOffset.MinValue;
         }
         catch
         {
             ResetCapture();
-            _nextRetry = DateTimeOffset.UtcNow.AddSeconds(5);
+            _ensureCooldownUntil = DateTimeOffset.UtcNow.AddSeconds(1);
         }
     }
 
@@ -182,6 +233,8 @@ internal sealed class AudioBandLevelMeter : IDisposable
     {
         var capture = _capture;
         _capture = null;
+        _lastCaptureResetAt = DateTimeOffset.UtcNow;
+
         if (capture is null)
         {
             return;
@@ -207,6 +260,8 @@ internal sealed class AudioBandLevelMeter : IDisposable
         {
             return;
         }
+
+        _source.ReportSamples();
 
         var format = capture.WaveFormat;
         var channels = Math.Max(1, format.Channels);

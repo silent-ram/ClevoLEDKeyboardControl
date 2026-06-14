@@ -52,6 +52,13 @@ public sealed class SettingsForm : Form
     private readonly SequenceEditor _musicSequence = new();
     private readonly CheckBox _musicFollowSystemVolume = new() { Text = "跟随 Windows 系统音量" };
     private readonly ComboBox _musicPreset = new();
+    private readonly Label _audioSourceLabel = new()
+    {
+        AutoSize = true,
+        ForeColor = SystemColors.GrayText,
+        Text = "当前音频源：检测中…",
+        Margin = new Padding(0, 4, 0, 8),
+    };
     private readonly TextBox _musicPresetName = new();
     private readonly Button _musicSavePreset = new() { Text = "保存修改" };
     private readonly Button _musicCreatePreset = new() { Text = "新建/另存为" };
@@ -125,6 +132,7 @@ public sealed class SettingsForm : Form
             UpdateEffectConfigurationVisibility();
             RefreshEffectPresetList();
         };
+        UpdateAudioSourceLabel(AudioSourceStatusFile.Read());
     }
 
     public event EventHandler? SettingsSaved;
@@ -391,6 +399,7 @@ public sealed class SettingsForm : Form
         _musicSequence.ColorsChanged += (_, _) => Text = "ClevoLEDKeyboardControl 设置 - 有未应用的更改";
         _musicAdvanced.CheckedChanged += (_, _) => UpdateMusicAdvancedVisibility();
 
+        page.Controls.Add(_audioSourceLabel);
         page.Controls.Add(Row("音乐预设", _musicPreset));
         page.Controls.Add(ButtonRow(_musicSavePreset, _musicCreatePreset, _musicDeletePreset));
         page.Controls.Add(Row("当前预设", _musicPresetName));
@@ -2093,6 +2102,23 @@ public sealed class SettingsForm : Form
         string? SourcePath,
         string InstalledPath,
         DateTimeOffset UpdatedUtc);
+
+    public void UpdateAudioSourceLabel(AudioSourceStatusInfo? info)
+    {
+        if (IsDisposed) return;
+        if (InvokeRequired)
+        {
+            try { BeginInvoke(new Action(() => UpdateAudioSourceLabel(info))); }
+            catch (ObjectDisposedException) { }
+            catch (InvalidOperationException) { }
+            return;
+        }
+
+        var deviceName = info?.DeviceFriendlyName ?? "";
+        _audioSourceLabel.Text = string.IsNullOrEmpty(deviceName)
+            ? "当前音频源：检测中…"
+            : $"当前音频源：{deviceName}";
+    }
 }
 
 internal sealed class SliderRow : UserControl
