@@ -62,14 +62,27 @@ public class Worker : BackgroundService
         }
     }
 
-    public override Task StopAsync(CancellationToken cancellationToken)
+    public override async Task StopAsync(CancellationToken cancellationToken)
     {
         _watcher?.Dispose();
         _audioSource.SourceChanged -= OnAudioSourceChanged;
-        _audioLevelMeter.Dispose();
-        _audioBandLevelMeter.Dispose();
-        _audioSource.Dispose();
-        return base.StopAsync(cancellationToken);
+
+        // NAudio 在某些路径下 StopRecording / Dispose 可能阻塞（COM 回调链路死锁）
+        // 加 5 秒超时保护，超时则放弃 dispose 让进程自然终结
+        var disposeTask = Task.Run(() =>
+        {
+            try { _audioBandLevelMeter.Dispose(); } catch (Exception ex) { _logger.LogWarning(ex, "AudioBandLevelMeter.Dispose threw"); }
+            try { _audioLevelMeter.Dispose(); } catch (Exception ex) { _logger.LogWarning(ex, "SystemAudioLevelMeter.Dispose threw"); }
+            try { _audioSource.Dispose(); } catch (Exception ex) { _logger.LogWarning(ex, "AudioSourceProvider.Dispose threw"); }
+        });
+
+        var completed = await Task.WhenAny(disposeTask, Task.Delay(TimeSpan.FromSeconds(5), cancellationToken));
+        if (completed != disposeTask)
+        {
+            _logger.LogWarning("Audio dispose timed out after 5s; proceeding with shutdown anyway");
+        }
+
+        await base.StopAsync(cancellationToken);
     }
 
     private void TryTurnOffKeyboard()
@@ -480,19 +493,24 @@ public class Worker : BackgroundService
 
     private void OnAudioSourceChanged(object? sender, AudioSourceChangedEventArgs e)
     {
-        try
+        // 这个回调可能在 NAudio COM 回调线程里触发；文件 IO 必须脱离它
+        var snapshot = new AudioSourceStatusInfo
         {
-            AudioSourceStatusFile.Write(new AudioSourceStatusInfo
+            Status = e.Status,
+            DeviceFriendlyName = e.DeviceFriendlyName,
+            DeviceId = e.DeviceId,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+        {
+            try
             {
-                Status = e.Status,
-                DeviceFriendlyName = e.DeviceFriendlyName,
-                DeviceId = e.DeviceId,
-                UpdatedAt = DateTimeOffset.UtcNow,
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to write audio source status file");
-        }
+                AudioSourceStatusFile.Write(snapshot);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to write audio source status file");
+            }
+        });
     }
 }

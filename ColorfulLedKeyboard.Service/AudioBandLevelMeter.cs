@@ -39,8 +39,9 @@ internal sealed class AudioBandLevelMeter : IDisposable
 
     private void OnSourceChanged(object? sender, AudioSourceChangedEventArgs e)
     {
-        // 任何状态变化都先停 capture，下一帧懒重建（仅 Active 时才会真正重建）
-        ResetCapture();
+        // ResetCapture 会调用 NAudio 的 StopRecording，必须脱离 COM 回调线程
+        // 否则在 IMMNotificationClient 回调链路上同步停 capture 会死锁
+        System.Threading.ThreadPool.QueueUserWorkItem(_ => ResetCapture());
     }
 
     public void PauseCapture()

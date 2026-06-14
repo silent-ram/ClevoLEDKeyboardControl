@@ -20,6 +20,7 @@ public sealed class AudioSourceProvider : IDisposable
     private string _deviceFriendlyName = "";
     private string _deviceId = "";
     private long _lastSampleTicks;
+    private long _switchingSinceTicks;
     private int _hasSample; // 0 = 从未 ReportSamples；1 = 已经 ReportSamples 至少一次
     // 测试模式：以虚拟时钟驱动 fallback；ReportSamples 把 _lastSampleTicks 设为 _virtualNowTicks
     private long _virtualNowTicks;
@@ -155,7 +156,7 @@ public sealed class AudioSourceProvider : IDisposable
     {
         if (_disposed) return;
 
-        // 第一次：进入 Switching
+        // 第一次：进入 Switching（保留旧设备名以便 UI 提示"切换中"）
         string nameNow, idNow;
         lock (_stateLock)
         {
@@ -164,8 +165,29 @@ public sealed class AudioSourceProvider : IDisposable
         }
         PublishStatus(AudioSourceStatus.Switching, nameNow, idNow);
 
-        // 第二次：根据 InspectDevice 结果决定 Active / Hfp / Switching（保守）
-        ResolveAndPublish(transitional: true);
+        // 第二次：用传入的 deviceId 直接 GetDevice，不要再调 GetDefaultRenderDevice
+        // —— COM 回调瞬间 GetDefaultAudioEndpoint 经常仍指向旧设备
+        DeviceSnapshot? snapshot;
+        try
+        {
+            snapshot = string.IsNullOrEmpty(newDeviceId) ? null : _probe.GetDevice(newDeviceId);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "AudioSourceProvider GetDevice threw, keeping Switching");
+            // 保持 Switching，让 fallback timer 兜底
+            MarkSwitchingNow();
+            return;
+        }
+
+        if (snapshot is null)
+        {
+            // 设备还没"完全切换好"，让 fallback 兜底重试
+            MarkSwitchingNow();
+            return;
+        }
+
+        ApplySnapshot(snapshot, fireEvent: true);
     }
 
     private void ResolveAndPublish(bool transitional)
@@ -242,10 +264,28 @@ public sealed class AudioSourceProvider : IDisposable
             _deviceFriendlyName = name;
             _deviceId = id;
         }
+        if (status != AudioSourceStatus.Switching)
+        {
+            System.Threading.Interlocked.Exchange(ref _switchingSinceTicks, 0);
+        }
         if (changed)
         {
             RaiseSourceChanged(status, name, id);
         }
+    }
+
+    private void MarkSwitchingNow()
+    {
+        var now = DateTime.UtcNow.Ticks;
+        System.Threading.Interlocked.Exchange(ref _switchingSinceTicks, now);
+
+        string nameNow, idNow;
+        lock (_stateLock)
+        {
+            nameNow = _deviceFriendlyName;
+            idNow = _deviceId;
+        }
+        PublishStatus(AudioSourceStatus.Switching, nameNow, idNow);
     }
 
     private void RaiseSourceChanged(AudioSourceStatus status, string name, string id)
@@ -305,6 +345,28 @@ public sealed class AudioSourceProvider : IDisposable
             {
                 PublishStatus(AudioSourceStatus.Active, name, id);
                 return;
+            }
+
+            // Switching 状态下，超过 2s 还没解析出来 → 主动 RefreshNow（脱出 COM 回调线程）
+            if (current == AudioSourceStatus.Switching)
+            {
+                var switchingSince = System.Threading.Interlocked.Read(ref _switchingSinceTicks);
+                if (switchingSince != 0)
+                {
+                    var stuckMs = (DateTime.UtcNow.Ticks - switchingSince) / TimeSpan.TicksPerMillisecond;
+                    if (stuckMs > 2000)
+                    {
+                        // 重置时间戳避免每次 fallback tick 都触发
+                        System.Threading.Interlocked.Exchange(ref _switchingSinceTicks, 0);
+                        try { ResolveAndPublish(transitional: true); }
+                        catch (Exception ex) { _logger?.LogWarning(ex, "Fallback RefreshNow threw"); }
+                    }
+                }
+                else
+                {
+                    // 没记录时间，补一个，让下次 tick 能判定
+                    System.Threading.Interlocked.Exchange(ref _switchingSinceTicks, DateTime.UtcNow.Ticks);
+                }
             }
         }
         catch (Exception ex)
