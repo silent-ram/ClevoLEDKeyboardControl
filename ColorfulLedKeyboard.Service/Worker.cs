@@ -7,15 +7,20 @@ public class Worker : BackgroundService
 {
     private readonly SettingsStore _settingsStore = new();
     private readonly DchuKeyboardDevice _device = new();
-    private readonly SystemAudioLevelMeter _audioLevelMeter = new();
-    private readonly AudioBandLevelMeter _audioBandLevelMeter = new();
+    private readonly AudioSourceProvider _audioSource;
+    private readonly SystemAudioLevelMeter _audioLevelMeter;
+    private readonly AudioBandLevelMeter _audioBandLevelMeter;
     private readonly ILogger<Worker> _logger;
     private FileSystemWatcher? _watcher;
     private volatile bool _settingsChanged = true;
 
-    public Worker(ILogger<Worker> logger)
+    public Worker(ILogger<Worker> logger, ILoggerFactory loggerFactory)
     {
         _logger = logger;
+        _audioSource = new AudioSourceProvider(loggerFactory.CreateLogger<AudioSourceProvider>());
+        _audioLevelMeter = new SystemAudioLevelMeter(_audioSource);
+        _audioBandLevelMeter = new AudioBandLevelMeter(_audioSource);
+        _audioSource.SourceChanged += OnAudioSourceChanged;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -60,8 +65,10 @@ public class Worker : BackgroundService
     public override Task StopAsync(CancellationToken cancellationToken)
     {
         _watcher?.Dispose();
+        _audioSource.SourceChanged -= OnAudioSourceChanged;
         _audioLevelMeter.Dispose();
         _audioBandLevelMeter.Dispose();
+        _audioSource.Dispose();
         return base.StopAsync(cancellationToken);
     }
 
@@ -142,37 +149,58 @@ public class Worker : BackgroundService
         var nextRuntimeRefresh = DateTimeOffset.UtcNow.AddSeconds(1);
         RgbColor? lastColor = null;
 
-        while (!stoppingToken.IsCancellationRequested && !_settingsChanged)
+        // 进入音乐模式立刻刷一次状态文件，避免 Tray 看到陈旧值
+        _audioSource.RefreshNow();
+
+        try
         {
-            if (DateTimeOffset.UtcNow >= nextRuntimeRefresh)
+            while (!stoppingToken.IsCancellationRequested && !_settingsChanged)
             {
-                nextRuntimeRefresh = DateTimeOffset.UtcNow.AddSeconds(1);
-                if (ShouldRebuildRuntimeSettings(settings))
+                if (DateTimeOffset.UtcNow >= nextRuntimeRefresh)
                 {
-                    _settingsChanged = true;
-                    return;
+                    nextRuntimeRefresh = DateTimeOffset.UtcNow.AddSeconds(1);
+                    if (ShouldRebuildRuntimeSettings(settings))
+                    {
+                        _settingsChanged = true;
+                        return;
+                    }
                 }
+
+                RgbColor color;
+                if (_audioSource.Status == AudioSourceStatus.Active)
+                {
+                    var level = music.EqEnabled
+                        ? Math.Max(_audioBandLevelMeter.GetAdaptiveBeatLevel(music), _audioLevelMeter.GetPeakLevel() * 0.12f)
+                        : _audioLevelMeter.GetPeakLevel();
+                    var systemVolume = _audioLevelMeter.GetMasterVolumeScalar();
+                    var frame = controller.Next(music, level, systemVolume, musicColors.Count);
+                    var envelope = frame.Envelope;
+                    var musicBrightness = music.BaseBrightness +
+                        (music.PeakBrightness - music.BaseBrightness) * Math.Pow(envelope, 0.55);
+                    var brightness = (int)Math.Clamp(Math.Round(musicBrightness), music.BaseBrightness, music.PeakBrightness);
+                    var sourceColor = musicColors[frame.ColorIndex % musicColors.Count];
+                    color = ApplyNotificationFlash(sourceColor.Scale(brightness), settings);
+                }
+                else
+                {
+                    var fallbackColor = musicColors.Count > 0 ? musicColors[0] : RgbColor.Black;
+                    var brightness = Math.Clamp(music.BaseBrightness, 0, 100);
+                    color = ApplyNotificationFlash(fallbackColor.Scale(brightness), settings);
+                }
+
+                if (color != lastColor)
+                {
+                    _device.SetColor(color);
+                    lastColor = color;
+                }
+
+                await Task.Delay(music.IntervalMs, stoppingToken);
             }
-
-            var level = music.EqEnabled
-                ? Math.Max(_audioBandLevelMeter.GetAdaptiveBeatLevel(music), _audioLevelMeter.GetPeakLevel() * 0.12f)
-                : _audioLevelMeter.GetPeakLevel();
-            var systemVolume = _audioLevelMeter.GetMasterVolumeScalar();
-            var frame = controller.Next(music, level, systemVolume, musicColors.Count);
-            var envelope = frame.Envelope;
-            var musicBrightness = music.BaseBrightness +
-                (music.PeakBrightness - music.BaseBrightness) * Math.Pow(envelope, 0.55);
-            var brightness = (int)Math.Clamp(Math.Round(musicBrightness), music.BaseBrightness, music.PeakBrightness);
-            var sourceColor = musicColors[frame.ColorIndex % musicColors.Count];
-            var color = ApplyNotificationFlash(sourceColor.Scale(brightness), settings);
-
-            if (color != lastColor)
-            {
-                _device.SetColor(color);
-                lastColor = color;
-            }
-
-            await Task.Delay(music.IntervalMs, stoppingToken);
+        }
+        finally
+        {
+            _audioBandLevelMeter.PauseCapture();
+            _audioLevelMeter.PauseDevice();
         }
     }
 
@@ -447,6 +475,24 @@ public class Worker : BackgroundService
         while (!stoppingToken.IsCancellationRequested && !_settingsChanged)
         {
             await Task.Delay(pollIntervalMs, stoppingToken);
+        }
+    }
+
+    private void OnAudioSourceChanged(object? sender, AudioSourceChangedEventArgs e)
+    {
+        try
+        {
+            AudioSourceStatusFile.Write(new AudioSourceStatusInfo
+            {
+                Status = e.Status,
+                DeviceFriendlyName = e.DeviceFriendlyName,
+                DeviceId = e.DeviceId,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to write audio source status file");
         }
     }
 }
