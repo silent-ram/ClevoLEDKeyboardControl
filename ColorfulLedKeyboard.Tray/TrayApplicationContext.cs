@@ -19,6 +19,8 @@ public sealed class TrayApplicationContext : ApplicationContext
     private DateTimeOffset _lastForegroundStateSaved = DateTimeOffset.MinValue;
     private KeyboardSettings _settings;
     private SettingsForm? _settingsForm;
+    private AudioSourceStatusWatcher? _audioStatusWatcher;
+    private AudioSourceStatusInfo? _lastAudioStatus;
 
     public TrayApplicationContext(SettingsStore settingsStore, bool openSettingsOnStartup = false)
     {
@@ -45,6 +47,9 @@ public sealed class TrayApplicationContext : ApplicationContext
         UpdateForegroundAppState();
         _ = CheckForUpdatesOnStartupAsync();
 
+        _audioStatusWatcher = new AudioSourceStatusWatcher(OnAudioStatusChanged);
+        _audioStatusWatcher.RefreshNow();
+
         if (openSettingsOnStartup)
         {
             OpenSettingsAfterStartup();
@@ -61,6 +66,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             _foregroundTimer.Dispose();
             _typingPulseHook.Dispose();
             _notificationFlashMonitor.Dispose();
+            _audioStatusWatcher?.Dispose();
         }
 
         base.Dispose(disposing);
@@ -416,6 +422,45 @@ public sealed class TrayApplicationContext : ApplicationContext
         var oldMenu = _notifyIcon.ContextMenuStrip;
         _notifyIcon.ContextMenuStrip = BuildMenu();
         oldMenu?.Dispose();
+        UpdateNotifyIconText();
+    }
+
+    private void OnAudioStatusChanged(AudioSourceStatusInfo? info)
+    {
+        _lastAudioStatus = info;
+        UpdateNotifyIconText();
+        if (_settingsForm is { } form && !form.IsDisposed)
+        {
+            try { form.UpdateAudioSourceLabel(info); }
+            catch (ObjectDisposedException) { }
+            catch (InvalidOperationException) { }
+        }
+    }
+
+    private void UpdateNotifyIconText()
+    {
+        var settings = _settings;
+        string text;
+
+        if (settings.OperatingMode != OperatingMode.Music || !settings.Enabled)
+        {
+            text = "ClevoLEDKeyboardControl";
+        }
+        else
+        {
+            var info = _lastAudioStatus;
+            text = info?.Status switch
+            {
+                AudioSourceStatus.Active      => $"ClevoLEDKeyboardControl\n音乐：{info.DeviceFriendlyName}",
+                AudioSourceStatus.Hfp         => "ClevoLEDKeyboardControl\n音乐：通话中，已暂停",
+                AudioSourceStatus.Switching   => "ClevoLEDKeyboardControl\n音乐：切换音频源中…",
+                AudioSourceStatus.Unavailable => "ClevoLEDKeyboardControl\n音乐：无可用音频源",
+                _                             => "ClevoLEDKeyboardControl\n音乐：等待状态…",
+            };
+        }
+
+        if (text.Length > 120) text = text[..120] + "…";
+        _notifyIcon.Text = text;
     }
 
     private static void ActivateSettingsWindow(Form form)
