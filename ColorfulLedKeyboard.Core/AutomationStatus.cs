@@ -78,6 +78,7 @@ public sealed class AudioApplicationsState
 
     public void Save()
     {
+        if (Environment.UserInteractive) { ServiceIpc.TrySend("AudioApplications", this); return; }
         try
         {
             Directory.CreateDirectory(AppPaths.ProgramDataDirectory);

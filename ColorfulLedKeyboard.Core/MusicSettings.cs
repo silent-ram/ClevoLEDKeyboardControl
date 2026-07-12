@@ -53,6 +53,7 @@ public sealed class MusicSettings : IMusicTunable
     public bool FollowSystemVolume { get; set; }
 
     public bool EqEnabled { get; set; }
+    public bool AllowSystemMixFallback { get; set; } = true;
 
     public int EqLowHz { get; set; } = 30;
 

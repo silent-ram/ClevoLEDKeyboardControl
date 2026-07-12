@@ -11,6 +11,7 @@ builder.Services.AddWindowsService(options =>
     options.ServiceName = ColorfulLedKeyboard.Core.AppPaths.ServiceName;
 });
 
+builder.Services.AddSingleton<ServiceIpcServer>();
 builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();

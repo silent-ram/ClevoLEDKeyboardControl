@@ -501,7 +501,11 @@ internal static class Program
     private static void EnsureProgramDataPermissions()
     {
         Directory.CreateDirectory(ProgramDataDirectory);
-        Run("icacls.exe", $"\"{ProgramDataDirectory}\" /grant *S-1-5-32-545:(OI)(CI)M /T /C");
+        var settingsPath = Path.Combine(ProgramDataDirectory, "settings.json");
+        var securityBackup = settingsPath + ".pre-security-v2.4.bak";
+        if (File.Exists(settingsPath) && !File.Exists(securityBackup))
+            File.Copy(settingsPath, securityBackup);
+        Run("icacls.exe", $"\"{ProgramDataDirectory}\" /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F *S-1-5-32-545:(OI)(CI)RX /T /C");
     }
 
     private static void ExtractPayload()

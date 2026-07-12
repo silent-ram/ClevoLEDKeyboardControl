@@ -8,11 +8,16 @@ namespace ColorfulLedKeyboard.Tray;
 
 public sealed class UpdateChecker
 {
+    private readonly IUpdatePackageVerifier _packageVerifier;
     public const string ReleasesUrl = "https://github.com/silent-ram/ClevoLEDKeyboardControl/releases";
     private const string LatestReleaseUrl = "https://github.com/silent-ram/ClevoLEDKeyboardControl/releases/latest";
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     public Version CurrentVersion { get; } = Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0, 0);
+    public bool CanInstallAutomatically => _packageVerifier.CanInstallAutomatically;
+
+    public UpdateChecker(IUpdatePackageVerifier? packageVerifier = null) =>
+        _packageVerifier = packageVerifier ?? new ManualReleaseVerifier();
 
     public async Task<UpdateCheckResult> CheckAsync(bool force, UpdateCheckInterval interval, CancellationToken cancellationToken = default)
     {
@@ -133,7 +138,10 @@ public sealed class UpdateChecker
         {
             if (!File.Exists(AppPaths.UpdateStatePath))
             {
-                return null;
+                var legacyPath = Path.Combine(AppPaths.ProgramDataDirectory, AppPaths.UpdateStateFileName);
+                if (!File.Exists(legacyPath)) return null;
+                Directory.CreateDirectory(AppPaths.UserDataDirectory);
+                File.Copy(legacyPath, AppPaths.UpdateStatePath, overwrite: false);
             }
 
             var json = File.ReadAllText(AppPaths.UpdateStatePath);
@@ -149,7 +157,7 @@ public sealed class UpdateChecker
     {
         try
         {
-            Directory.CreateDirectory(AppPaths.ProgramDataDirectory);
+            Directory.CreateDirectory(AppPaths.UserDataDirectory);
             File.WriteAllText(AppPaths.UpdateStatePath, JsonSerializer.Serialize(state, JsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -164,6 +172,19 @@ public sealed class UpdateChecker
         public string? LastReleaseUrl { get; set; }
         public string? LastPromptedVersion { get; set; }
     }
+}
+
+public interface IUpdatePackageVerifier
+{
+    bool CanInstallAutomatically { get; }
+    ValueTask<bool> VerifyAsync(Stream package, string? expectedDigest, CancellationToken cancellationToken = default);
+}
+
+public sealed class ManualReleaseVerifier : IUpdatePackageVerifier
+{
+    public bool CanInstallAutomatically => false;
+    public ValueTask<bool> VerifyAsync(Stream package, string? expectedDigest, CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(false);
 }
 
 public sealed record UpdateCheckResult(

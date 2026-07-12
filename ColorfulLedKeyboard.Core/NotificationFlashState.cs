@@ -25,7 +25,9 @@ public sealed class NotificationFlashState
 
     public static void Save()
     {
+        var state = new NotificationFlashState();
+        if (Environment.UserInteractive) { ServiceIpc.TrySend("NotificationFlash", state); return; }
         Directory.CreateDirectory(AppPaths.ProgramDataDirectory);
-        File.WriteAllText(AppPaths.NotificationFlashStatePath, JsonSerializer.Serialize(new NotificationFlashState()));
+        File.WriteAllText(AppPaths.NotificationFlashStatePath, JsonSerializer.Serialize(state));
     }
 }

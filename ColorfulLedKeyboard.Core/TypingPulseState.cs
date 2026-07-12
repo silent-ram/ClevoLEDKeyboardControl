@@ -26,10 +26,11 @@ public sealed class TypingPulseState
 
     public static void Save(DateTimeOffset timestamp)
     {
+        var state = new TypingPulseState { LastKeyUtc = timestamp };
+        if (Environment.UserInteractive) { ServiceIpc.TrySend("TypingPulse", state); return; }
         try
         {
             Directory.CreateDirectory(AppPaths.ProgramDataDirectory);
-            var state = new TypingPulseState { LastKeyUtc = timestamp };
             File.WriteAllText(AppPaths.TypingPulseStatePath, JsonSerializer.Serialize(state));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

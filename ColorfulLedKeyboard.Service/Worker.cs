@@ -12,6 +12,7 @@ public class Worker : BackgroundService
     private readonly AudioBandLevelMeter _audioBandLevelMeter;
     private readonly AudioApplicationMonitor _audioApplicationMonitor = new();
     private readonly ILogger<Worker> _logger;
+    private readonly ServiceIpcServer _ipcServer;
     private FileSystemWatcher? _watcher;
     private volatile bool _settingsChanged = true;
     private List<RgbColor> _lastRenderedMusicColors = [];
@@ -20,9 +21,10 @@ public class Worker : BackgroundService
     private AudioApplicationsState? _lastAudioApplicationsState;
     private DateTimeOffset _lastAudioApplicationsRead = DateTimeOffset.MinValue;
 
-    public Worker(ILogger<Worker> logger, ILoggerFactory loggerFactory)
+    public Worker(ILogger<Worker> logger, ILoggerFactory loggerFactory, ServiceIpcServer ipcServer)
     {
         _logger = logger;
+        _ipcServer = ipcServer;
         _audioSource = new AudioSourceProvider(loggerFactory.CreateLogger<AudioSourceProvider>());
         _audioLevelMeter = new SystemAudioLevelMeter(_audioSource);
         _audioBandLevelMeter = new AudioBandLevelMeter(_audioSource);
@@ -35,6 +37,7 @@ public class Worker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        _ipcServer.Start();
         EnsureConfigWatcher();
         await FlashStartupAsync(stoppingToken);
 
@@ -75,6 +78,7 @@ public class Worker : BackgroundService
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
         _watcher?.Dispose();
+        _ipcServer.Dispose();
         _audioSource.SourceChanged -= OnAudioSourceChanged;
 
         // NAudio 在某些路径下 StopRecording / Dispose 可能阻塞（COM 回调链路死锁）
@@ -201,7 +205,7 @@ public class Worker : BackgroundService
                 // HFP 屏蔽在 meter 内部处理（Status==Hfp 时 EnsureCapture 跳过、不激活 SCO）。
                 var selectedPeak = GetSelectedApplicationPeak(
                     settings.SelectedAudioProcessName, settings.SelectedAudioExecutablePath, settings.SelectedAudioProcessIds);
-                var level = music.EqEnabled
+                var level = music.EqEnabled && music.AllowSystemMixFallback
                     ? Math.Max(_audioBandLevelMeter.GetAdaptiveBeatLevel(music), selectedPeak * 0.12f)
                     : selectedPeak;
                 var systemVolume = _audioLevelMeter.GetMasterVolumeScalar();
@@ -403,6 +407,7 @@ public class Worker : BackgroundService
             left.PeakHoldMs == right.PeakHoldMs &&
             left.FollowSystemVolume == right.FollowSystemVolume &&
             left.EqEnabled == right.EqEnabled &&
+            left.AllowSystemMixFallback == right.AllowSystemMixFallback &&
             left.EqLowHz == right.EqLowHz &&
             left.EqHighHz == right.EqHighHz &&
             PlayerBindingEquals(left.PlayerBinding, right.PlayerBinding) &&
@@ -497,7 +502,9 @@ public class Worker : BackgroundService
                 status.ActiveProcessIds = selection.Audio.ProcessIds.ToList();
                 status.TargetDescription = DescribeMusicRule(settings, selection.Music);
                 status.AudioCaptureMode = settings.Effect.Music.EqEnabled
-                    ? "程序电平 + 系统混音频段分析"
+                    ? settings.Effect.Music.AllowSystemMixFallback
+                        ? "程序会话峰值 + 系统混音频段回退"
+                        : "程序音频会话电平（系统混音已禁用）"
                     : "程序音频会话电平";
                 if (media is not null)
                 {
@@ -639,7 +646,10 @@ public class Worker : BackgroundService
         status.ActiveMusicApplication = binding.ProcessName;
         status.ActiveProcessIds = settings.SelectedAudioProcessIds;
         status.TargetDescription = binding.ColorSource == MusicColorSource.Preset ? "音乐：预设颜色" : "音乐：歌曲封面颜色";
-        status.AudioCaptureMode = audio is null ? "等待播放器音频会话" : "程序音频会话电平";
+        status.AudioCaptureMode = audio is null ? "等待播放器音频会话" :
+            settings.Effect.Music.EqEnabled && settings.Effect.Music.AllowSystemMixFallback
+                ? "程序会话峰值 + 系统混音频段回退"
+                : "程序音频会话电平";
         if (audio is null) status.InvalidReason = "已绑定播放器未检测到音频会话";
         if (media is not null)
         {

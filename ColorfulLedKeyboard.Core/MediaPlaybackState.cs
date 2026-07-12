@@ -52,6 +52,7 @@ public sealed class MediaPlaybackState
 
     public void Save()
     {
+        if (Environment.UserInteractive) { ServiceIpc.TrySend("MediaPlayback", this); return; }
         try
         {
             Directory.CreateDirectory(AppPaths.ProgramDataDirectory);

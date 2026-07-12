@@ -28,14 +28,15 @@ public sealed class ForegroundAppState
 
     public static void Save(string processName)
     {
+        var state = new ForegroundAppState
+        {
+            ProcessName = AppProfileRule.NormalizeProcessName(processName),
+            UpdatedUtc = DateTimeOffset.UtcNow
+        };
+        if (Environment.UserInteractive) { ServiceIpc.TrySend("ForegroundState", state); return; }
         try
         {
             Directory.CreateDirectory(AppPaths.ProgramDataDirectory);
-            var state = new ForegroundAppState
-            {
-                ProcessName = AppProfileRule.NormalizeProcessName(processName),
-                UpdatedUtc = DateTimeOffset.UtcNow
-            };
             File.WriteAllText(AppPaths.ForegroundAppStatePath, JsonSerializer.Serialize(state));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

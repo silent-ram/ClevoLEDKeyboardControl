@@ -74,6 +74,7 @@ public sealed class SettingsForm : Form
     private readonly SliderRow _musicNoiseGate = new("噪声门", 0, 50, "%");
     private readonly SliderRow _musicBeatThreshold = new("节拍阈值", 0, 100, "%");
     private readonly CheckBox _musicEqEnabled = new() { Text = "自适应鼓点检测" };
+    private readonly CheckBox _musicSystemMixFallback = new() { Text = "进程独立捕获不可用时，允许系统混音频段分析" };
     private readonly SliderRow _musicEqLow = new("低频参考", 20, 1000, " Hz");
     private readonly SliderRow _musicEqHigh = new("高频参考", 40, 16000, " Hz");
     private readonly SliderRow _musicBaseBrightness = new("基础亮度", 0, 100, "%");
@@ -466,6 +467,7 @@ public sealed class SettingsForm : Form
         page.Controls.Add(_musicNoiseGate);
         page.Controls.Add(_musicBeatThreshold);
         page.Controls.Add(PlainRow(_musicEqEnabled));
+        page.Controls.Add(PlainRow(_musicSystemMixFallback));
         page.Controls.Add(_musicEqLow);
         page.Controls.Add(_musicEqHigh);
         UpdateMusicAdvancedVisibility();
@@ -583,6 +585,9 @@ public sealed class SettingsForm : Form
 
         page.Controls.Add(Section("运行状态"));
         page.Controls.Add(_automationStatus);
+        var simulator = new Button { Text = "场景模拟器...", Width = 130 };
+        simulator.Click += (_, _) => ShowAutomationSimulator();
+        page.Controls.Add(PlainRow(simulator));
         page.Controls.Add(Section("场景规则（列表靠前者优先）"));
         page.Controls.Add(PlainRow(_automationEnabled));
         page.Controls.Add(_sceneAutomation);
@@ -592,6 +597,43 @@ public sealed class SettingsForm : Form
         page.Controls.Add(_idleBrightness);
         page.Controls.Add(PlainRow(_idleTurnOff));
         return page;
+    }
+
+    private void ShowAutomationSimulator()
+    {
+        var settings = _settingsStore.Load();
+        using var dialog = new Form { Text = "场景模拟器（不会改变灯光）", Width = 620, Height = 470, StartPosition = FormStartPosition.CenterParent };
+        var layout = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Padding = new Padding(12) };
+        var time = new DateTimePicker { Width = 260, Format = DateTimePickerFormat.Custom, CustomFormat = "yyyy-MM-dd HH:mm:ss", Value = DateTime.Now };
+        var foreground = new TextBox { Width = 260, PlaceholderText = "例如 winword.exe" };
+        var audio = new ComboBox { Width = 260, DropDownStyle = ComboBoxStyle.DropDown };
+        audio.Items.AddRange(settings.Automation.MusicApplications.Select(rule => rule.ProcessName).Where(name => name.Length > 0).Distinct().Cast<object>().ToArray());
+        var playing = new CheckBox { Text = "模拟该程序正在播放", AutoSize = true };
+        var level = new NumericUpDown { Width = 100, Minimum = 0, Maximum = 100, Value = 30 };
+        var idle = new CheckBox { Text = "模拟已进入空闲状态", AutoSize = true };
+        var output = new TextBox { Width = 560, Height = 180, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
+        var run = new Button { Text = "模拟", Width = 100 };
+        run.Click += (_, _) =>
+        {
+            var process = AppProfileRule.NormalizeProcessName(audio.Text);
+            var states = playing.Checked && process.Length > 0
+                ? new AudioApplicationState[] { new(process, "", [1234], (float)level.Value / 100f, true,
+                    string.Equals(process, AppProfileRule.NormalizeProcessName(foreground.Text), StringComparison.OrdinalIgnoreCase)) }
+                : [];
+            var result = AutomationSimulator.Simulate(settings,
+                new AutomationSimulationInput(time.Value, foreground.Text, states, idle.Checked));
+            var issues = result.Health.Count == 0 ? "无" : string.Join(Environment.NewLine,
+                result.Health.Select(issue => $"[{issue.Severity}] {issue.RuleName}：{issue.Reason}"));
+            output.Text = $"优先级结果：{result.PriorityTrace}{Environment.NewLine}" +
+                $"最终亮度上限：{result.FinalBrightnessLimit}%{Environment.NewLine}" +
+                $"跳过提示：{result.Selection.InvalidReason ?? "无"}{Environment.NewLine}{Environment.NewLine}规则健康检查：{Environment.NewLine}{issues}";
+        };
+        layout.Controls.AddRange([new Label { Text = "本地时间", AutoSize = true }, time,
+            new Label { Text = "前台程序", AutoSize = true }, foreground,
+            new Label { Text = "播放程序", AutoSize = true }, audio, playing,
+            new Label { Text = "模拟音量（%）", AutoSize = true }, level, idle, run, output]);
+        dialog.Controls.Add(layout);
+        dialog.ShowDialog(this);
     }
 
     private Panel BuildEventFeedbackPage()
@@ -692,8 +734,19 @@ public sealed class SettingsForm : Form
             LoadSettings();
         };
 
+        var export = new Button { Text = "导出配置...", Width = 120 };
+        export.Click += (_, _) => ExportConfiguration();
+        var import = new Button { Text = "导入配置...", Width = 120 };
+        import.Click += (_, _) => ImportConfiguration();
+        var restore = new Button { Text = "恢复最近备份", Width = 120 };
+        restore.Click += (_, _) => RestoreLastGoodConfiguration();
+
         page.Controls.Add(Section("更新"));
         page.Controls.Add(Row("自动检查更新", _updateInterval));
+        page.Controls.Add(Section("配置管理"));
+        page.Controls.Add(PlainRow(export));
+        page.Controls.Add(PlainRow(import));
+        page.Controls.Add(PlainRow(restore));
         page.Controls.Add(Section("配置"));
         page.Controls.Add(Row("配置文件", configPath));
         page.Controls.Add(PlainRow(openFolder));
@@ -742,6 +795,7 @@ public sealed class SettingsForm : Form
             _musicNoiseGate.Value = (int)Math.Round(settings.Effect.Music.NoiseGate * 100);
             _musicBeatThreshold.Value = (int)Math.Round(settings.Effect.Music.BeatThreshold * 100);
             _musicEqEnabled.Checked = settings.Effect.Music.EqEnabled;
+            _musicSystemMixFallback.Checked = settings.Effect.Music.AllowSystemMixFallback;
             _musicEqLow.Value = settings.Effect.Music.EqLowHz;
             _musicEqHigh.Value = settings.Effect.Music.EqHighHz;
             _musicBaseBrightness.Value = settings.Effect.Music.BaseBrightness;
@@ -846,6 +900,7 @@ public sealed class SettingsForm : Form
             settings.Effect.Music.NoiseGate = _musicNoiseGate.Value / 100d;
             settings.Effect.Music.BeatThreshold = _musicBeatThreshold.Value / 100d;
             settings.Effect.Music.EqEnabled = _musicEqEnabled.Checked;
+            settings.Effect.Music.AllowSystemMixFallback = _musicSystemMixFallback.Checked;
             settings.Effect.Music.EqLowHz = _musicEqLow.Value;
             settings.Effect.Music.EqHighHz = _musicEqHigh.Value;
             settings.Effect.Music.Spotify.AlbumColorEnabled = false;
@@ -2131,7 +2186,8 @@ public sealed class SettingsForm : Form
         if (errors.Count > 0) return string.Join("；", errors);
         if (audio is null || DateTimeOffset.UtcNow - audio.UpdatedUtc > TimeSpan.FromSeconds(10))
             return "托盘未运行或音频检测状态过期";
-        return $"音频程序 {audio.Applications.Count} 个；媒体会话 {media?.Sessions.Count ?? 0} 个";
+        var ipc = ServiceIpc.IsAvailable() ? "安全管道已连接" : "安全管道不可用，设置只读";
+        return $"{ipc}；音频程序 {audio.Applications.Count} 个；媒体会话 {media?.Sessions.Count ?? 0} 个";
     }
 
     private static string GetServiceStatusText()
@@ -2365,6 +2421,48 @@ public sealed class SettingsForm : Form
         _audioSourceLabel.Text = string.IsNullOrEmpty(deviceName)
             ? "当前音频源：检测中…"
             : $"当前音频源：{deviceName}";
+    }
+
+    private void ExportConfiguration()
+    {
+        using var dialog = new SaveFileDialog { Filter = "JSON 配置|*.json", FileName = $"ClevoLEDKeyboardControl-{DateTime.Now:yyyyMMdd-HHmmss}.json" };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        var options = new JsonSerializerOptions { WriteIndented = true };
+        options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+        File.WriteAllText(dialog.FileName, JsonSerializer.Serialize(_settingsStore.Load(), options));
+    }
+
+    private void ImportConfiguration()
+    {
+        using var dialog = new OpenFileDialog { Filter = "JSON 配置|*.json", CheckFileExists = true };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        var json = File.ReadAllText(dialog.FileName);
+        if (!SettingsStore.TryParse(json, out var settings, out var error))
+        {
+            MessageBox.Show($"配置验证失败，当前设置未改变：{error}", "导入配置", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        _settingsStore.Save(settings);
+        LoadSettings();
+        MessageBox.Show("配置已验证并导入。", "导入配置", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    private void RestoreLastGoodConfiguration()
+    {
+        var path = AppPaths.SettingsPath + SettingsStore.LastGoodSuffix;
+        if (!File.Exists(path))
+        {
+            MessageBox.Show("没有可用的最近备份。", "恢复配置", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        if (!SettingsStore.TryParse(File.ReadAllText(path), out var settings, out var error))
+        {
+            MessageBox.Show($"最近备份无效：{error}", "恢复配置", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        _settingsStore.Save(settings);
+        LoadSettings();
+        MessageBox.Show("已恢复最近一次有效配置。", "恢复配置", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 }
 

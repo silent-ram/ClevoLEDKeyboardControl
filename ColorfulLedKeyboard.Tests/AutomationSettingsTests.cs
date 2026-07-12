@@ -94,6 +94,57 @@ public sealed class AutomationSettingsTests
         Assert.Null(state.Find(new MusicPlayerBinding { ProcessName = "" }));
         Assert.Null(state.Find(new MusicPlayerBinding { ProcessName = "browser" }));
     }
+
+    [Fact]
+    public void HealthAnalyzer_FindsMissingPresetAndCoveredRule()
+    {
+        var first = new LightingApplicationRule
+        {
+            Name = "第一条", ProcessNames = ["winword"],
+            Action = new SceneAction { PresetId = EffectPresetSettings.BuiltInId(EffectType.Static) }
+        };
+        var covered = new LightingApplicationRule
+        {
+            Name = "被覆盖", ProcessNames = ["winword"],
+            Action = new SceneAction { PresetId = "missing" }
+        };
+        var settings = new KeyboardSettings
+        {
+            Automation = new AutomationSettings { Enabled = true, LightingApplications = [first, covered] }
+        }.Normalize();
+
+        var issues = AutomationHealthAnalyzer.Analyze(settings);
+
+        Assert.Contains(issues, issue => issue.RuleName == "被覆盖" && issue.Reason.Contains("预设不存在"));
+        Assert.Contains(issues, issue => issue.RuleName == "被覆盖" && issue.Reason.Contains("覆盖"));
+    }
+
+    [Fact]
+    public void Simulator_AppliesMusicLightingAndIdleBrightnessMinimum()
+    {
+        var settings = new KeyboardSettings
+        {
+            Automation = new AutomationSettings
+            {
+                Enabled = true,
+                MusicApplications = [new MusicApplicationRule { ProcessName = "music", BrightnessLimit = 70 }],
+                LightingApplications = [new LightingApplicationRule
+                {
+                    ProcessNames = ["winword"],
+                    Action = new SceneAction { PresetId = EffectPresetSettings.BuiltInId(EffectType.Static), BrightnessLimit = 50 }
+                }]
+            },
+            IdleDim = new IdleDimSettings { Enabled = true, Brightness = 20 }
+        }.Normalize();
+        var audio = new AudioApplicationState[] { new("music", "", [1], .5f, true, false) };
+
+        var result = AutomationSimulator.Simulate(settings,
+            new AutomationSimulationInput(DateTime.Now, "winword", audio, true));
+
+        Assert.NotNull(result.Selection.Music);
+        Assert.NotNull(result.Selection.Lighting);
+        Assert.Equal(20, result.FinalBrightnessLimit);
+    }
     [Fact]
     public void Conditions_CombineWeekdayOvernightAndAnyApplication()
     {

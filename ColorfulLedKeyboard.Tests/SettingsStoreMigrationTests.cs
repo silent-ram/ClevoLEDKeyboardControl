@@ -120,6 +120,13 @@ public sealed class SettingsStoreMigrationTests : IDisposable
     }
 
     [Fact]
+    public void TryParse_InvalidImportDoesNotProduceSettings()
+    {
+        Assert.False(SettingsStore.TryParse("not-json", out _, out var error));
+        Assert.NotEmpty(error);
+    }
+
+    [Fact]
     public void Load_LegacyAutomation_MigratesOnceAndCreatesBackup()
     {
         var legacyJson = """

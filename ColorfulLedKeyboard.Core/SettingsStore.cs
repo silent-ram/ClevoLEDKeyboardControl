@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using System.Text;
 
 namespace ColorfulLedKeyboard.Core;
 
@@ -25,6 +26,14 @@ public sealed class SettingsStore
     }
 
     public KeyboardSettings Load()
+    {
+        if (IsInteractiveDefaultStore &&
+            ServiceIpc.TryRequest<object, KeyboardSettings>("GetSettings", new { }, out var remote) && remote is not null)
+            return remote.Normalize();
+        return LoadLocal();
+    }
+
+    public KeyboardSettings LoadLocal()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
 
@@ -299,6 +308,17 @@ public sealed class SettingsStore
 
     public void Save(KeyboardSettings settings)
     {
+        if (IsInteractiveDefaultStore)
+        {
+            if (!ServiceIpc.TrySend("SaveSettings", settings.Normalize()))
+                throw new IOException("服务通信不可用，配置处于只读状态。");
+            return;
+        }
+        SaveLocal(settings);
+    }
+
+    public void SaveLocal(KeyboardSettings settings)
+    {
         Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
         var json = JsonSerializer.Serialize(settings.Normalize(), SerializerOptions);
         var tempPath = $"{SettingsPath}.{Environment.ProcessId}.tmp";
@@ -314,6 +334,9 @@ public sealed class SettingsStore
             File.Move(tempPath, SettingsPath);
         }
     }
+
+    private bool IsInteractiveDefaultStore => Environment.UserInteractive &&
+        string.Equals(Path.GetFullPath(SettingsPath), Path.GetFullPath(AppPaths.SettingsPath), StringComparison.OrdinalIgnoreCase);
 
     private KeyboardSettings RecoverCorruptSettings()
     {
@@ -351,6 +374,28 @@ public sealed class SettingsStore
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
+            return false;
+        }
+    }
+
+    public static bool TryParse(string json, out KeyboardSettings settings, out string error)
+    {
+        settings = new KeyboardSettings().Normalize();
+        error = "";
+        if (Encoding.UTF8.GetByteCount(json) > ServiceIpc.MaximumMessageBytes)
+        {
+            error = "配置文件超过 1 MB 限制";
+            return false;
+        }
+        try
+        {
+            settings = (JsonSerializer.Deserialize<KeyboardSettings>(json, SerializerOptions)
+                ?? throw new JsonException("配置内容为空")).Normalize();
+            return true;
+        }
+        catch (JsonException ex)
+        {
+            error = ex.Message;
             return false;
         }
     }

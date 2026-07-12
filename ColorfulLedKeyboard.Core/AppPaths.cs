@@ -21,9 +21,12 @@ public static class AppPaths
     public static string ProgramDataDirectory =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), ProgramDataFolderName);
 
+    public static string UserDataDirectory =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), ProgramDataFolderName);
+
     public static string SettingsPath => Path.Combine(ProgramDataDirectory, SettingsFileName);
 
-    public static string UpdateStatePath => Path.Combine(ProgramDataDirectory, UpdateStateFileName);
+    public static string UpdateStatePath => Path.Combine(UserDataDirectory, UpdateStateFileName);
 
     public static string ForegroundAppStatePath => Path.Combine(ProgramDataDirectory, ForegroundAppStateFileName);
 

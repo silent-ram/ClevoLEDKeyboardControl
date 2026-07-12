@@ -30,11 +30,10 @@ public sealed class TrayApplicationContext : ApplicationContext
     public TrayApplicationContext(SettingsStore settingsStore, bool openSettingsOnStartup = false)
     {
         _settingsStore = settingsStore;
+        EnsureServiceRunning();
         _settings = _settingsStore.Load();
         _availableUpdate = _updateChecker.LoadKnownAvailable();
         _notificationFlashMonitor = new NotificationFlashMonitor(_settingsStore);
-
-        EnsureServiceRunning();
 
         _notifyIcon = new NotifyIcon
         {
