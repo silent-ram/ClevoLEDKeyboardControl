@@ -6,19 +6,31 @@ public sealed class MediaPlaybackState
 {
     public DateTimeOffset UpdatedUtc { get; set; } = DateTimeOffset.UtcNow;
     public List<MediaSessionState> Sessions { get; set; } = [];
+    public string LastError { get; set; } = "";
+    public DateTimeOffset? LastErrorUtc { get; set; }
 
     public MediaSessionState? Find(MusicApplicationRule rule)
     {
         if (!string.IsNullOrWhiteSpace(rule.MediaSessionId))
             return BestSession(item => string.Equals(item.SourceId, rule.MediaSessionId, StringComparison.OrdinalIgnoreCase));
-        return BestSession(item => item.SourceId.Contains(rule.ProcessName, StringComparison.OrdinalIgnoreCase));
+        return FindUnbound(rule.ProcessName);
     }
 
     public MediaSessionState? Find(MusicPlayerBinding binding)
     {
         if (!string.IsNullOrWhiteSpace(binding.MediaSessionId))
             return BestSession(item => string.Equals(item.SourceId, binding.MediaSessionId, StringComparison.OrdinalIgnoreCase));
-        return BestSession(item => item.SourceId.Contains(binding.ProcessName, StringComparison.OrdinalIgnoreCase));
+        return FindUnbound(binding.ProcessName);
+    }
+
+    private MediaSessionState? FindUnbound(string processName)
+    {
+        if (string.IsNullOrWhiteSpace(processName)) return null;
+        var normalized = AppProfileRule.NormalizeProcessName(processName);
+        var matches = Sessions.Where(item =>
+            item.SourceId.Contains(normalized, StringComparison.OrdinalIgnoreCase)).ToList();
+        // 未绑定时只接受唯一候选；多个相似 SourceId 的置信度不足，避免套用错误封面。
+        return matches.Count == 1 ? BestSession(item => ReferenceEquals(item, matches[0])) : null;
     }
 
     private MediaSessionState? BestSession(Func<MediaSessionState, bool> matches) =>

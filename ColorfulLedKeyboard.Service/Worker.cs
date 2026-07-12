@@ -471,7 +471,9 @@ public class Worker : BackgroundService
         AddProcessTreeStates(settings.Automation.MusicApplications, audioStates);
         AddPlayerBindingState(settings.Effect.Music.PlayerBinding, audioStates);
         var selection = AutomationResolver.Resolve(
-            settings.Automation, DateTime.Now, foregroundAvailable ? foreground?.ProcessName ?? "" : "", audioStates);
+            settings.Automation, DateTime.Now, foregroundAvailable ? foreground?.ProcessName ?? "" : "", audioStates,
+            rule => ValidateMusicRule(settings, rule),
+            action => ValidateSceneAction(settings, action));
 
         var status = new AutomationStatus
         {
@@ -479,6 +481,7 @@ public class Worker : BackgroundService
             ForegroundAvailable = foregroundAvailable,
             AudioApplications = audioApplications.ToList()
         };
+        status.InvalidReason = selection.InvalidReason ?? "";
 
         if (selection.Music is not null && selection.Audio is not null)
         {

@@ -1,0 +1,46 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ColorfulLedKeyboard.Core", "ColorfulLedKeyboard.Core\ColorfulLedKeyboard.Core.csproj", "{756F3540-32A0-487D-9466-764BBA34FA16}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ColorfulLedKeyboard.Service", "ColorfulLedKeyboard.Service\ColorfulLedKeyboard.Service.csproj", "{78C3365F-E057-4615-A6A1-477D7AF76A10}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ColorfulLedKeyboard.Tray", "ColorfulLedKeyboard.Tray\ColorfulLedKeyboard.Tray.csproj", "{094E025E-0784-4593-ADB7-7485CA8E7F66}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ColorfulLedKeyboard.Installer", "ColorfulLedKeyboard.Installer\ColorfulLedKeyboard.Installer.csproj", "{DE0F2186-ACA4-406E-BDBE-65FAB05C47BA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ColorfulLedKeyboard.Tests", "ColorfulLedKeyboard.Tests\ColorfulLedKeyboard.Tests.csproj", "{118640C8-0AF2-4B95-B148-615D8ED41473}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{756F3540-32A0-487D-9466-764BBA34FA16}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{756F3540-32A0-487D-9466-764BBA34FA16}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{756F3540-32A0-487D-9466-764BBA34FA16}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{756F3540-32A0-487D-9466-764BBA34FA16}.Release|Any CPU.Build.0 = Release|Any CPU
+		{78C3365F-E057-4615-A6A1-477D7AF76A10}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{78C3365F-E057-4615-A6A1-477D7AF76A10}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{78C3365F-E057-4615-A6A1-477D7AF76A10}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{78C3365F-E057-4615-A6A1-477D7AF76A10}.Release|Any CPU.Build.0 = Release|Any CPU
+		{094E025E-0784-4593-ADB7-7485CA8E7F66}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{094E025E-0784-4593-ADB7-7485CA8E7F66}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{094E025E-0784-4593-ADB7-7485CA8E7F66}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{094E025E-0784-4593-ADB7-7485CA8E7F66}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DE0F2186-ACA4-406E-BDBE-65FAB05C47BA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DE0F2186-ACA4-406E-BDBE-65FAB05C47BA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DE0F2186-ACA4-406E-BDBE-65FAB05C47BA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DE0F2186-ACA4-406E-BDBE-65FAB05C47BA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{118640C8-0AF2-4B95-B148-615D8ED41473}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{118640C8-0AF2-4B95-B148-615D8ED41473}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{118640C8-0AF2-4B95-B148-615D8ED41473}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{118640C8-0AF2-4B95-B148-615D8ED41473}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

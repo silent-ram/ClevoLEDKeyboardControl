@@ -16,6 +16,7 @@ public static class AppPaths
     public const string AutomationStatusFileName = "automation-status.json";
     public const string MediaPlaybackStateFileName = "media-playback.json";
     public const string AudioApplicationsStateFileName = "audio-applications.json";
+    public const string SettingsRecoveryStateFileName = "settings-recovery.json";
 
     public static string ProgramDataDirectory =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), ProgramDataFolderName);
@@ -41,4 +42,5 @@ public static class AppPaths
     public static string MediaPlaybackStatePath => Path.Combine(ProgramDataDirectory, MediaPlaybackStateFileName);
 
     public static string AudioApplicationsStatePath => Path.Combine(ProgramDataDirectory, AudioApplicationsStateFileName);
+    public static string SettingsRecoveryStatePath => Path.Combine(ProgramDataDirectory, SettingsRecoveryStateFileName);
 }

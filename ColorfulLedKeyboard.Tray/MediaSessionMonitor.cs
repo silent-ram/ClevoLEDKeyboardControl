@@ -1,5 +1,6 @@
 using ColorfulLedKeyboard.Core;
 using System.Drawing;
+using System.Security.Cryptography;
 using Windows.Media.Control;
 
 namespace ColorfulLedKeyboard.Tray;
@@ -41,22 +42,30 @@ internal sealed class MediaSessionMonitor : IDisposable
                         SourceId = sourceId,
                         Title = title,
                         Artist = artist,
-                        TrackId = $"{sourceId}|{title}|{artist}",
+                        TrackId = $"{sourceId}|{title}|{artist}|{properties?.AlbumTitle ?? ""}",
                         IsPlaying = playback?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing
                     };
                     List<string> colors = [];
-                    if (_colorCache.TryGetValue(media.TrackId, out var cached))
-                    {
-                        colors = [.. cached];
-                    }
-                    else if (properties?.Thumbnail is not null)
+                    if (properties?.Thumbnail is not null)
                     {
                         try
                         {
                             using var randomAccess = await properties.Thumbnail.OpenReadAsync();
                             using var stream = randomAccess.AsStreamForRead();
-                            using var bitmap = new Bitmap(stream);
-                            colors = AlbumColorExtractor.Extract(bitmap);
+                            using var bytes = new MemoryStream();
+                            await stream.CopyToAsync(bytes);
+                            var imageBytes = bytes.ToArray();
+                            media.TrackId += "|" + Convert.ToHexString(SHA256.HashData(imageBytes));
+                            if (_colorCache.TryGetValue(media.TrackId, out var cached))
+                            {
+                                colors = [.. cached];
+                            }
+                            else
+                            {
+                                bytes.Position = 0;
+                                using var bitmap = new Bitmap(bytes);
+                                colors = AlbumColorExtractor.Extract(bitmap);
+                            }
                             if (colors.Count > 0)
                             {
                                 _colorCache[media.TrackId] = [.. colors];
@@ -99,8 +108,14 @@ internal sealed class MediaSessionMonitor : IDisposable
             }
             state.Save();
         }
-        catch
+        catch (Exception ex)
         {
+            new MediaPlaybackState
+            {
+                UpdatedUtc = DateTimeOffset.UtcNow,
+                LastError = ex.GetType().Name + ": " + ex.Message,
+                LastErrorUtc = DateTimeOffset.UtcNow
+            }.Save();
         }
         finally
         {

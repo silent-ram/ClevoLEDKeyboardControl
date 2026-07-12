@@ -626,6 +626,8 @@ public sealed class SettingsForm : Form
         var foregroundApp = DiagnosticTextBox();
         var matchedProfile = DiagnosticTextBox();
         var updateStatus = DiagnosticTextBox();
+        var monitorStatus = DiagnosticTextBox();
+        var recoveryStatus = DiagnosticTextBox();
         var configDirectory = DiagnosticTextBox();
         var refresh = new Button { Text = "刷新诊断信息", Width = 130 };
 
@@ -637,6 +639,8 @@ public sealed class SettingsForm : Form
             foregroundApp.Text = diagnostics.ForegroundApp;
             matchedProfile.Text = diagnostics.MatchedProfile;
             updateStatus.Text = diagnostics.UpdateStatus;
+            monitorStatus.Text = diagnostics.MonitorStatus;
+            recoveryStatus.Text = diagnostics.RecoveryStatus;
             configDirectory.Text = diagnostics.ConfigDirectory;
             UpdateStatusHeader();
         }
@@ -648,6 +652,8 @@ public sealed class SettingsForm : Form
         page.Controls.Add(Row("当前前台应用", foregroundApp));
         page.Controls.Add(Row("命中应用场景", matchedProfile));
         page.Controls.Add(Row("更新检查", updateStatus));
+        page.Controls.Add(Row("播放器监视", monitorStatus));
+        page.Controls.Add(Row("配置恢复", recoveryStatus));
         page.Controls.Add(Row("配置目录", configDirectory));
         page.Controls.Add(PlainRow(refresh));
         Refresh();
@@ -2097,6 +2103,9 @@ public sealed class SettingsForm : Form
             : $"{foreground.ProcessName}，{FormatAge(DateTimeOffset.UtcNow - foreground.UpdatedUtc)}前更新";
 
         var automation = AutomationStatus.Load();
+        var audioState = AudioApplicationsState.Load();
+        var mediaState = MediaPlaybackState.Load();
+        var recovery = SettingsRecoveryState.Load();
         var matched = automation is null
             ? "无自动化状态"
             : string.IsNullOrWhiteSpace(automation.ActiveRuleName)
@@ -2109,7 +2118,20 @@ public sealed class SettingsForm : Form
             ForegroundApp: foregroundText,
             MatchedProfile: settings.Automation.Enabled ? matched : "场景自动化未启用",
             UpdateStatus: GetUpdateStatusText(settings.Update.CheckInterval),
+            MonitorStatus: BuildMonitorStatus(audioState, mediaState),
+            RecoveryStatus: recovery is null ? "未发生配置恢复" :
+                $"{recovery.Result}，{FormatAge(DateTimeOffset.UtcNow - recovery.UpdatedUtc)}前",
             ConfigDirectory: AppPaths.ProgramDataDirectory);
+    }
+
+    private static string BuildMonitorStatus(AudioApplicationsState? audio, MediaPlaybackState? media)
+    {
+        var errors = new[] { audio?.LastError, media?.LastError }
+            .Where(value => !string.IsNullOrWhiteSpace(value)).ToList();
+        if (errors.Count > 0) return string.Join("；", errors);
+        if (audio is null || DateTimeOffset.UtcNow - audio.UpdatedUtc > TimeSpan.FromSeconds(10))
+            return "托盘未运行或音频检测状态过期";
+        return $"音频程序 {audio.Applications.Count} 个；媒体会话 {media?.Sessions.Count ?? 0} 个";
     }
 
     private static string GetServiceStatusText()
@@ -2317,6 +2339,8 @@ public sealed class SettingsForm : Form
         string ForegroundApp,
         string MatchedProfile,
         string UpdateStatus,
+        string MonitorStatus,
+        string RecoveryStatus,
         string ConfigDirectory);
 
     private sealed record DriverComponentState(

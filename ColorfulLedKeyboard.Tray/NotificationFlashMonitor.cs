@@ -6,7 +6,7 @@ namespace ColorfulLedKeyboard.Tray;
 internal sealed class NotificationFlashMonitor : IDisposable
 {
     private readonly SettingsStore _settingsStore;
-    private readonly System.Windows.Forms.Timer _timer = new() { Interval = 3000 };
+    private readonly System.Windows.Forms.Timer _timer = new() { Interval = 1000 };
     private readonly HashSet<uint> _seen = [];
     private DateTimeOffset _lastFlash = DateTimeOffset.MinValue;
     private bool _permissionRequested;
@@ -42,8 +42,9 @@ internal sealed class NotificationFlashMonitor : IDisposable
     {
         var settings = _settingsStore.Load();
         var flash = settings.NotificationFlash.Normalize();
-        var requiredByRule = settings.Automation.MusicApplications.Any(rule => rule.NotificationPolicy == EventPolicy.Enabled) ||
-            settings.Automation.LightingApplications.Any(rule => rule.NotificationPolicy == EventPolicy.Enabled);
+        var requiredByRule = settings.Automation.Enabled && (
+            settings.Automation.MusicApplications.Any(rule => rule.Enabled && rule.NotificationPolicy == EventPolicy.Enabled) ||
+            settings.Automation.LightingApplications.Any(rule => rule.Enabled && rule.NotificationPolicy == EventPolicy.Enabled));
         if (!flash.Enabled && !requiredByRule)
         {
             return;

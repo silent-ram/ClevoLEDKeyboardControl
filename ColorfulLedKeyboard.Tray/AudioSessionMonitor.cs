@@ -93,8 +93,14 @@ internal sealed class AudioSessionMonitor : IDisposable
                 }).OrderByDescending(app => app.IsPlaying).ThenByDescending(app => app.PeakLevel).ToList()
             }.Save();
         }
-        catch
+        catch (Exception ex)
         {
+            new AudioApplicationsState
+            {
+                UpdatedUtc = DateTimeOffset.UtcNow,
+                LastError = ex.GetType().Name + ": " + ex.Message,
+                LastErrorUtc = DateTimeOffset.UtcNow
+            }.Save();
         }
         finally
         {

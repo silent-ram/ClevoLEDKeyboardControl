@@ -656,11 +656,13 @@ public sealed class TrayApplicationContext : ApplicationContext
     private void RefreshEventMonitors()
     {
         var typingRequired = _settings.TypingPulse.Enabled ||
-            _settings.Automation.MusicApplications.Any(rule => rule.TypingPolicy == EventPolicy.Enabled) ||
-            _settings.Automation.LightingApplications.Any(rule => rule.TypingPolicy == EventPolicy.Enabled);
+            (_settings.Automation.Enabled && (
+            _settings.Automation.MusicApplications.Any(rule => rule.Enabled && rule.TypingPolicy == EventPolicy.Enabled) ||
+            _settings.Automation.LightingApplications.Any(rule => rule.Enabled && rule.TypingPolicy == EventPolicy.Enabled)));
         var notificationRequired = _settings.NotificationFlash.Enabled ||
-            _settings.Automation.MusicApplications.Any(rule => rule.NotificationPolicy == EventPolicy.Enabled) ||
-            _settings.Automation.LightingApplications.Any(rule => rule.NotificationPolicy == EventPolicy.Enabled);
+            (_settings.Automation.Enabled && (
+            _settings.Automation.MusicApplications.Any(rule => rule.Enabled && rule.NotificationPolicy == EventPolicy.Enabled) ||
+            _settings.Automation.LightingApplications.Any(rule => rule.Enabled && rule.NotificationPolicy == EventPolicy.Enabled)));
         _typingPulseHook.SetEnabled(typingRequired);
         _notificationFlashMonitor.SetEnabled(notificationRequired);
     }

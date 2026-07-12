@@ -67,7 +67,7 @@ public class AudioSourceStatusFileTests : IDisposable
     }
 
     [Fact]
-    public void ConcurrentWriteRead_NeverYieldsHalfWrittenState()
+    public async Task ConcurrentWriteRead_NeverYieldsHalfWrittenState()
     {
         var writer = Task.Run(() =>
         {
@@ -94,7 +94,7 @@ public class AudioSourceStatusFileTests : IDisposable
             }
         });
 
-        Task.WaitAll(writer, reader);
+        await Task.WhenAll(writer, reader);
         Assert.Equal(0, failures);
     }
 }

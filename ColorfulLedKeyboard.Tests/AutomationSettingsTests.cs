@@ -59,6 +59,41 @@ public sealed class AutomationSettingsTests
         Assert.Equal("网易云", selected.Music?.Name);
         Assert.Equal("Word", selected.Lighting?.Name);
     }
+
+    [Fact]
+    public void Resolver_InvalidRulesDoNotBlockLaterValidRules()
+    {
+        var invalidMusic = new MusicApplicationRule { Name = "预设已删除", ProcessName = "qqmusic", MusicPresetId = "missing" };
+        var validMusic = new MusicApplicationRule { Name = "有效音乐", ProcessName = "qqmusic", MusicPresetId = "valid" };
+        var settings = new AutomationSettings
+        {
+            Enabled = true,
+            MusicApplications = [invalidMusic, validMusic]
+        }.Normalize();
+        var states = new AudioApplicationState[] { new("qqmusic", "", [1], .2f, true, false) };
+
+        var selected = AutomationResolver.Resolve(settings, DateTime.Now, "", states,
+            rule => rule.MusicPresetId == "valid" ? null : "引用的音乐预设不存在", _ => null);
+
+        Assert.Equal("有效音乐", selected.Music?.Name);
+        Assert.Contains("预设已删除", selected.InvalidReason);
+    }
+
+    [Fact]
+    public void MediaFallbackRejectsAmbiguousOrEmptyProcessNames()
+    {
+        var state = new MediaPlaybackState
+        {
+            Sessions =
+            [
+                new MediaSessionState { SourceId = "browser.music.one" },
+                new MediaSessionState { SourceId = "browser.music.two" }
+            ]
+        };
+
+        Assert.Null(state.Find(new MusicPlayerBinding { ProcessName = "" }));
+        Assert.Null(state.Find(new MusicPlayerBinding { ProcessName = "browser" }));
+    }
     [Fact]
     public void Conditions_CombineWeekdayOvernightAndAnyApplication()
     {

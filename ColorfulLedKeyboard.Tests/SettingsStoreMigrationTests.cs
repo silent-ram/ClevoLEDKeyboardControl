@@ -18,6 +18,12 @@ public sealed class SettingsStoreMigrationTests : IDisposable
         if (File.Exists(_tempSettingsPath)) File.Delete(_tempSettingsPath);
         if (File.Exists(_tempSettingsPath + ".pre-automation-v2.bak"))
             File.Delete(_tempSettingsPath + ".pre-automation-v2.bak");
+        if (File.Exists(_tempSettingsPath + SettingsStore.LastGoodSuffix))
+            File.Delete(_tempSettingsPath + SettingsStore.LastGoodSuffix);
+        foreach (var file in Directory.GetFiles(Path.GetDirectoryName(_tempSettingsPath)!,
+                     Path.GetFileName(_tempSettingsPath) + ".corrupt-*")) File.Delete(file);
+        var recovery = Path.Combine(Path.GetDirectoryName(_tempSettingsPath)!, AppPaths.SettingsRecoveryStateFileName);
+        if (File.Exists(recovery)) File.Delete(recovery);
     }
 
     [Fact]
@@ -96,6 +102,21 @@ public sealed class SettingsStoreMigrationTests : IDisposable
 
         Assert.Equal(OperatingMode.Lighting, loaded.OperatingMode);
         Assert.Equal(EffectType.Rainbow, loaded.Effect.Type);
+    }
+
+    [Fact]
+    public void Load_CorruptJson_PreservesCorruptFileAndRecoversLastGoodBackup()
+    {
+        var expected = new KeyboardSettings { Brightness = 73 }.Normalize();
+        File.WriteAllText(_tempSettingsPath + SettingsStore.LastGoodSuffix,
+            System.Text.Json.JsonSerializer.Serialize(expected));
+        File.WriteAllText(_tempSettingsPath, "{ invalid json");
+
+        var loaded = _store.Load();
+
+        Assert.Equal(73, loaded.Brightness);
+        Assert.NotEmpty(Directory.GetFiles(Path.GetDirectoryName(_tempSettingsPath)!,
+            Path.GetFileName(_tempSettingsPath) + ".corrupt-*"));
     }
 
     [Fact]

@@ -6,6 +6,7 @@ namespace ColorfulLedKeyboard.Core;
 
 public sealed class SettingsStore
 {
+    public const string LastGoodSuffix = ".last-good.bak";
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         WriteIndented = true
@@ -68,9 +69,7 @@ public sealed class SettingsStore
         }
         catch (JsonException)
         {
-            var defaults = new KeyboardSettings().Normalize();
-            TrySaveDefaults(defaults);
-            return defaults;
+            return RecoverCorruptSettings();
         }
 
         if (legacyMusicDetected)
@@ -307,12 +306,80 @@ public sealed class SettingsStore
 
         if (File.Exists(SettingsPath))
         {
+            TryPreserveLastGood(SettingsPath);
             File.Replace(tempPath, SettingsPath, destinationBackupFileName: null);
         }
         else
         {
             File.Move(tempPath, SettingsPath);
         }
+    }
+
+    private KeyboardSettings RecoverCorruptSettings()
+    {
+        var corruptPath = $"{SettingsPath}.corrupt-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmssfff}";
+        try
+        {
+            File.Move(SettingsPath, corruptPath);
+        }
+        catch (IOException) { corruptPath = SettingsPath; }
+        catch (UnauthorizedAccessException) { corruptPath = SettingsPath; }
+
+        var backupPath = SettingsPath + LastGoodSuffix;
+        if (TryLoadValidated(backupPath, out var recovered))
+        {
+            TryWriteRecoveryStatus("RecoveredBackup", corruptPath, backupPath);
+            try { Save(recovered); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            return recovered;
+        }
+
+        TryWriteRecoveryStatus("DefaultsUsed", corruptPath, "");
+        var defaults = new KeyboardSettings().Normalize();
+        TrySaveDefaults(defaults);
+        return defaults;
+    }
+
+    private static bool TryLoadValidated(string path, out KeyboardSettings settings)
+    {
+        settings = new KeyboardSettings().Normalize();
+        try
+        {
+            if (!File.Exists(path)) return false;
+            settings = (JsonSerializer.Deserialize<KeyboardSettings>(File.ReadAllText(path), SerializerOptions)
+                ?? new KeyboardSettings()).Normalize();
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return false;
+        }
+    }
+
+    private void TryPreserveLastGood(string path)
+    {
+        try
+        {
+            using var _ = JsonDocument.Parse(File.ReadAllText(path));
+            File.Copy(path, SettingsPath + LastGoodSuffix, overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { }
+    }
+
+    private void TryWriteRecoveryStatus(string result, string corruptPath, string backupPath)
+    {
+        try
+        {
+            var state = new SettingsRecoveryState
+            {
+                UpdatedUtc = DateTimeOffset.UtcNow,
+                Result = result,
+                CorruptFilePath = corruptPath,
+                BackupFilePath = backupPath
+            };
+            var statePath = Path.Combine(Path.GetDirectoryName(SettingsPath)!, AppPaths.SettingsRecoveryStateFileName);
+            File.WriteAllText(statePath, JsonSerializer.Serialize(state));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 
     private void TrySaveDefaults(KeyboardSettings defaults)
@@ -327,5 +394,24 @@ public sealed class SettingsStore
         catch (IOException)
         {
         }
+    }
+}
+
+public sealed class SettingsRecoveryState
+{
+    public DateTimeOffset UpdatedUtc { get; set; }
+    public string Result { get; set; } = "";
+    public string CorruptFilePath { get; set; } = "";
+    public string BackupFilePath { get; set; } = "";
+
+    public static SettingsRecoveryState? Load()
+    {
+        try
+        {
+            return File.Exists(AppPaths.SettingsRecoveryStatePath)
+                ? JsonSerializer.Deserialize<SettingsRecoveryState>(File.ReadAllText(AppPaths.SettingsRecoveryStatePath))
+                : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { return null; }
     }
 }

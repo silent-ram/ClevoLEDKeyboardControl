@@ -170,7 +170,8 @@ public sealed record AutomationSelection(
     MusicApplicationRule? Music,
     AudioApplicationState? Audio,
     LightingApplicationRule? Lighting,
-    AutomationScheduleRule? Schedule);
+    AutomationScheduleRule? Schedule,
+    string? InvalidReason = null);
 
 public static class AutomationResolver
 {
@@ -178,11 +179,23 @@ public static class AutomationResolver
         AutomationSettings settings,
         DateTime localNow,
         string foregroundProcessName,
-        IReadOnlyList<AudioApplicationState> audioStates)
+        IReadOnlyList<AudioApplicationState> audioStates,
+        Func<MusicApplicationRule, string?>? validateMusic = null,
+        Func<SceneAction, string?>? validateAction = null)
     {
         if (!settings.Enabled) return new AutomationSelection(null, null, null, null);
+        string? firstInvalidReason = null;
         var candidates = settings.MusicApplications
             .Where(rule => rule.Enabled && rule.TimeFilter.Matches(localNow))
+            .Where(rule =>
+            {
+                var error = string.IsNullOrWhiteSpace(rule.ProcessName)
+                    ? "未配置有效进程"
+                    : validateMusic?.Invoke(rule);
+                if (error is null) return true;
+                firstInvalidReason ??= $"{rule.Name}：{error}";
+                return false;
+            })
             .Select(rule => (Rule: rule, Audio: audioStates.FirstOrDefault(state => state.IsPlaying &&
                 string.Equals(state.ProcessName, rule.ProcessName, StringComparison.OrdinalIgnoreCase) &&
                 PathMatches(rule.ExecutablePath, state.ExecutablePath))))
@@ -191,9 +204,34 @@ public static class AutomationResolver
         var music = candidates.FirstOrDefault(item => item.Audio!.IsForeground);
         if (music.Rule is null) music = candidates.FirstOrDefault();
 
-        var lighting = settings.LightingApplications.FirstOrDefault(rule => rule.Matches(foregroundProcessName, localNow));
-        var schedule = settings.ScheduleRules.FirstOrDefault(rule => rule.Enabled && rule.TimeFilter.Matches(localNow));
-        return new AutomationSelection(music.Rule, music.Audio, lighting, schedule);
+        var lighting = settings.LightingApplications.FirstOrDefault(rule =>
+        {
+            if (!rule.Enabled) return false;
+            if (rule.ProcessNames.Count == 0)
+            {
+                firstInvalidReason ??= $"{rule.Name}：未配置有效进程";
+                return false;
+            }
+            var error = validateAction?.Invoke(rule.Action);
+            if (error is not null)
+            {
+                firstInvalidReason ??= $"{rule.Name}：{error}";
+                return false;
+            }
+            return rule.Matches(foregroundProcessName, localNow);
+        });
+        var schedule = settings.ScheduleRules.FirstOrDefault(rule =>
+        {
+            if (!rule.Enabled) return false;
+            var error = validateAction?.Invoke(rule.Action);
+            if (error is not null)
+            {
+                firstInvalidReason ??= $"{rule.Name}：{error}";
+                return false;
+            }
+            return rule.TimeFilter.Matches(localNow);
+        });
+        return new AutomationSelection(music.Rule, music.Audio, lighting, schedule, firstInvalidReason);
     }
 
     private static bool PathMatches(string expected, string actual)

@@ -62,6 +62,8 @@ public sealed class AudioApplicationsState
 {
     public DateTimeOffset UpdatedUtc { get; set; } = DateTimeOffset.UtcNow;
     public List<AudioApplicationStatus> Applications { get; set; } = [];
+    public string LastError { get; set; } = "";
+    public DateTimeOffset? LastErrorUtc { get; set; }
 
     public static AudioApplicationsState? Load()
     {
