@@ -16,6 +16,8 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly AudioSessionMonitor _audioSessionMonitor = new();
     private readonly NotifyIcon _notifyIcon;
     private readonly System.Windows.Forms.Timer _foregroundTimer = new() { Interval = 1000 };
+    private readonly System.Windows.Forms.Timer _trayStatusTimer = new() { Interval = 2000 };
+    private readonly System.Windows.Forms.Timer _updateTimer = new() { Interval = 6 * 60 * 60 * 1000 };
     private string? _balloonReleaseUrl;
     private string? _lastForegroundProcess;
     private DateTimeOffset _lastForegroundStateSaved = DateTimeOffset.MinValue;
@@ -23,11 +25,13 @@ public sealed class TrayApplicationContext : ApplicationContext
     private SettingsForm? _settingsForm;
     private AudioSourceStatusWatcher? _audioStatusWatcher;
     private AudioSourceStatusInfo? _lastAudioStatus;
+    private UpdateCheckResult? _availableUpdate;
 
     public TrayApplicationContext(SettingsStore settingsStore, bool openSettingsOnStartup = false)
     {
         _settingsStore = settingsStore;
         _settings = _settingsStore.Load();
+        _availableUpdate = _updateChecker.LoadKnownAvailable();
         _notificationFlashMonitor = new NotificationFlashMonitor(_settingsStore);
 
         EnsureServiceRunning();
@@ -44,9 +48,17 @@ public sealed class TrayApplicationContext : ApplicationContext
         _notifyIcon.BalloonTipClicked += (_, _) => OpenBalloonRelease();
         _foregroundTimer.Tick += (_, _) => UpdateForegroundAppState();
         _foregroundTimer.Start();
+        _trayStatusTimer.Tick += (_, _) =>
+        {
+            if (!(_notifyIcon.ContextMenuStrip?.Visible ?? false)) RefreshMenu(refreshEventMonitors: false);
+            else UpdateNotifyIconText();
+        };
+        _trayStatusTimer.Start();
+        _updateTimer.Tick += async (_, _) => await CheckForUpdatesAutomaticallyAsync(initialDelay: false);
+        _updateTimer.Start();
         RefreshEventMonitors();
         UpdateForegroundAppState();
-        _ = CheckForUpdatesOnStartupAsync();
+        _ = CheckForUpdatesAutomaticallyAsync(initialDelay: true);
 
         _audioStatusWatcher = new AudioSourceStatusWatcher(OnAudioStatusChanged);
         _audioStatusWatcher.RefreshNow();
@@ -65,6 +77,10 @@ public sealed class TrayApplicationContext : ApplicationContext
             _notifyIcon.Dispose();
             _foregroundTimer.Stop();
             _foregroundTimer.Dispose();
+            _trayStatusTimer.Stop();
+            _trayStatusTimer.Dispose();
+            _updateTimer.Stop();
+            _updateTimer.Dispose();
             _typingPulseHook.Dispose();
             _notificationFlashMonitor.Dispose();
             _mediaSessionMonitor.Dispose();
@@ -77,7 +93,10 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private ContextMenuStrip BuildMenu()
     {
+        _settings = _settingsStore.Load();
         var menu = new ContextMenuStrip();
+        AddRuntimeStatusItems(menu);
+        menu.Items.Add(new ToolStripSeparator());
 
         var enabled = new ToolStripMenuItem("启用灯效") { Checked = _settings.Enabled };
         enabled.Click += (_, _) =>
@@ -89,8 +108,10 @@ public sealed class TrayApplicationContext : ApplicationContext
         };
 
         menu.Items.Add(enabled);
-        menu.Items.Add(BuildEffectMenu());
-        menu.Items.Add(BuildMusicModeMenu());
+        menu.Items.Add(BuildAutomationMenu());
+        menu.Items.Add(BuildBaseModeMenu());
+        menu.Items.Add(BuildPlayerBindingMenu());
+        menu.Items.Add(BuildEventFeedbackMenu());
         menu.Items.Add(BuildBrightnessMenu());
         menu.Items.Add(new ToolStripSeparator());
 
@@ -100,8 +121,16 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         menu.Items.Add(BuildServiceMenu());
 
-        var update = new ToolStripMenuItem("检查更新");
-        update.Click += async (_, _) => await CheckForUpdatesManuallyAsync();
+        var update = new ToolStripMenuItem(_availableUpdate?.Status == UpdateCheckStatus.Available
+            ? $"发现新版本 v{_availableUpdate.LatestVersion?.ToString(3)}（点击下载）"
+            : "检查更新");
+        update.ForeColor = _availableUpdate?.Status == UpdateCheckStatus.Available ? Color.Firebrick : SystemColors.ControlText;
+        update.Click += async (_, _) =>
+        {
+            if (_availableUpdate?.Status == UpdateCheckStatus.Available && !string.IsNullOrWhiteSpace(_availableUpdate.ReleaseUrl))
+                UpdateChecker.OpenUrl(_availableUpdate.ReleaseUrl);
+            else await CheckForUpdatesManuallyAsync();
+        };
         menu.Items.Add(update);
 
         var about = new ToolStripMenuItem("关于...");
@@ -115,6 +144,164 @@ public sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add(exit);
 
         return menu;
+    }
+
+    private void AddRuntimeStatusItems(ContextMenuStrip menu)
+    {
+        var status = AutomationStatus.Load();
+        var fresh = status is not null && DateTimeOffset.UtcNow - status.UpdatedUtc <= TimeSpan.FromSeconds(10);
+        var current = !_settings.Enabled
+            ? "当前：灯光已关闭"
+            : fresh && !string.IsNullOrWhiteSpace(status!.ActiveMusicApplication)
+                ? $"当前：{status.ActiveMusicApplication} · 音乐模式"
+                : _settings.OperatingMode == OperatingMode.Music ? "当前：音乐模式" : $"当前：灯效模式 · {_settings.Effect.Type}";
+        menu.Items.Add(new ToolStripMenuItem(current) { Enabled = false });
+        if (fresh && !string.IsNullOrWhiteSpace(status!.TrackTitle))
+            menu.Items.Add(new ToolStripMenuItem($"歌曲：{status.TrackTitle}{(string.IsNullOrWhiteSpace(status.TrackArtist) ? "" : " - " + status.TrackArtist)}") { Enabled = false });
+        if (fresh && !string.IsNullOrWhiteSpace(status!.ActiveRuleName))
+            menu.Items.Add(new ToolStripMenuItem($"场景：{status.ActiveRuleName}") { Enabled = false });
+        if (fresh && !string.IsNullOrWhiteSpace(status!.AlbumColor))
+            menu.Items.Add(new ToolStripMenuItem($"封面：{status.AlbumColor} · {status.AudioCaptureMode}") { Enabled = false });
+    }
+
+    private ToolStripMenuItem BuildAutomationMenu()
+    {
+        var parent = new ToolStripMenuItem("场景自动化") { Checked = _settings.Automation.Enabled };
+        var enabled = new ToolStripMenuItem("启用场景自动化") { Checked = _settings.Automation.Enabled };
+        enabled.Click += (_, _) => ApplyEffect(settings => settings.Automation.Enabled = !settings.Automation.Enabled);
+        parent.DropDownItems.Add(enabled);
+        parent.DropDownItems.Add(new ToolStripSeparator());
+        parent.DropDownItems.Add(BuildRuleToggleMenu("音乐程序", _settings.Automation.MusicApplications.Select(rule => (rule.Id, rule.Name, rule.Enabled)),
+            (settings, id) =>
+            {
+                var rule = settings.Automation.MusicApplications.FirstOrDefault(item => item.Id == id);
+                if (rule is not null) rule.Enabled = !rule.Enabled;
+            }));
+        parent.DropDownItems.Add(BuildRuleToggleMenu("灯效程序", _settings.Automation.LightingApplications.Select(rule => (rule.Id, rule.Name, rule.Enabled)),
+            (settings, id) =>
+            {
+                var rule = settings.Automation.LightingApplications.FirstOrDefault(item => item.Id == id);
+                if (rule is not null) rule.Enabled = !rule.Enabled;
+            }));
+        parent.DropDownItems.Add(BuildRuleToggleMenu("时间计划", _settings.Automation.ScheduleRules.Select(rule => (rule.Id, rule.Name, rule.Enabled)),
+            (settings, id) =>
+            {
+                var rule = settings.Automation.ScheduleRules.FirstOrDefault(item => item.Id == id);
+                if (rule is not null) rule.Enabled = !rule.Enabled;
+            }));
+        parent.DropDownItems.Add(new ToolStripSeparator());
+        var open = new ToolStripMenuItem("打开场景自动化设置...");
+        open.Click += (_, _) => OpenSettings();
+        parent.DropDownItems.Add(open);
+        return parent;
+    }
+
+    private ToolStripMenuItem BuildRuleToggleMenu(
+        string title,
+        IEnumerable<(string Id, string Name, bool Enabled)> rules,
+        Action<KeyboardSettings, string> toggle)
+    {
+        var parent = new ToolStripMenuItem(title);
+        var list = rules.ToList();
+        if (list.Count == 0)
+        {
+            parent.DropDownItems.Add(new ToolStripMenuItem("暂无规则") { Enabled = false });
+            return parent;
+        }
+        foreach (var rule in list)
+        {
+            var id = rule.Id;
+            var item = new ToolStripMenuItem(rule.Name) { Checked = rule.Enabled };
+            item.Click += (_, _) => ApplyEffect(settings => toggle(settings, id));
+            parent.DropDownItems.Add(item);
+        }
+        return parent;
+    }
+
+    private ToolStripMenuItem BuildBaseModeMenu()
+    {
+        var parent = new ToolStripMenuItem("基础模式（无场景命中时）");
+        parent.DropDownItems.Add(BuildEffectMenu());
+        parent.DropDownItems.Add(BuildMusicModeMenu());
+        var off = new ToolStripMenuItem("关闭灯光") { Checked = !_settings.Enabled };
+        off.Click += (_, _) => ApplyEffect(settings => settings.Enabled = false);
+        parent.DropDownItems.Add(off);
+        return parent;
+    }
+
+    private ToolStripMenuItem BuildPlayerBindingMenu()
+    {
+        var binding = _settings.Effect.Music.PlayerBinding;
+        var parent = new ToolStripMenuItem("播放器绑定");
+        parent.DropDownItems.Add(new ToolStripMenuItem(binding.Enabled ? $"当前绑定：{binding.ProcessName}" : "当前绑定：无") { Enabled = false });
+        var bind = new ToolStripMenuItem("绑定当前有声程序");
+        var state = AudioApplicationsState.Load();
+        var applications = state is not null && DateTimeOffset.UtcNow - state.UpdatedUtc <= TimeSpan.FromSeconds(3)
+            ? state.Applications.OrderByDescending(item => item.IsPlaying).ThenByDescending(item => item.PeakLevel).ToList()
+            : [];
+        if (applications.Count == 0) bind.DropDownItems.Add(new ToolStripMenuItem("未检测到有声程序") { Enabled = false });
+        foreach (var application in applications)
+        {
+            var copy = application;
+            var item = new ToolStripMenuItem($"{copy.ProcessName} · PID {string.Join(",", copy.ProcessIds)} · {copy.PeakLevel:P0}")
+            {
+                Checked = binding.Enabled && string.Equals(binding.ProcessName, copy.ProcessName, StringComparison.OrdinalIgnoreCase)
+            };
+            item.Click += (_, _) => ApplyEffect(settings =>
+            {
+                settings.Effect.Music.PlayerBinding = new MusicPlayerBinding
+                {
+                    Enabled = true,
+                    ProcessName = copy.ProcessName,
+                    ExecutablePath = copy.ExecutablePath,
+                    IncludeChildProcesses = true,
+                    MediaSessionId = MediaPlaybackState.Load()?.Sessions.FirstOrDefault(session =>
+                        session.SourceId.Contains(copy.ProcessName, StringComparison.OrdinalIgnoreCase))?.SourceId ?? "",
+                    ColorSource = settings.Effect.Music.PlayerBinding.ColorSource
+                };
+            });
+            bind.DropDownItems.Add(item);
+        }
+        parent.DropDownItems.Add(bind);
+        var color = new ToolStripMenuItem("颜色来源");
+        foreach (var source in Enum.GetValues<MusicColorSource>())
+        {
+            var sourceCopy = source;
+            var label = source switch
+            {
+                MusicColorSource.AlbumDominant => "封面主色",
+                MusicColorSource.AlbumPalette => "封面配色",
+                _ => "音乐预设颜色"
+            };
+            var item = new ToolStripMenuItem(label) { Checked = binding.ColorSource == source };
+            item.Click += (_, _) => ApplyEffect(settings => settings.Effect.Music.PlayerBinding.ColorSource = sourceCopy);
+            color.DropDownItems.Add(item);
+        }
+        parent.DropDownItems.Add(color);
+        var clear = new ToolStripMenuItem("取消绑定") { Enabled = binding.Enabled };
+        clear.Click += (_, _) => ApplyEffect(settings => settings.Effect.Music.PlayerBinding = new MusicPlayerBinding());
+        parent.DropDownItems.Add(clear);
+        parent.DropDownItems.Add(new ToolStripSeparator());
+        var open = new ToolStripMenuItem("打开音乐设置...");
+        open.Click += (_, _) => OpenSettings();
+        parent.DropDownItems.Add(open);
+        return parent;
+    }
+
+    private ToolStripMenuItem BuildEventFeedbackMenu()
+    {
+        var parent = new ToolStripMenuItem("事件反馈");
+        var typing = new ToolStripMenuItem("敲字闪烁") { Checked = _settings.TypingPulse.Enabled };
+        typing.Click += (_, _) => ApplyEffect(settings => settings.TypingPulse.Enabled = !settings.TypingPulse.Enabled);
+        var notification = new ToolStripMenuItem("通知闪烁") { Checked = _settings.NotificationFlash.Enabled };
+        notification.Click += (_, _) => ApplyEffect(settings => settings.NotificationFlash.Enabled = !settings.NotificationFlash.Enabled);
+        parent.DropDownItems.Add(typing);
+        parent.DropDownItems.Add(notification);
+        parent.DropDownItems.Add(new ToolStripSeparator());
+        var open = new ToolStripMenuItem("打开事件反馈设置...");
+        open.Click += (_, _) => OpenSettings();
+        parent.DropDownItems.Add(open);
+        return parent;
     }
 
     private ToolStripMenuItem BuildEffectMenu()
@@ -203,23 +390,27 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private ToolStripMenuItem BuildBrightnessMenu()
     {
-        var brightness = new ToolStripMenuItem($"亮度 ({_settings.Brightness}%)");
-        if (_settings.OperatingMode == OperatingMode.Music)
-        {
-            brightness.Enabled = false;
-            brightness.Text = "亮度 (由当前模式控制)";
-        }
+        var musicMode = _settings.OperatingMode == OperatingMode.Music;
+        var current = musicMode ? _settings.Effect.Music.PeakBrightness : _settings.Brightness;
+        var brightness = new ToolStripMenuItem(musicMode
+            ? $"音乐峰值亮度 ({current}%)"
+            : $"基础亮度 ({current}%)");
 
         foreach (var value in new[] { 25, 50, 75, 100 })
         {
             var item = new ToolStripMenuItem($"{value}%")
             {
-                Checked = _settings.Brightness == value
+                Checked = current == value
             };
             item.Click += (_, _) => ApplyEffect(settings =>
             {
                 settings.Enabled = true;
-                settings.Brightness = value;
+                if (settings.OperatingMode == OperatingMode.Music)
+                {
+                    settings.Effect.Music.PeakBrightness = value;
+                    settings.Effect.Music.BaseBrightness = Math.Min(settings.Effect.Music.BaseBrightness, value);
+                }
+                else settings.Brightness = value;
             });
             brightness.DropDownItems.Add(item);
         }
@@ -298,15 +489,17 @@ public sealed class TrayApplicationContext : ApplicationContext
         _lastForegroundStateSaved = DateTimeOffset.UtcNow;
     }
 
-    private async Task CheckForUpdatesOnStartupAsync()
+    private async Task CheckForUpdatesAutomaticallyAsync(bool initialDelay)
     {
         try
         {
-            await Task.Delay(TimeSpan.FromSeconds(5));
+            if (initialDelay) await Task.Delay(TimeSpan.FromSeconds(5));
             var interval = _settingsStore.Load().Update.CheckInterval;
             var result = await _updateChecker.CheckAsync(force: false, interval);
             if (result.Status == UpdateCheckStatus.Available)
             {
+                _availableUpdate = result;
+                RefreshMenu(refreshEventMonitors: false);
                 ShowUpdateAvailable(result, passive: true);
             }
         }
@@ -322,6 +515,9 @@ public sealed class TrayApplicationContext : ApplicationContext
             var result = await _updateChecker.CheckAsync(force: true, UpdateCheckInterval.Daily);
             if (result.Status == UpdateCheckStatus.Available)
             {
+                _availableUpdate = result;
+                RefreshMenu(refreshEventMonitors: false);
+                if (result.LatestVersion is not null) UpdateChecker.MarkPrompted(result.LatestVersion);
                 ShowUpdateAvailable(result, passive: false);
                 return;
             }
@@ -334,8 +530,18 @@ public sealed class TrayApplicationContext : ApplicationContext
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
         {
+            var detail = ex switch
+            {
+                TaskCanceledException => "连接 GitHub 超时，请稍后重试。",
+                HttpRequestException http when http.StatusCode == System.Net.HttpStatusCode.Forbidden =>
+                    "GitHub 暂时限制了更新检查请求，请稍后重试。",
+                HttpRequestException http when http.StatusCode.HasValue =>
+                    $"GitHub 返回状态码 {(int)http.StatusCode.Value}，请稍后重试。",
+                InvalidOperationException => "无法识别 GitHub 最新版本信息，请稍后重试。",
+                _ => "暂时无法连接更新服务器，请稍后重试。"
+            };
             MessageBox.Show(
-                $"检查更新失败：{ex.Message}",
+                $"检查更新失败：{detail}",
                 "ClevoLEDKeyboardControl",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Warning);
@@ -347,10 +553,19 @@ public sealed class TrayApplicationContext : ApplicationContext
         var latest = result.LatestVersion?.ToString(3) ?? "未知";
         if (passive)
         {
+            if (result.LatestVersion is null || !UpdateChecker.ShouldPrompt(result.LatestVersion)) return;
+            UpdateChecker.MarkPrompted(result.LatestVersion);
             _balloonReleaseUrl = result.ReleaseUrl;
             _notifyIcon.BalloonTipTitle = "ClevoLEDKeyboardControl 有新版本";
-            _notifyIcon.BalloonTipText = $"最新版本：{latest}。点击这里打开下载页面。";
+            _notifyIcon.BalloonTipText = $"最新版本：{latest}。托盘菜单会持续显示更新入口。";
             _notifyIcon.ShowBalloonTip(8000);
+            var passiveChoice = MessageBox.Show(
+                $"发现新版本：{latest}\n当前版本：{result.CurrentVersion.ToString(3)}\n\n是否立即打开下载页面？\n选择“否”后仍可从托盘菜单下载。",
+                "ClevoLEDKeyboardControl 自动更新提醒",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Information);
+            if (passiveChoice == DialogResult.Yes && !string.IsNullOrWhiteSpace(result.ReleaseUrl))
+                UpdateChecker.OpenUrl(result.ReleaseUrl);
             return;
         }
 
@@ -416,10 +631,10 @@ public sealed class TrayApplicationContext : ApplicationContext
         }
     }
 
-    private void RefreshMenu()
+    private void RefreshMenu(bool refreshEventMonitors = true)
     {
         _settings = _settingsStore.Load();
-        RefreshEventMonitors();
+        if (refreshEventMonitors) RefreshEventMonitors();
         var oldMenu = _notifyIcon.ContextMenuStrip;
         _notifyIcon.ContextMenuStrip = BuildMenu();
         oldMenu?.Dispose();
@@ -453,20 +668,29 @@ public sealed class TrayApplicationContext : ApplicationContext
     private void UpdateNotifyIconText()
     {
         var settings = _settings;
+        var status = AutomationStatus.Load();
+        var fresh = status is not null && DateTimeOffset.UtcNow - status.UpdatedUtc <= TimeSpan.FromSeconds(10);
         string text;
 
         if (settings.OperatingMode != OperatingMode.Music || !settings.Enabled)
         {
-            text = "ClevoLEDKeyboardControl";
+            text = !settings.Enabled
+                ? "ClevoLEDKeyboardControl\n灯光已关闭"
+                : fresh && !string.IsNullOrWhiteSpace(status!.ActiveRuleName)
+                    ? $"ClevoLEDKeyboardControl\n场景：{status.ActiveRuleName}"
+                    : "ClevoLEDKeyboardControl\n灯效模式";
         }
         else
         {
-            var info = _lastAudioStatus;
-            var deviceName = info?.DeviceFriendlyName ?? "";
-            text = string.IsNullOrEmpty(deviceName)
-                ? "ClevoLEDKeyboardControl\n音乐：检测中…"
-                : $"ClevoLEDKeyboardControl\n音乐：{deviceName}";
+            var player = fresh && !string.IsNullOrWhiteSpace(status!.ActiveMusicApplication)
+                ? status.ActiveMusicApplication
+                : _lastAudioStatus?.DeviceFriendlyName ?? "检测中…";
+            var track = fresh && !string.IsNullOrWhiteSpace(status!.TrackTitle) ? $"\n{status.TrackTitle}" : "";
+            text = $"ClevoLEDKeyboardControl\n音乐：{player}{track}";
         }
+
+        if (_availableUpdate?.Status == UpdateCheckStatus.Available)
+            text += $"\n可更新：v{_availableUpdate.LatestVersion?.ToString(3)}";
 
         if (text.Length > 120) text = text[..120] + "…";
         _notifyIcon.Text = text;

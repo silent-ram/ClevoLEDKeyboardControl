@@ -3,14 +3,13 @@ using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace ColorfulLedKeyboard.Tray;
 
 public sealed class UpdateChecker
 {
     public const string ReleasesUrl = "https://github.com/silent-ram/ClevoLEDKeyboardControl/releases";
-    private const string LatestReleaseApiUrl = "https://api.github.com/repos/silent-ram/ClevoLEDKeyboardControl/releases/latest";
+    private const string LatestReleaseUrl = "https://github.com/silent-ram/ClevoLEDKeyboardControl/releases/latest";
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     public Version CurrentVersion { get; } = Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0, 0);
@@ -24,20 +23,25 @@ public sealed class UpdateChecker
 
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
         client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("ClevoLEDKeyboardControl", CurrentVersion.ToString(3)));
-        client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+        client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/html"));
 
-        using var response = await client.GetAsync(LatestReleaseApiUrl, cancellationToken);
+        // releases/latest 通过普通网页 302 跳转到 /releases/tag/vX.Y.Z，
+        // 不消耗 GitHub REST API 的匿名限额，避免多个用户共享公网 IP 时出现 403。
+        using var response = await client.GetAsync(LatestReleaseUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         response.EnsureSuccessStatusCode();
-
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        var release = await JsonSerializer.DeserializeAsync<GitHubRelease>(stream, JsonOptions, cancellationToken)
-            ?? throw new InvalidOperationException("GitHub 返回的发布信息为空。");
-
-        var latestVersion = ParseVersion(release.TagName);
-        SaveState(new UpdateCheckState { LastCheckedUtc = DateTimeOffset.UtcNow });
+        var releaseUrl = response.RequestMessage?.RequestUri?.ToString() ?? LatestReleaseUrl;
+        var tagName = TryGetTagFromReleaseUrl(releaseUrl);
+        var latestVersion = ParseVersion(tagName);
+        if (latestVersion == new Version(0, 0, 0))
+            throw new InvalidOperationException("无法从 GitHub 最新发布地址识别版本号。");
+        var state = LoadState() ?? new UpdateCheckState();
+        state.LastCheckedUtc = DateTimeOffset.UtcNow;
+        state.LastAvailableVersion = latestVersion.CompareTo(CurrentVersion) > 0 ? latestVersion.ToString(3) : null;
+        state.LastReleaseUrl = latestVersion.CompareTo(CurrentVersion) > 0 ? releaseUrl : null;
+        SaveState(state);
 
         return latestVersion.CompareTo(CurrentVersion) > 0
-            ? UpdateCheckResult.Available(CurrentVersion, latestVersion, release.HtmlUrl ?? ReleasesUrl)
+            ? UpdateCheckResult.Available(CurrentVersion, latestVersion, releaseUrl)
             : UpdateCheckResult.UpToDate(CurrentVersion, latestVersion);
     }
 
@@ -92,6 +96,37 @@ public sealed class UpdateChecker
         return LoadState()?.LastCheckedUtc;
     }
 
+    private static string TryGetTagFromReleaseUrl(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return "";
+        var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var tagIndex = Array.FindIndex(segments, segment => string.Equals(segment, "tag", StringComparison.OrdinalIgnoreCase));
+        return tagIndex >= 0 && tagIndex + 1 < segments.Length
+            ? Uri.UnescapeDataString(segments[tagIndex + 1])
+            : "";
+    }
+
+    public UpdateCheckResult? LoadKnownAvailable()
+    {
+        var state = LoadState();
+        return Version.TryParse(state?.LastAvailableVersion, out var version) && version.CompareTo(CurrentVersion) > 0
+            ? UpdateCheckResult.Available(CurrentVersion, version, state?.LastReleaseUrl ?? ReleasesUrl)
+            : null;
+    }
+
+    public static bool ShouldPrompt(Version version)
+    {
+        var state = LoadState();
+        return !string.Equals(state?.LastPromptedVersion, version.ToString(3), StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static void MarkPrompted(Version version)
+    {
+        var state = LoadState() ?? new UpdateCheckState();
+        state.LastPromptedVersion = version.ToString(3);
+        SaveState(state);
+    }
+
     private static UpdateCheckState? LoadState()
     {
         try
@@ -122,18 +157,12 @@ public sealed class UpdateChecker
         }
     }
 
-    private sealed class GitHubRelease
-    {
-        [JsonPropertyName("tag_name")]
-        public string? TagName { get; set; }
-
-        [JsonPropertyName("html_url")]
-        public string? HtmlUrl { get; set; }
-    }
-
     private sealed class UpdateCheckState
     {
         public DateTimeOffset? LastCheckedUtc { get; set; }
+        public string? LastAvailableVersion { get; set; }
+        public string? LastReleaseUrl { get; set; }
+        public string? LastPromptedVersion { get; set; }
     }
 }
 
