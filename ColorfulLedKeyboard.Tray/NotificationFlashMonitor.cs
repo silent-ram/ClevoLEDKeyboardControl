@@ -42,7 +42,9 @@ internal sealed class NotificationFlashMonitor : IDisposable
     {
         var settings = _settingsStore.Load();
         var flash = settings.NotificationFlash.Normalize();
-        if (!flash.Enabled)
+        var requiredByRule = settings.Automation.MusicApplications.Any(rule => rule.NotificationPolicy == EventPolicy.Enabled) ||
+            settings.Automation.LightingApplications.Any(rule => rule.NotificationPolicy == EventPolicy.Enabled);
+        if (!flash.Enabled && !requiredByRule)
         {
             return;
         }

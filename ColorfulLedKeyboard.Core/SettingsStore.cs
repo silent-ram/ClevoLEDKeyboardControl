@@ -50,6 +50,9 @@ public sealed class SettingsStore
 
         var migrateLegacyMode = !json.Contains("\"Effect\"", StringComparison.Ordinal);
 
+        var automationVersion = DetectAutomationVersion(json);
+        var migrateLegacyAutomation = automationVersion == 0;
+
         // ★ 旧版 EffectType.Music 预扫描：枚举值已删除，反序列化会抛 JsonException 导致重置默认（数据丢失）
         var legacyMusicDetected = DetectLegacyMusicMode(json);
         var legacyAppProfileMusic = ContainsLegacyAppProfileMusic(json);
@@ -75,7 +78,189 @@ public sealed class SettingsStore
             settings.OperatingMode = OperatingMode.Music;
         }
 
-        return settings.Normalize(migrateLegacyMode);
+        settings.Normalize(migrateLegacyMode);
+        if (migrateLegacyAutomation)
+        {
+            MigrateLegacyAutomation(settings);
+        }
+        if (automationVersion < AutomationSettings.CurrentVersion)
+        {
+            MigrateAutomationV1(settings);
+            TryPersistAutomationMigration(settings);
+        }
+
+        return settings;
+    }
+
+    private static int DetectAutomationVersion(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("Automation", out var automation)) return 0;
+            return automation.TryGetProperty("Version", out var version) && version.TryGetInt32(out var value)
+                ? value
+                : 1;
+        }
+        catch (JsonException)
+        {
+            return 0;
+        }
+    }
+
+    private static void MigrateAutomationV1(KeyboardSettings settings)
+    {
+        foreach (var legacy in settings.Automation.Rules)
+        {
+            var filter = new AutomationTimeFilter
+            {
+                TimeEnabled = legacy.Conditions.TimeEnabled,
+                Start = legacy.Conditions.Start,
+                End = legacy.Conditions.End,
+                Days = [.. legacy.Conditions.Days]
+            }.Normalize();
+
+            if (legacy.Conditions.ApplicationsEnabled && legacy.Conditions.ProcessNames.Count > 0)
+            {
+                if (legacy.Action.Target == SceneTargetKind.MusicPreset)
+                {
+                    foreach (var processName in legacy.Conditions.ProcessNames)
+                    {
+                        settings.Automation.MusicApplications.Add(new MusicApplicationRule
+                        {
+                            Name = legacy.Conditions.ProcessNames.Count == 1 ? legacy.Name : $"{legacy.Name} - {processName}",
+                            Enabled = legacy.Enabled,
+                            ProcessName = processName,
+                            TimeFilter = filter,
+                            MusicPresetId = legacy.Action.PresetId,
+                            BrightnessLimit = legacy.Action.BrightnessLimit
+                        }.Normalize());
+                    }
+                }
+                else
+                {
+                    settings.Automation.LightingApplications.Add(new LightingApplicationRule
+                    {
+                        Name = legacy.Name,
+                        Enabled = legacy.Enabled,
+                        ProcessNames = [.. legacy.Conditions.ProcessNames],
+                        TimeFilter = filter,
+                        Action = legacy.Action
+                    }.Normalize());
+                }
+            }
+            else
+            {
+                settings.Automation.ScheduleRules.Add(new AutomationScheduleRule
+                {
+                    Name = legacy.Name,
+                    Enabled = legacy.Enabled,
+                    TimeFilter = filter,
+                    Action = legacy.Action
+                }.Normalize());
+            }
+        }
+
+        settings.Automation.Rules.Clear();
+        settings.Automation.Version = AutomationSettings.CurrentVersion;
+        settings.Automation.Normalize();
+    }
+
+    private static void MigrateLegacyAutomation(KeyboardSettings settings)
+    {
+        var automation = new AutomationSettings
+        {
+            Enabled = settings.AppProfiles.Enabled || settings.Schedule.Enabled,
+            Rules = []
+        };
+
+        var index = 0;
+        foreach (var legacy in settings.AppProfiles.Rules)
+        {
+            var effect = legacy.BuildEffect();
+            var preset = CreateMigratedPreset(settings, effect, legacy.Name, ++index);
+            automation.Rules.Add(new SceneRule
+            {
+                Name = legacy.Name,
+                Enabled = settings.AppProfiles.Enabled && legacy.Enabled,
+                Conditions = new SceneConditions
+                {
+                    ApplicationsEnabled = true,
+                    ProcessNames = [legacy.ProcessName]
+                },
+                Action = new SceneAction
+                {
+                    Target = SceneTargetKind.LightingPreset,
+                    LightingEffectType = effect.Type,
+                    PresetId = preset.Id,
+                    BrightnessLimit = legacy.Brightness
+                }
+            }.Normalize());
+        }
+
+        foreach (var legacy in settings.Schedule.Rules)
+        {
+            var action = new SceneAction
+            {
+                Target = legacy.Effect.Type == EffectType.Off
+                    ? SceneTargetKind.Off
+                    : SceneTargetKind.LightingPreset,
+                LightingEffectType = legacy.Effect.Type,
+                BrightnessLimit = legacy.Brightness
+            };
+            if (action.Target == SceneTargetKind.LightingPreset)
+            {
+                action.PresetId = CreateMigratedPreset(settings, legacy.Effect, legacy.Name, ++index).Id;
+            }
+
+            automation.Rules.Add(new SceneRule
+            {
+                Name = legacy.Name,
+                Enabled = settings.Schedule.Enabled && legacy.Enabled,
+                Conditions = new SceneConditions
+                {
+                    TimeEnabled = true,
+                    Start = legacy.Start,
+                    End = legacy.End
+                },
+                Action = action
+            }.Normalize());
+        }
+
+        settings.Automation = automation.Normalize();
+        settings.AppProfiles.Enabled = false;
+        settings.Schedule.Enabled = false;
+    }
+
+    private static EffectPreset CreateMigratedPreset(
+        KeyboardSettings settings,
+        LightingEffectSettings effect,
+        string ruleName,
+        int index)
+    {
+        var preset = new EffectPreset
+        {
+            Name = $"迁移-{(string.IsNullOrWhiteSpace(ruleName) ? "场景" : ruleName.Trim())}-{index}",
+            Effect = KeyboardSettings.CloneEffect(effect)
+        }.Normalize(effect.Type);
+        settings.EffectPresets.ForType(effect.Type).Add(preset);
+        settings.EffectPresets.Normalize();
+        return preset;
+    }
+
+    private void TryPersistAutomationMigration(KeyboardSettings settings)
+    {
+        try
+        {
+            var backupPath = SettingsPath + ".pre-automation-v2.bak";
+            if (!File.Exists(backupPath) && File.Exists(SettingsPath))
+            {
+                File.Copy(SettingsPath, backupPath);
+            }
+            Save(settings);
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 
     private static bool DetectLegacyMusicMode(string json)

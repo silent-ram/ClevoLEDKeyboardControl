@@ -10,9 +10,15 @@ public class Worker : BackgroundService
     private readonly AudioSourceProvider _audioSource;
     private readonly SystemAudioLevelMeter _audioLevelMeter;
     private readonly AudioBandLevelMeter _audioBandLevelMeter;
+    private readonly AudioApplicationMonitor _audioApplicationMonitor = new();
     private readonly ILogger<Worker> _logger;
     private FileSystemWatcher? _watcher;
     private volatile bool _settingsChanged = true;
+    private List<RgbColor> _lastRenderedMusicColors = [];
+    private DateTimeOffset _lastAutomationStatusWrite = DateTimeOffset.MinValue;
+    private string _lastAutomationStatusSignature = "";
+    private AudioApplicationsState? _lastAudioApplicationsState;
+    private DateTimeOffset _lastAudioApplicationsRead = DateTimeOffset.MinValue;
 
     public Worker(ILogger<Worker> logger, ILoggerFactory loggerFactory)
     {
@@ -78,6 +84,7 @@ public class Worker : BackgroundService
             try { _audioBandLevelMeter.Dispose(); } catch (Exception ex) { _logger.LogWarning(ex, "AudioBandLevelMeter.Dispose threw"); }
             try { _audioLevelMeter.Dispose(); } catch (Exception ex) { _logger.LogWarning(ex, "SystemAudioLevelMeter.Dispose threw"); }
             try { _audioSource.Dispose(); } catch (Exception ex) { _logger.LogWarning(ex, "AudioSourceProvider.Dispose threw"); }
+            try { _audioApplicationMonitor.Dispose(); } catch (Exception ex) { _logger.LogWarning(ex, "AudioApplicationMonitor.Dispose threw"); }
         });
 
         var completed = await Task.WhenAny(disposeTask, Task.Delay(TimeSpan.FromSeconds(5), cancellationToken));
@@ -110,14 +117,14 @@ public class Worker : BackgroundService
         }
 
         var generator = new LightingFrameGenerator(settings);
-        var nextRuntimeRefresh = DateTimeOffset.UtcNow.AddSeconds(1);
+        var nextRuntimeRefresh = DateTimeOffset.UtcNow.Add(RuntimePollInterval(settings));
         RgbColor? lastColor = null;
 
         while (!stoppingToken.IsCancellationRequested && !_settingsChanged)
         {
             if (DateTimeOffset.UtcNow >= nextRuntimeRefresh)
             {
-                nextRuntimeRefresh = DateTimeOffset.UtcNow.AddSeconds(1);
+                nextRuntimeRefresh = DateTimeOffset.UtcNow.Add(RuntimePollInterval(settings));
                 if (ShouldRebuildRuntimeSettings(settings))
                 {
                     _settingsChanged = true;
@@ -126,7 +133,9 @@ public class Worker : BackgroundService
             }
 
             var brightness = ApplyTypingPulseBrightness(settings.Brightness, settings);
-            var color = ApplyNotificationFlash(generator.Next(brightness), settings);
+            var color = ClampOutputBrightness(
+                ApplyNotificationFlash(generator.Next(brightness), settings),
+                settings.OutputBrightnessLimit);
             if (color != lastColor)
             {
                 _device.SetColor(color);
@@ -144,7 +153,7 @@ public class Worker : BackgroundService
 
                 if (NeedsRuntimePolling(settings))
                 {
-                    await Task.Delay(1000, stoppingToken);
+                    await Task.Delay(RuntimePollInterval(settings), stoppingToken);
                     _settingsChanged = true;
                     return;
                 }
@@ -162,8 +171,13 @@ public class Worker : BackgroundService
     {
         var music = settings.Effect.Music.Normalize();
         var controller = new MusicPulseController();
-        var musicColors = music.Colors.Select(RgbColor.FromHex).ToList();
-        var nextRuntimeRefresh = DateTimeOffset.UtcNow.AddSeconds(1);
+        var targetMusicColors = music.Colors.Select(RgbColor.FromHex).ToList();
+        var transitionFrom = _lastRenderedMusicColors.Count == 0
+            ? targetMusicColors
+            : Enumerable.Range(0, targetMusicColors.Count)
+                .Select(index => _lastRenderedMusicColors[index % _lastRenderedMusicColors.Count]).ToList();
+        var colorTransitionStarted = DateTimeOffset.UtcNow;
+        var nextRuntimeRefresh = DateTimeOffset.UtcNow.Add(RuntimePollInterval(settings));
         RgbColor? lastColor = null;
 
         // 进入音乐模式立刻刷一次状态文件，避免 Tray 看到陈旧值
@@ -175,7 +189,7 @@ public class Worker : BackgroundService
             {
                 if (DateTimeOffset.UtcNow >= nextRuntimeRefresh)
                 {
-                    nextRuntimeRefresh = DateTimeOffset.UtcNow.AddSeconds(1);
+                    nextRuntimeRefresh = DateTimeOffset.UtcNow.Add(RuntimePollInterval(settings));
                     if (ShouldRebuildRuntimeSettings(settings))
                     {
                         _settingsChanged = true;
@@ -185,17 +199,34 @@ public class Worker : BackgroundService
 
                 // 永远调 meter（同 v1.3）：静音 → envelope=0 → 灯自然降到 BaseBrightness 颜色保持。
                 // HFP 屏蔽在 meter 内部处理（Status==Hfp 时 EnsureCapture 跳过、不激活 SCO）。
+                var selectedPeak = GetSelectedApplicationPeak(
+                    settings.SelectedAudioProcessName, settings.SelectedAudioExecutablePath, settings.SelectedAudioProcessIds);
                 var level = music.EqEnabled
-                    ? Math.Max(_audioBandLevelMeter.GetAdaptiveBeatLevel(music), _audioLevelMeter.GetPeakLevel() * 0.12f)
-                    : _audioLevelMeter.GetPeakLevel();
+                    ? Math.Max(_audioBandLevelMeter.GetAdaptiveBeatLevel(music), selectedPeak * 0.12f)
+                    : selectedPeak;
                 var systemVolume = _audioLevelMeter.GetMasterVolumeScalar();
+                var transition = Math.Clamp((DateTimeOffset.UtcNow - colorTransitionStarted).TotalMilliseconds / 800d, 0, 1);
+                var musicColors = targetMusicColors.Select((color, index) =>
+                    RgbColor.Lerp(transitionFrom[index], color, transition)).ToList();
+                _lastRenderedMusicColors = musicColors;
                 var frame = controller.Next(music, level, systemVolume, musicColors.Count);
                 var envelope = frame.Envelope;
-                var musicBrightness = music.BaseBrightness +
-                    (music.PeakBrightness - music.BaseBrightness) * Math.Pow(envelope, 0.55);
-                var brightness = (int)Math.Clamp(Math.Round(musicBrightness), music.BaseBrightness, music.PeakBrightness);
+                // 单色封面缺少多色切换带来的视觉节奏，扩大明暗范围让鼓点清晰可见。
+                var effectiveBaseBrightness = musicColors.Count == 1
+                    ? Math.Min(music.BaseBrightness, 8)
+                    : music.BaseBrightness;
+                var musicBrightness = effectiveBaseBrightness +
+                    (music.PeakBrightness - effectiveBaseBrightness) * Math.Pow(envelope, musicColors.Count == 1 ? 0.45 : 0.55);
+                var brightness = Math.Min(
+                    (int)Math.Clamp(Math.Round(musicBrightness), effectiveBaseBrightness, music.PeakBrightness),
+                    settings.OutputBrightnessLimit);
+                brightness = Math.Min(
+                    ApplyTypingPulseBrightness(brightness, settings),
+                    settings.OutputBrightnessLimit);
                 var sourceColor = musicColors[frame.ColorIndex % musicColors.Count];
-                var color = ApplyNotificationFlash(sourceColor.Scale(brightness), settings);
+                var color = ClampOutputBrightness(
+                    ApplyNotificationFlash(sourceColor.Scale(brightness), settings),
+                    settings.OutputBrightnessLimit);
 
                 if (color != lastColor)
                 {
@@ -239,6 +270,23 @@ public class Worker : BackgroundService
         return phase < flash.PulseMs ? RgbColor.FromHex(flash.Color) : RgbColor.Black;
     }
 
+    private static RgbColor ClampOutputBrightness(RgbColor color, int limit)
+    {
+        limit = Math.Clamp(limit, 0, 100);
+        var maximum = Math.Max(color.R, Math.Max(color.G, color.B));
+        var allowed = limit * 255 / 100d;
+        if (maximum == 0 || maximum <= allowed)
+        {
+            return color;
+        }
+
+        var scale = allowed / maximum;
+        return new RgbColor(
+            (byte)Math.Round(color.R * scale),
+            (byte)Math.Round(color.G * scale),
+            (byte)Math.Round(color.B * scale));
+    }
+
     private static int ApplyTypingPulseBrightness(int currentBrightness, KeyboardSettings settings)
     {
         var pulse = settings.TypingPulse.Normalize();
@@ -269,21 +317,39 @@ public class Worker : BackgroundService
         return Math.Max(currentBrightness, pulseBrightness);
     }
 
-    private static KeyboardSettings BuildRuntimeSettings(KeyboardSettings settings)
+    private KeyboardSettings BuildRuntimeSettings(KeyboardSettings settings)
     {
         var runtime = settings.CloneForRuntime();
-        ApplySchedule(runtime);
-        ApplyAppProfiles(runtime);
-        ApplyIdleDim(runtime);
+        var status = ApplyAutomation(runtime);
+        status.IdleOverrideActive = ApplyIdleDim(runtime);
+        status.UpdatedUtc = DateTimeOffset.UtcNow;
+        PublishAutomationStatus(status);
         return runtime.Normalize();
     }
 
-    private static bool ShouldRebuildRuntimeSettings(KeyboardSettings current)
+    private void PublishAutomationStatus(AutomationStatus status)
+    {
+        var signature = string.Join("|", status.ActiveRuleId, status.ForegroundProcessName,
+            status.ActiveMusicApplication, string.Join(",", status.ActiveProcessIds), status.TrackTitle,
+            status.AlbumColor, status.IdleOverrideActive, status.InvalidReason);
+        if (signature == _lastAutomationStatusSignature &&
+            DateTimeOffset.UtcNow - _lastAutomationStatusWrite < TimeSpan.FromSeconds(1)) return;
+        _lastAutomationStatusSignature = signature;
+        _lastAutomationStatusWrite = DateTimeOffset.UtcNow;
+        status.Save();
+    }
+
+    private bool ShouldRebuildRuntimeSettings(KeyboardSettings current)
     {
         var next = BuildRuntimeSettings(new SettingsStore().Load());
         return next.Enabled != current.Enabled ||
             next.OperatingMode != current.OperatingMode ||
             next.Brightness != current.Brightness ||
+            next.OutputBrightnessLimit != current.OutputBrightnessLimit ||
+            next.SelectedAudioProcessName != current.SelectedAudioProcessName ||
+            next.SelectedAudioExecutablePath != current.SelectedAudioExecutablePath ||
+            !next.SelectedAudioProcessIds.SequenceEqual(current.SelectedAudioProcessIds) ||
+            !TypingPulseEquals(next.TypingPulse, current.TypingPulse) ||
             !NotificationFlashEquals(next.NotificationFlash, current.NotificationFlash) ||
             next.Effect.Type != current.Effect.Type ||
             next.Effect.Color != current.Effect.Color ||
@@ -304,9 +370,8 @@ public class Worker : BackgroundService
 
     private static bool NeedsRuntimePolling(KeyboardSettings settings)
     {
-        return settings.Schedule.Enabled ||
-            settings.IdleDim.Enabled ||
-            settings.AppProfiles.Enabled;
+        // 音乐页的播放器 PID 绑定依赖实时会话列表，自动化关闭时也必须持续刷新。
+        return true;
     }
 
     private static bool NotificationFlashEquals(NotificationFlashSettings left, NotificationFlashSettings right)
@@ -340,9 +405,18 @@ public class Worker : BackgroundService
             left.EqEnabled == right.EqEnabled &&
             left.EqLowHz == right.EqLowHz &&
             left.EqHighHz == right.EqHighHz &&
+            PlayerBindingEquals(left.PlayerBinding, right.PlayerBinding) &&
             left.CustomPresets.Count == right.CustomPresets.Count &&
             left.CustomPresets.Zip(right.CustomPresets).All(pair => MusicPresetEquals(pair.First, pair.Second));
     }
+
+    private static bool PlayerBindingEquals(MusicPlayerBinding left, MusicPlayerBinding right) =>
+        left.Enabled == right.Enabled &&
+        left.ProcessName == right.ProcessName &&
+        left.ExecutablePath == right.ExecutablePath &&
+        left.IncludeChildProcesses == right.IncludeChildProcesses &&
+        left.MediaSessionId == right.MediaSessionId &&
+        left.ColorSource == right.ColorSource;
 
     private static bool MusicPresetEquals(MusicPreset left, MusicPreset right)
     {
@@ -385,74 +459,362 @@ public class Worker : BackgroundService
         }
     }
 
-    private static void ApplySchedule(KeyboardSettings settings)
+    private AutomationStatus ApplyAutomation(KeyboardSettings settings)
     {
-        if (!settings.Schedule.Enabled)
-        {
-            return;
-        }
-
-        var now = TimeOnly.FromDateTime(DateTime.Now);
-        var rule = settings.Schedule.Rules.FirstOrDefault(item => item.Enabled && item.IsActive(now));
-        if (rule is null)
-        {
-            return;
-        }
-
-        settings.Enabled = true;
-        settings.Effect = rule.Effect;
-    }
-
-    private static void ApplyAppProfiles(KeyboardSettings settings)
-    {
-        if (!settings.AppProfiles.Enabled || settings.AppProfiles.Rules.Count == 0)
-        {
-            return;
-        }
-
+        var manualMusicMode = settings.OperatingMode == OperatingMode.Music;
         var foreground = ForegroundAppState.Load();
-        if (foreground is null || DateTimeOffset.UtcNow - foreground.UpdatedUtc > TimeSpan.FromSeconds(10))
+        var foregroundAvailable = foreground is not null &&
+            DateTimeOffset.UtcNow - foreground.UpdatedUtc <= TimeSpan.FromSeconds(10);
+        var audioApplications = GetAudioApplications(foreground?.ProcessName ?? "");
+        var audioStates = audioApplications.Select(app => new AudioApplicationState(
+            app.ProcessName, app.ExecutablePath, app.ProcessIds, app.PeakLevel, app.IsPlaying, app.IsForeground)).ToList();
+        AddProcessTreeStates(settings.Automation.MusicApplications, audioStates);
+        AddPlayerBindingState(settings.Effect.Music.PlayerBinding, audioStates);
+        var selection = AutomationResolver.Resolve(
+            settings.Automation, DateTime.Now, foregroundAvailable ? foreground?.ProcessName ?? "" : "", audioStates);
+
+        var status = new AutomationStatus
         {
-            return;
+            ForegroundProcessName = foreground?.ProcessName ?? "",
+            ForegroundAvailable = foregroundAvailable,
+            AudioApplications = audioApplications.ToList()
+        };
+
+        if (selection.Music is not null && selection.Audio is not null)
+        {
+            var error = ValidateMusicRule(settings, selection.Music);
+            if (error is null)
+            {
+                ApplyMusicRule(settings, selection.Music);
+                settings.SelectedAudioProcessIds = selection.Audio.ProcessIds.ToList();
+                var media = ApplyMediaColors(settings, selection.Music);
+                status.ActiveRuleId = selection.Music.Id;
+                status.ActiveRuleName = selection.Music.Name;
+                status.ActiveMusicApplication = selection.Music.ProcessName;
+                status.ActiveProcessIds = selection.Audio.ProcessIds.ToList();
+                status.TargetDescription = DescribeMusicRule(settings, selection.Music);
+                status.AudioCaptureMode = settings.Effect.Music.EqEnabled
+                    ? "程序电平 + 系统混音频段分析"
+                    : "程序音频会话电平";
+                if (media is not null)
+                {
+                    status.TrackTitle = media.Title;
+                    status.TrackArtist = media.Artist;
+                    status.AlbumColor = media.DominantColor;
+                }
+            }
+            else status.InvalidReason = $"{selection.Music.Name}：{error}";
+        }
+        else if (selection.Lighting is not null)
+        {
+            var error = ValidateSceneAction(settings, selection.Lighting.Action);
+            if (error is null)
+            {
+                ApplySceneAction(settings, selection.Lighting.Action);
+                status.ActiveRuleId = selection.Lighting.Id;
+                status.ActiveRuleName = selection.Lighting.Name;
+                status.TargetDescription = DescribeSceneAction(settings, selection.Lighting.Action);
+            }
+            else status.InvalidReason = $"{selection.Lighting.Name}：{error}";
+        }
+        else if (selection.Schedule is not null)
+        {
+            var error = ValidateSceneAction(settings, selection.Schedule.Action);
+            if (error is null)
+            {
+                ApplySceneAction(settings, selection.Schedule.Action);
+                status.ActiveRuleId = selection.Schedule.Id;
+                status.ActiveRuleName = selection.Schedule.Name;
+                status.TargetDescription = DescribeSceneAction(settings, selection.Schedule.Action);
+            }
+            else status.InvalidReason = $"{selection.Schedule.Name}：{error}";
+        }
+        else if (manualMusicMode && settings.Effect.Music.PlayerBinding.Enabled)
+        {
+            ApplyPlayerBinding(settings, audioStates, status);
         }
 
-        var processName = foreground.ProcessName;
-        if (string.IsNullOrWhiteSpace(processName))
+        if (selection.Music is not null)
         {
-            return;
+            ApplyBrightnessLimit(settings, selection.Music.BrightnessLimit);
+            ApplyEventPolicy(settings, selection.Music.TypingPolicy, selection.Music.NotificationPolicy);
         }
-
-        var rule = settings.AppProfiles.Rules.FirstOrDefault(item => item.Matches(processName));
-        if (rule is null)
+        if (selection.Lighting is not null)
         {
-            return;
+            ApplyBrightnessLimit(settings, selection.Lighting.Action.BrightnessLimit);
+            ApplyEventPolicy(settings, selection.Lighting.TypingPolicy, selection.Lighting.NotificationPolicy);
         }
-
-        settings.Enabled = true;
-        // AppProfile 不再支持 TargetEffect=Music（已从 EffectType 中移除，规则只能切到灯效模式下的 Static/Breathing）。
-        // 用户希望"前台某进程时切到音乐"需要在未来的 AppProfile 改进中重新设计。
-        settings.Effect = rule.BuildEffect();
+        return status;
     }
 
-    private static void ApplyIdleDim(KeyboardSettings settings)
+    private static TimeSpan RuntimePollInterval(KeyboardSettings settings) =>
+        (settings.Automation.Enabled && settings.Automation.MusicApplications.Count > 0) ||
+        settings.Effect.Music.PlayerBinding.Enabled
+            ? TimeSpan.FromMilliseconds(100)
+            : TimeSpan.FromSeconds(1);
+
+    private static bool TypingPulseEquals(TypingPulseSettings left, TypingPulseSettings right) =>
+        left.Enabled == right.Enabled &&
+        left.BaseBrightness == right.BaseBrightness &&
+        left.PeakBrightness == right.PeakBrightness &&
+        left.HoldMs == right.HoldMs &&
+        left.FadeMs == right.FadeMs;
+
+    private static string? ValidateMusicRule(KeyboardSettings settings, MusicApplicationRule rule) =>
+        MusicSettings.BuiltInPresets.Any(item => item.Id == rule.MusicPresetId) ||
+        settings.Effect.Music.CustomPresets.Any(item => item.Id == rule.MusicPresetId)
+            ? null
+            : "引用的音乐预设不存在";
+
+    private static void ApplyMusicRule(KeyboardSettings settings, MusicApplicationRule rule)
+    {
+        settings.Enabled = true;
+        settings.OperatingMode = OperatingMode.Music;
+        var preset = MusicSettings.BuiltInPresets.Concat(settings.Effect.Music.CustomPresets)
+            .First(item => item.Id == rule.MusicPresetId);
+        settings.Effect.Music.ApplyPreset(preset);
+        settings.SelectedAudioProcessName = rule.ProcessName;
+        settings.SelectedAudioExecutablePath = rule.ExecutablePath;
+        ApplyBrightnessLimit(settings, rule.BrightnessLimit);
+    }
+
+    private static string DescribeMusicRule(KeyboardSettings settings, MusicApplicationRule rule) =>
+        "音乐：" + MusicSettings.BuiltInPresets.Concat(settings.Effect.Music.CustomPresets)
+            .First(item => item.Id == rule.MusicPresetId).Name;
+
+    private static MediaSessionState? ApplyMediaColors(KeyboardSettings settings, MusicApplicationRule rule)
+    {
+        if (rule.ColorSource == MusicColorSource.Preset) return null;
+        var state = MediaPlaybackState.Load();
+        if (state is null || DateTimeOffset.UtcNow - state.UpdatedUtc > TimeSpan.FromSeconds(10)) return null;
+        var media = state.Find(rule);
+        if (media is null) return null;
+        IEnumerable<string> colors = rule.ColorSource == MusicColorSource.AlbumDominant
+            ? new[] { media.DominantColor }
+            : media.Palette;
+        var normalized = colors.Where(color => !string.IsNullOrWhiteSpace(color)).ToList();
+        if (normalized.Count == 0) return null;
+        settings.Effect.Music.Colors = normalized;
+        settings.Effect.Music.LowColor = normalized[0];
+        settings.Effect.Music.HighColor = normalized[^1];
+        return media;
+    }
+
+    private static MediaSessionState? ApplyMediaColors(KeyboardSettings settings, MusicPlayerBinding binding)
+    {
+        if (binding.ColorSource == MusicColorSource.Preset) return null;
+        var state = MediaPlaybackState.Load();
+        if (state is null || DateTimeOffset.UtcNow - state.UpdatedUtc > TimeSpan.FromSeconds(10)) return null;
+        var media = state.Find(binding);
+        if (media is null) return null;
+        IEnumerable<string> colors = binding.ColorSource == MusicColorSource.AlbumDominant
+            ? new[] { media.DominantColor }
+            : media.Palette;
+        var normalized = colors.Where(color => !string.IsNullOrWhiteSpace(color)).ToList();
+        if (normalized.Count == 0) return null;
+        settings.Effect.Music.Colors = normalized;
+        settings.Effect.Music.LowColor = normalized[0];
+        settings.Effect.Music.HighColor = normalized[^1];
+        return media;
+    }
+
+    private static void ApplyPlayerBinding(
+        KeyboardSettings settings,
+        IReadOnlyList<AudioApplicationState> audioStates,
+        AutomationStatus status)
+    {
+        var binding = settings.Effect.Music.PlayerBinding;
+        var audio = audioStates.FirstOrDefault(state =>
+            string.Equals(state.ProcessName, binding.ProcessName, StringComparison.OrdinalIgnoreCase) &&
+            (string.IsNullOrWhiteSpace(binding.ExecutablePath) ||
+             string.Equals(state.ExecutablePath, binding.ExecutablePath, StringComparison.OrdinalIgnoreCase)));
+        settings.SelectedAudioProcessName = binding.ProcessName;
+        settings.SelectedAudioExecutablePath = binding.ExecutablePath;
+        settings.SelectedAudioProcessIds = audio?.ProcessIds.ToList() ?? [];
+        var media = ApplyMediaColors(settings, binding);
+        status.ActiveRuleName = "音乐页播放器绑定";
+        status.ActiveMusicApplication = binding.ProcessName;
+        status.ActiveProcessIds = settings.SelectedAudioProcessIds;
+        status.TargetDescription = binding.ColorSource == MusicColorSource.Preset ? "音乐：预设颜色" : "音乐：歌曲封面颜色";
+        status.AudioCaptureMode = audio is null ? "等待播放器音频会话" : "程序音频会话电平";
+        if (audio is null) status.InvalidReason = "已绑定播放器未检测到音频会话";
+        if (media is not null)
+        {
+            status.TrackTitle = media.Title;
+            status.TrackArtist = media.Artist;
+            status.AlbumColor = media.DominantColor;
+        }
+    }
+
+    private static void ApplyBrightnessLimit(KeyboardSettings settings, int? limit)
+    {
+        if (!limit.HasValue) return;
+        settings.OutputBrightnessLimit = Math.Min(settings.OutputBrightnessLimit, limit.Value);
+        if (settings.OperatingMode == OperatingMode.Lighting)
+            settings.Brightness = Math.Min(settings.Brightness, limit.Value);
+    }
+
+    private static void ApplyEventPolicy(KeyboardSettings settings, EventPolicy typing, EventPolicy notification)
+    {
+        if (typing != EventPolicy.Inherit) settings.TypingPulse.Enabled = typing == EventPolicy.Enabled;
+        if (notification != EventPolicy.Inherit) settings.NotificationFlash.Enabled = notification == EventPolicy.Enabled;
+    }
+
+    private float GetSelectedApplicationPeak(string processName, string executablePath, IReadOnlyCollection<int> processIds)
+    {
+        if (string.IsNullOrWhiteSpace(processName)) return _audioLevelMeter.GetPeakLevel();
+        var foreground = ForegroundAppState.Load()?.ProcessName ?? "";
+        var matches = GetAudioApplications(foreground)
+            .Where(item => (string.Equals(item.ProcessName, processName, StringComparison.OrdinalIgnoreCase) &&
+                (string.IsNullOrWhiteSpace(executablePath) || string.Equals(item.ExecutablePath, executablePath, StringComparison.OrdinalIgnoreCase)) ||
+                item.ProcessIds.Any(processIds.Contains)))
+            .ToList();
+        return matches.Count == 0 ? 0f : matches.Max(item => item.PeakLevel);
+    }
+
+    private IReadOnlyList<AudioApplicationStatus> GetAudioApplications(string foregroundProcessName)
+    {
+        var now = DateTimeOffset.UtcNow;
+        if (now - _lastAudioApplicationsRead >= TimeSpan.FromMilliseconds(50))
+        {
+            _lastAudioApplicationsRead = now;
+            _lastAudioApplicationsState = AudioApplicationsState.Load() ?? _lastAudioApplicationsState;
+        }
+        var state = _lastAudioApplicationsState;
+        if (state is not null && DateTimeOffset.UtcNow - state.UpdatedUtc <= TimeSpan.FromSeconds(2))
+            return state.Applications;
+
+        // 仅作为非服务宿主/测试环境的兼容回退。Windows 服务 Session 0 看不到用户会话音频。
+        return _audioApplicationMonitor.Poll(foregroundProcessName, DateTimeOffset.UtcNow);
+    }
+
+    private static void AddPlayerBindingState(MusicPlayerBinding binding, List<AudioApplicationState> states)
+    {
+        if (!binding.Enabled || !binding.IncludeChildProcesses) return;
+        var roots = ProcessTree.FindRoots(binding.ProcessName, binding.ExecutablePath);
+        var tree = ProcessTree.Expand(roots);
+        var children = states.Where(state => state.ProcessIds.Any(tree.Contains)).ToList();
+        if (children.Count == 0) return;
+        states.RemoveAll(state => string.Equals(state.ProcessName, binding.ProcessName, StringComparison.OrdinalIgnoreCase));
+        states.Add(new AudioApplicationState(
+            binding.ProcessName,
+            binding.ExecutablePath,
+            children.SelectMany(item => item.ProcessIds).Distinct().ToList(),
+            children.Max(item => item.PeakLevel),
+            children.Any(item => item.IsPlaying),
+            children.Any(item => item.IsForeground)));
+    }
+
+    private static void AddProcessTreeStates(
+        IEnumerable<MusicApplicationRule> rules,
+        List<AudioApplicationState> states)
+    {
+        foreach (var rule in rules.Where(item => item.Enabled && item.IncludeChildProcesses))
+        {
+            var roots = ProcessTree.FindRoots(rule.ProcessName, rule.ExecutablePath);
+            var tree = ProcessTree.Expand(roots);
+            var children = states.Where(state => state.ProcessIds.Any(tree.Contains)).ToList();
+            if (children.Count == 0) continue;
+            states.RemoveAll(state => string.Equals(state.ProcessName, rule.ProcessName, StringComparison.OrdinalIgnoreCase));
+            states.Add(new AudioApplicationState(
+                rule.ProcessName,
+                rule.ExecutablePath,
+                children.SelectMany(item => item.ProcessIds).Distinct().ToList(),
+                children.Max(item => item.PeakLevel),
+                children.Any(item => item.IsPlaying),
+                children.Any(item => item.IsForeground)));
+        }
+    }
+
+    private static string? ValidateSceneAction(KeyboardSettings settings, SceneAction action)
+    {
+        return action.Target switch
+        {
+            SceneTargetKind.Off => null,
+            SceneTargetKind.LightingPreset when
+                action.PresetId == EffectPresetSettings.BuiltInId(action.LightingEffectType) ||
+                settings.EffectPresets.ForType(action.LightingEffectType).Any(item => item.Id == action.PresetId) => null,
+            SceneTargetKind.MusicPreset when
+                MusicSettings.BuiltInPresets.Any(item => item.Id == action.PresetId) ||
+                settings.Effect.Music.CustomPresets.Any(item => item.Id == action.PresetId) => null,
+            _ => "引用的预设不存在"
+        };
+    }
+
+    private static void ApplySceneAction(KeyboardSettings settings, SceneAction action)
+    {
+        settings.Enabled = true;
+        if (action.Target == SceneTargetKind.Off)
+        {
+            settings.OperatingMode = OperatingMode.Lighting;
+            settings.Effect.Type = EffectType.Off;
+        }
+        else if (action.Target == SceneTargetKind.LightingPreset)
+        {
+            settings.OperatingMode = OperatingMode.Lighting;
+            var preset = settings.EffectPresets.ForType(action.LightingEffectType)
+                .FirstOrDefault(item => item.Id == action.PresetId);
+            settings.Effect = preset is null
+                ? EffectPresetSettings.CreateSoftwareDefault(action.LightingEffectType)
+                : KeyboardSettings.CloneEffect(preset.Effect);
+        }
+        else
+        {
+            settings.OperatingMode = OperatingMode.Music;
+            var preset = MusicSettings.BuiltInPresets
+                .Concat(settings.Effect.Music.CustomPresets)
+                .First(item => item.Id == action.PresetId);
+            settings.Effect.Music.ApplyPreset(preset);
+        }
+
+        if (action.BrightnessLimit.HasValue)
+        {
+            settings.OutputBrightnessLimit = action.BrightnessLimit.Value;
+            if (settings.OperatingMode == OperatingMode.Lighting)
+            {
+                settings.Brightness = action.BrightnessLimit.Value;
+            }
+        }
+    }
+
+    private static string DescribeSceneAction(KeyboardSettings settings, SceneAction action)
+    {
+        if (action.Target == SceneTargetKind.Off) return "关闭灯光";
+        if (action.Target == SceneTargetKind.MusicPreset)
+        {
+            return "音乐：" + MusicSettings.BuiltInPresets
+                .Concat(settings.Effect.Music.CustomPresets)
+                .First(item => item.Id == action.PresetId).Name;
+        }
+        if (action.PresetId == EffectPresetSettings.BuiltInId(action.LightingEffectType))
+            return $"灯效：{action.LightingEffectType} 软件默认";
+        return "灯效：" + settings.EffectPresets.ForType(action.LightingEffectType)
+            .First(item => item.Id == action.PresetId).Name;
+    }
+
+    private static bool ApplyIdleDim(KeyboardSettings settings)
     {
         if (!settings.IdleDim.Enabled)
         {
-            return;
+            return false;
         }
 
         if (WindowsIdleTime.GetIdleTime().TotalSeconds < settings.IdleDim.AfterSeconds)
         {
-            return;
+            return false;
         }
 
         if (settings.IdleDim.TurnOff)
         {
+            settings.OperatingMode = OperatingMode.Lighting;
             settings.Effect.Type = EffectType.Off;
-            return;
+            settings.OutputBrightnessLimit = 0;
+            return true;
         }
 
+        settings.OutputBrightnessLimit = Math.Min(settings.OutputBrightnessLimit, settings.IdleDim.Brightness);
         settings.Brightness = Math.Min(settings.Brightness, settings.IdleDim.Brightness);
+        return true;
     }
 
     private void EnsureConfigWatcher()

@@ -13,6 +13,9 @@ public static class AppPaths
     public const string SpotifyAlbumColorStateFileName = "spotify-album-color.json";
     public const string DriverComponentStateFileName = "driver-component.json";
     public const string AudioSourceStatusFileName = "audio-source-status.json";
+    public const string AutomationStatusFileName = "automation-status.json";
+    public const string MediaPlaybackStateFileName = "media-playback.json";
+    public const string AudioApplicationsStateFileName = "audio-applications.json";
 
     public static string ProgramDataDirectory =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), ProgramDataFolderName);
@@ -32,4 +35,10 @@ public static class AppPaths
     public static string DriverComponentStatePath => Path.Combine(ProgramDataDirectory, DriverComponentStateFileName);
 
     public static string AudioSourceStatusPath => Path.Combine(ProgramDataDirectory, AudioSourceStatusFileName);
+
+    public static string AutomationStatusPath => Path.Combine(ProgramDataDirectory, AutomationStatusFileName);
+
+    public static string MediaPlaybackStatePath => Path.Combine(ProgramDataDirectory, MediaPlaybackStateFileName);
+
+    public static string AudioApplicationsStatePath => Path.Combine(ProgramDataDirectory, AudioApplicationsStateFileName);
 }

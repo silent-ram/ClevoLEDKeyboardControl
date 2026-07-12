@@ -28,6 +28,20 @@ public sealed class KeyboardSettings
 
     public AppProfileSettings AppProfiles { get; set; } = new();
 
+    public AutomationSettings Automation { get; set; } = new();
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public int OutputBrightnessLimit { get; set; } = 100;
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string SelectedAudioProcessName { get; set; } = "";
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string SelectedAudioExecutablePath { get; set; } = "";
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public List<int> SelectedAudioProcessIds { get; set; } = [];
+
     public TypingPulseSettings TypingPulse { get; set; } = new();
 
     public UpdateSettings Update { get; set; } = new();
@@ -115,6 +129,9 @@ public sealed class KeyboardSettings
         Schedule.Normalize();
         AppProfiles ??= new AppProfileSettings();
         AppProfiles.Normalize();
+        Automation ??= new AutomationSettings();
+        Automation.Normalize();
+        OutputBrightnessLimit = Math.Clamp(OutputBrightnessLimit, 0, 100);
         TypingPulse ??= new TypingPulseSettings();
         TypingPulse.Normalize();
         Update ??= new UpdateSettings();
@@ -198,6 +215,73 @@ public sealed class KeyboardSettings
                     ManualColor = rule.ManualColor
                 }).ToList()
             },
+            Automation = new AutomationSettings
+            {
+                Version = Automation.Version,
+                Enabled = Automation.Enabled,
+                Rules = Automation.Rules.Select(rule => new SceneRule
+                {
+                    Id = rule.Id,
+                    Name = rule.Name,
+                    Enabled = rule.Enabled,
+                    Conditions = new SceneConditions
+                    {
+                        TimeEnabled = rule.Conditions.TimeEnabled,
+                        Start = rule.Conditions.Start,
+                        End = rule.Conditions.End,
+                        Days = [.. rule.Conditions.Days],
+                        ApplicationsEnabled = rule.Conditions.ApplicationsEnabled,
+                        ProcessNames = [.. rule.Conditions.ProcessNames]
+                    },
+                    Action = new SceneAction
+                    {
+                        Target = rule.Action.Target,
+                        LightingEffectType = rule.Action.LightingEffectType,
+                        PresetId = rule.Action.PresetId,
+                        BrightnessLimit = rule.Action.BrightnessLimit
+                    }
+                }).ToList(),
+                MusicApplications = Automation.MusicApplications.Select(rule => new MusicApplicationRule
+                {
+                    Id = rule.Id,
+                    Name = rule.Name,
+                    Enabled = rule.Enabled,
+                    ProcessName = rule.ProcessName,
+                    ExecutablePath = rule.ExecutablePath,
+                    ApplicationId = rule.ApplicationId,
+                    MediaSessionId = rule.MediaSessionId,
+                    IncludeChildProcesses = rule.IncludeChildProcesses,
+                    TimeFilter = CloneTimeFilter(rule.TimeFilter),
+                    MusicPresetId = rule.MusicPresetId,
+                    ColorSource = rule.ColorSource,
+                    BrightnessLimit = rule.BrightnessLimit,
+                    TypingPolicy = rule.TypingPolicy,
+                    NotificationPolicy = rule.NotificationPolicy
+                }).ToList(),
+                LightingApplications = Automation.LightingApplications.Select(rule => new LightingApplicationRule
+                {
+                    Id = rule.Id,
+                    Name = rule.Name,
+                    Enabled = rule.Enabled,
+                    ProcessNames = [.. rule.ProcessNames],
+                    TimeFilter = CloneTimeFilter(rule.TimeFilter),
+                    Action = CloneSceneAction(rule.Action),
+                    TypingPolicy = rule.TypingPolicy,
+                    NotificationPolicy = rule.NotificationPolicy
+                }).ToList(),
+                ScheduleRules = Automation.ScheduleRules.Select(rule => new AutomationScheduleRule
+                {
+                    Id = rule.Id,
+                    Name = rule.Name,
+                    Enabled = rule.Enabled,
+                    TimeFilter = CloneTimeFilter(rule.TimeFilter),
+                    Action = CloneSceneAction(rule.Action)
+                }).ToList()
+            },
+            OutputBrightnessLimit = OutputBrightnessLimit,
+            SelectedAudioProcessName = SelectedAudioProcessName,
+            SelectedAudioExecutablePath = SelectedAudioExecutablePath,
+            SelectedAudioProcessIds = [.. SelectedAudioProcessIds],
             TypingPulse = new TypingPulseSettings
             {
                 Enabled = TypingPulse.Enabled,
@@ -262,8 +346,18 @@ public sealed class KeyboardSettings
                     RefreshToken = effect.Music.Spotify.RefreshToken,
                     LastAlbumColor = effect.Music.Spotify.LastAlbumColor
                 },
+                PlayerBinding = new MusicPlayerBinding
+                {
+                    Enabled = effect.Music.PlayerBinding.Enabled,
+                    ProcessName = effect.Music.PlayerBinding.ProcessName,
+                    ExecutablePath = effect.Music.PlayerBinding.ExecutablePath,
+                    IncludeChildProcesses = effect.Music.PlayerBinding.IncludeChildProcesses,
+                    MediaSessionId = effect.Music.PlayerBinding.MediaSessionId,
+                    ColorSource = effect.Music.PlayerBinding.ColorSource
+                },
                 CustomPresets = effect.Music.CustomPresets.Select(preset => new MusicPreset
                 {
+                    Id = preset.Id,
                     Name = preset.Name,
                     ResponseMode = preset.ResponseMode,
                     LowColor = preset.LowColor,
@@ -294,6 +388,22 @@ public sealed class KeyboardSettings
         };
     }
 
+    private static AutomationTimeFilter CloneTimeFilter(AutomationTimeFilter filter) => new()
+    {
+        TimeEnabled = filter.TimeEnabled,
+        Start = filter.Start,
+        End = filter.End,
+        Days = [.. filter.Days]
+    };
+
+    private static SceneAction CloneSceneAction(SceneAction action) => new()
+    {
+        Target = action.Target,
+        LightingEffectType = action.LightingEffectType,
+        PresetId = action.PresetId,
+        BrightnessLimit = action.BrightnessLimit
+    };
+
     public static EffectPresetSettings CloneEffectPresets(EffectPresetSettings presets)
     {
         return new EffectPresetSettings
@@ -311,6 +421,7 @@ public sealed class KeyboardSettings
     {
         return new EffectPreset
         {
+            Id = preset.Id,
             Name = preset.Name,
             Effect = CloneEffect(preset.Effect)
         };
@@ -396,6 +507,8 @@ public sealed class EffectPresetSettings
     public const int DefaultPulsePeriodMs = 2000;
     public const int DefaultHeartbeatPeriodMs = 1500;
     public const int MaxPresetsPerMode = 16;
+
+    public static string BuiltInId(EffectType type) => $"builtin:lighting:{type.ToString().ToLowerInvariant()}";
 
     public List<EffectPreset> Static { get; set; } = [];
 
@@ -524,12 +637,15 @@ public sealed class EffectPresetSettings
 
 public sealed class EffectPreset
 {
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+
     public string Name { get; set; } = "";
 
     public LightingEffectSettings Effect { get; set; } = new();
 
     public EffectPreset Normalize(EffectType type)
     {
+        Id = string.IsNullOrWhiteSpace(Id) ? Guid.NewGuid().ToString("N") : Id.Trim();
         Name = Name.Trim();
         Effect ??= EffectPresetSettings.CreateSoftwareDefault(type);
         Effect.Type = type;

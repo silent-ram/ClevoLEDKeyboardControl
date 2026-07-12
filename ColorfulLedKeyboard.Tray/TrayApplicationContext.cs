@@ -12,6 +12,8 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly UpdateChecker _updateChecker = new();
     private readonly TypingPulseHook _typingPulseHook = new();
     private readonly NotificationFlashMonitor _notificationFlashMonitor;
+    private readonly MediaSessionMonitor _mediaSessionMonitor = new();
+    private readonly AudioSessionMonitor _audioSessionMonitor = new();
     private readonly NotifyIcon _notifyIcon;
     private readonly System.Windows.Forms.Timer _foregroundTimer = new() { Interval = 1000 };
     private string? _balloonReleaseUrl;
@@ -42,8 +44,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         _notifyIcon.BalloonTipClicked += (_, _) => OpenBalloonRelease();
         _foregroundTimer.Tick += (_, _) => UpdateForegroundAppState();
         _foregroundTimer.Start();
-        _typingPulseHook.SetEnabled(_settings.TypingPulse.Enabled);
-        _notificationFlashMonitor.SetEnabled(_settings.NotificationFlash.Enabled);
+        RefreshEventMonitors();
         UpdateForegroundAppState();
         _ = CheckForUpdatesOnStartupAsync();
 
@@ -66,6 +67,8 @@ public sealed class TrayApplicationContext : ApplicationContext
             _foregroundTimer.Dispose();
             _typingPulseHook.Dispose();
             _notificationFlashMonitor.Dispose();
+            _mediaSessionMonitor.Dispose();
+            _audioSessionMonitor.Dispose();
             _audioStatusWatcher?.Dispose();
         }
 
@@ -393,8 +396,7 @@ public sealed class TrayApplicationContext : ApplicationContext
 
             update(_settings);
             _settingsStore.Save(_settings);
-            _typingPulseHook.SetEnabled(_settings.TypingPulse.Enabled);
-            _notificationFlashMonitor.SetEnabled(_settings.NotificationFlash.Enabled);
+            RefreshEventMonitors();
             _settingsForm?.ReloadFromStore();
             return true;
         }
@@ -417,8 +419,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     private void RefreshMenu()
     {
         _settings = _settingsStore.Load();
-        _typingPulseHook.SetEnabled(_settings.TypingPulse.Enabled);
-        _notificationFlashMonitor.SetEnabled(_settings.NotificationFlash.Enabled);
+        RefreshEventMonitors();
         var oldMenu = _notifyIcon.ContextMenuStrip;
         _notifyIcon.ContextMenuStrip = BuildMenu();
         oldMenu?.Dispose();
@@ -435,6 +436,18 @@ public sealed class TrayApplicationContext : ApplicationContext
             catch (ObjectDisposedException) { }
             catch (InvalidOperationException) { }
         }
+    }
+
+    private void RefreshEventMonitors()
+    {
+        var typingRequired = _settings.TypingPulse.Enabled ||
+            _settings.Automation.MusicApplications.Any(rule => rule.TypingPolicy == EventPolicy.Enabled) ||
+            _settings.Automation.LightingApplications.Any(rule => rule.TypingPolicy == EventPolicy.Enabled);
+        var notificationRequired = _settings.NotificationFlash.Enabled ||
+            _settings.Automation.MusicApplications.Any(rule => rule.NotificationPolicy == EventPolicy.Enabled) ||
+            _settings.Automation.LightingApplications.Any(rule => rule.NotificationPolicy == EventPolicy.Enabled);
+        _typingPulseHook.SetEnabled(typingRequired);
+        _notificationFlashMonitor.SetEnabled(notificationRequired);
     }
 
     private void UpdateNotifyIconText()

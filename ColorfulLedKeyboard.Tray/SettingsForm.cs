@@ -95,6 +95,23 @@ public sealed class SettingsForm : Form
     private readonly SliderRow _typingPulseFade = new("回落时间", 50, 5000, " ms");
     private readonly CheckBox _appProfilesEnabled = new() { Text = "启用应用场景配置" };
     private readonly AppProfileEditor _appProfiles = new();
+    private readonly CheckBox _automationEnabled = new() { Text = "启用场景自动化" };
+    private readonly SceneAutomationEditorV2 _sceneAutomation = new();
+    private readonly Label _automationStatus = new()
+    {
+        AutoSize = true,
+        ForeColor = SystemColors.GrayText,
+        MaximumSize = new Size(ContentWidth, 0)
+    };
+    private readonly Label _musicBindingStatus = new() { AutoSize = true, ForeColor = SystemColors.GrayText };
+    private readonly Button _musicBindPlayer = new() { Text = "绑定正在播放的程序" };
+    private readonly Button _musicClearPlayer = new() { Text = "取消绑定" };
+    private readonly ComboBox _musicBindingColorSource = new();
+    private readonly ComboBox _musicMediaSession = new();
+    private readonly Label _musicCurrentColorStatus = new() { AutoSize = true, ForeColor = SystemColors.GrayText };
+    private readonly Label _musicMediaMatchStatus = new() { AutoSize = true, ForeColor = SystemColors.GrayText };
+    private readonly PalettePreviewControl _musicPalettePreview = new();
+    private readonly System.Windows.Forms.Timer _automationStatusTimer = new() { Interval = 1000 };
     private readonly ComboBox _updateInterval = new();
     private readonly Label _serviceSummary = new();
     private readonly Label _componentSummary = new();
@@ -104,6 +121,7 @@ public sealed class SettingsForm : Form
     private static readonly int[] MusicReleaseValues = [70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200];
     private EffectPresetSettings _effectPresets = new();
     private List<MusicPreset> _musicCustomPresets = [];
+    private MusicPlayerBinding _musicPlayerBinding = new();
     private bool _loadingSettings;
     private bool _effectChangedByUser;
     private bool _loadingEffectPreset;
@@ -120,6 +138,9 @@ public sealed class SettingsForm : Form
 
         BuildUi();
         LoadSettings();
+        _automationStatusTimer.Tick += (_, _) => UpdateAutomationStatus();
+        _automationStatusTimer.Start();
+        FormClosed += (_, _) => _automationStatusTimer.Dispose();
         _effectType.SelectedIndexChanged += (_, _) =>
         {
             if (!_loadingSettings)
@@ -176,8 +197,8 @@ public sealed class SettingsForm : Form
         {
             ("常规", BuildGeneralPage()),
             ("音乐", BuildMusicPage()),
-            ("自动化", BuildAutomationPage()),
-            ("应用场景", BuildAppProfilesPage()),
+            ("场景自动化", BuildAutomationPage()),
+            ("事件反馈", BuildEventFeedbackPage()),
             ("诊断", BuildDiagnosticsPage()),
             ("高级", BuildAdvancedPage())
         };
@@ -373,6 +394,23 @@ public sealed class SettingsForm : Form
         _musicPreset.DropDownStyle = ComboBoxStyle.DropDownList;
         _musicResponseMode.DropDownStyle = ComboBoxStyle.DropDownList;
         _musicResponseMode.Items.AddRange(["按电平变色", "仅亮度脉冲"]);
+        _musicBindingColorSource.DropDownStyle = ComboBoxStyle.DropDownList;
+        _musicBindingColorSource.Items.AddRange(["使用音乐预设颜色", "使用歌曲封面主色", "使用歌曲封面配色"]);
+        _musicBindingColorSource.SelectedIndex = 0;
+        _musicBindingColorSource.SelectedIndexChanged += (_, _) => RefreshMusicBindingStatus();
+        _musicMediaSession.DropDownStyle = ComboBoxStyle.DropDownList;
+        _musicMediaSession.Items.Add("自动匹配播放器");
+        _musicMediaSession.SelectedIndex = 0;
+        _musicMediaSession.SelectedIndexChanged += (_, _) =>
+        {
+            if (_loadingSettings || _musicMediaSession.SelectedIndex < 0) return;
+            _musicPlayerBinding.MediaSessionId = _musicMediaSession.SelectedIndex == 0
+                ? ""
+                : _musicMediaSession.SelectedItem?.ToString() ?? "";
+            RefreshMusicBindingStatus();
+        };
+        _musicBindPlayer.Click += (_, _) => BindMusicPlayer();
+        _musicClearPlayer.Click += (_, _) => ClearMusicPlayerBinding();
         SetupCombo(_musicSensitivity, MusicSensitivityValues.Select(value => $"{value:0.0}x"));
         SetupCombo(_musicAttack, MusicAttackValues.Select(value => $"{value} ms"));
         SetupCombo(_musicRelease, MusicReleaseValues.Select(value => $"{value} ms"));
@@ -400,6 +438,14 @@ public sealed class SettingsForm : Form
         _musicAdvanced.CheckedChanged += (_, _) => UpdateMusicAdvancedVisibility();
 
         page.Controls.Add(_audioSourceLabel);
+        page.Controls.Add(Section("播放器绑定（不依赖场景自动化）"));
+        page.Controls.Add(_musicBindingStatus);
+        page.Controls.Add(ButtonRow(_musicBindPlayer, _musicClearPlayer));
+        page.Controls.Add(Row("键盘颜色来源", _musicBindingColorSource));
+        page.Controls.Add(Row("歌曲封面来源", _musicMediaSession));
+        page.Controls.Add(_musicMediaMatchStatus);
+        page.Controls.Add(Row("当前实际颜色", _musicPalettePreview));
+        page.Controls.Add(_musicCurrentColorStatus);
         page.Controls.Add(Row("音乐预设", _musicPreset));
         page.Controls.Add(ButtonRow(_musicSavePreset, _musicCreatePreset, _musicDeletePreset));
         page.Controls.Add(Row("当前预设", _musicPresetName));
@@ -426,21 +472,131 @@ public sealed class SettingsForm : Form
         return page;
     }
 
+    private void BindMusicPlayer()
+    {
+        using var picker = new AudioApplicationPickerForm(includeVisibleProcesses: true);
+        if (picker.ShowDialog(this) != DialogResult.OK || picker.Selected is null) return;
+        var selected = picker.Selected;
+        _musicPlayerBinding.Enabled = true;
+        _musicPlayerBinding.ProcessName = selected.ProcessName;
+        _musicPlayerBinding.ExecutablePath = selected.ExecutablePath;
+        _musicPlayerBinding.IncludeChildProcesses = true;
+        _musicPlayerBinding.MediaSessionId = MediaPlaybackState.Load()?.Sessions.FirstOrDefault(session =>
+            session.SourceId.Contains(selected.ProcessName, StringComparison.OrdinalIgnoreCase))?.SourceId ?? "";
+        RefreshMusicMediaSessions(_musicPlayerBinding.MediaSessionId);
+        RefreshMusicBindingStatus();
+        Text = "ClevoLEDKeyboardControl 设置 - 有未应用的更改";
+    }
+
+    private void ClearMusicPlayerBinding()
+    {
+        _musicPlayerBinding = new MusicPlayerBinding();
+        RefreshMusicMediaSessions("");
+        RefreshMusicBindingStatus();
+        Text = "ClevoLEDKeyboardControl 设置 - 有未应用的更改";
+    }
+
+    private void RefreshMusicBindingStatus(AutomationStatus? status = null)
+    {
+        if (!_musicPlayerBinding.Enabled)
+        {
+            _musicBindingStatus.Text = "未绑定：音乐模式使用系统混音和音乐预设颜色。";
+            _musicMediaMatchStatus.Text = "媒体会话：未启用播放器绑定。";
+            _musicMediaMatchStatus.ForeColor = SystemColors.GrayText;
+            _musicPalettePreview.Colors = _musicSequence.Colors;
+            _musicCurrentColorStatus.Text = "当前使用音乐预设配色。";
+            _musicClearPlayer.Enabled = false;
+            return;
+        }
+
+        _musicClearPlayer.Enabled = true;
+        var runtime = status?.ActiveMusicApplication == _musicPlayerBinding.ProcessName
+            ? $"；当前 PID：{string.Join(",", status.ActiveProcessIds)}{(string.IsNullOrWhiteSpace(status.TrackTitle) ? "" : $"；{status.TrackTitle}")}"
+            : "";
+        var media = string.IsNullOrWhiteSpace(_musicPlayerBinding.MediaSessionId)
+            ? "；媒体会话：自动匹配"
+            : $"；媒体会话：{_musicPlayerBinding.MediaSessionId}";
+        _musicBindingStatus.Text = $"已绑定：{_musicPlayerBinding.ProcessName}{runtime}{media}";
+        var mediaState = MediaPlaybackState.Load();
+        var playback = mediaState?.Find(_musicPlayerBinding);
+        var source = (MusicColorSource)Math.Max(0, _musicBindingColorSource.SelectedIndex);
+        var colors = source switch
+        {
+            MusicColorSource.AlbumDominant when playback is not null && !string.IsNullOrWhiteSpace(playback.DominantColor) => new List<string> { playback.DominantColor },
+            MusicColorSource.AlbumPalette when playback is not null && playback.Palette.Count > 0 => playback.Palette,
+            _ => _musicSequence.Colors
+        };
+        _musicPalettePreview.Colors = colors;
+        if (source == MusicColorSource.Preset)
+        {
+            _musicMediaMatchStatus.Text = "媒体会话：颜色来源为音乐预设，封面匹配暂不参与输出。";
+            _musicMediaMatchStatus.ForeColor = SystemColors.GrayText;
+        }
+        else if (playback is not null)
+        {
+            var mode = string.IsNullOrWhiteSpace(_musicPlayerBinding.MediaSessionId) ? "自动匹配成功" : "手动匹配成功";
+            var cover = playback.Palette.Count > 0 ? $"已获取封面（{playback.Palette.Count} 色）" : "未获取封面，正在使用预设颜色";
+            _musicMediaMatchStatus.Text = $"媒体会话：{mode} → {playback.SourceId}；{(playback.IsPlaying ? "正在播放" : "切歌/暂停过渡")}；{cover}";
+            _musicMediaMatchStatus.ForeColor = playback.Palette.Count > 0 ? Color.ForestGreen : Color.DarkOrange;
+        }
+        else
+        {
+            var candidates = mediaState?.Sessions.Select(item => item.SourceId)
+                .Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.OrdinalIgnoreCase).ToList() ?? [];
+            var automatic = string.IsNullOrWhiteSpace(_musicPlayerBinding.MediaSessionId);
+            _musicMediaMatchStatus.Text = candidates.Count == 0
+                ? "媒体会话：尚未检测到 Windows 播放器会话，请先播放歌曲。"
+                : automatic
+                    ? $"媒体会话：自动匹配失败；当前可用：{string.Join("、", candidates)}。可在上方改为手动选择。"
+                    : $"媒体会话：选择的会话当前不可用；当前可用：{string.Join("、", candidates)}。";
+            _musicMediaMatchStatus.ForeColor = Color.Firebrick;
+        }
+        _musicCurrentColorStatus.Text = playback is null
+            ? $"当前使用预设颜色：{string.Join("  ", colors)}"
+            : $"当前歌曲：{playback.Title}{(string.IsNullOrWhiteSpace(playback.Artist) ? "" : " - " + playback.Artist)}；实际颜色：{string.Join("  ", colors)}";
+    }
+
+    private void RefreshMusicMediaSessions(string? selectedSource = null)
+    {
+        selectedSource ??= _musicMediaSession.SelectedIndex <= 0 ? _musicPlayerBinding.MediaSessionId : _musicMediaSession.SelectedItem?.ToString();
+        var sources = MediaPlaybackState.Load()?.Sessions
+            .Select(session => session.SourceId)
+            .Where(source => !string.IsNullOrWhiteSpace(source))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(source => source, StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? [];
+        _musicMediaSession.Items.Clear();
+        _musicMediaSession.Items.Add("自动匹配播放器");
+        foreach (var source in sources) _musicMediaSession.Items.Add(source);
+        var index = string.IsNullOrWhiteSpace(selectedSource)
+            ? 0
+            : Enumerable.Range(1, _musicMediaSession.Items.Count - 1)
+                .FirstOrDefault(i => string.Equals(_musicMediaSession.Items[i]?.ToString(), selectedSource, StringComparison.OrdinalIgnoreCase));
+        _musicMediaSession.SelectedIndex = index;
+    }
+
     private Panel BuildAutomationPage()
     {
         var page = CreatePage();
         _idleAfter.DropDownStyle = ComboBoxStyle.DropDownList;
         _idleAfter.Items.AddRange(["1 分钟", "3 分钟", "5 分钟", "10 分钟", "30 分钟"]);
 
-        page.Controls.Add(Section("空闲降亮"));
+        page.Controls.Add(Section("运行状态"));
+        page.Controls.Add(_automationStatus);
+        page.Controls.Add(Section("场景规则（列表靠前者优先）"));
+        page.Controls.Add(PlainRow(_automationEnabled));
+        page.Controls.Add(_sceneAutomation);
+        page.Controls.Add(Section("空闲最终覆盖"));
         page.Controls.Add(PlainRow(_idleEnabled));
         page.Controls.Add(Row("空闲时间", _idleAfter));
         page.Controls.Add(_idleBrightness);
         page.Controls.Add(PlainRow(_idleTurnOff));
-        page.Controls.Add(Section("时间计划"));
-        page.Controls.Add(PlainRow(_scheduleEnabled));
-        page.Controls.Add(_evening);
-        page.Controls.Add(_night);
+        return page;
+    }
+
+    private Panel BuildEventFeedbackPage()
+    {
+        var page = CreatePage();
         page.Controls.Add(Section("敲字闪烁"));
         page.Controls.Add(PlainRow(_typingPulseEnabled));
         page.Controls.Add(_typingPulsePeakBrightness);
@@ -585,6 +741,18 @@ public sealed class SettingsForm : Form
             _musicBaseBrightness.Value = settings.Effect.Music.BaseBrightness;
             _musicPeakBrightness.Value = settings.Effect.Music.PeakBrightness;
             _musicFollowSystemVolume.Checked = settings.Effect.Music.FollowSystemVolume;
+            _musicPlayerBinding = new MusicPlayerBinding
+            {
+                Enabled = settings.Effect.Music.PlayerBinding.Enabled,
+                ProcessName = settings.Effect.Music.PlayerBinding.ProcessName,
+                ExecutablePath = settings.Effect.Music.PlayerBinding.ExecutablePath,
+                IncludeChildProcesses = settings.Effect.Music.PlayerBinding.IncludeChildProcesses,
+                MediaSessionId = settings.Effect.Music.PlayerBinding.MediaSessionId,
+                ColorSource = settings.Effect.Music.PlayerBinding.ColorSource
+            };
+            _musicBindingColorSource.SelectedIndex = (int)_musicPlayerBinding.ColorSource;
+            RefreshMusicMediaSessions(_musicPlayerBinding.MediaSessionId);
+            RefreshMusicBindingStatus();
             _idleEnabled.Checked = settings.IdleDim.Enabled;
             _idleAfter.SelectedIndex = SecondsToIdleIndex(settings.IdleDim.AfterSeconds);
             _idleBrightness.Value = settings.IdleDim.Brightness;
@@ -600,6 +768,10 @@ public sealed class SettingsForm : Form
             _notificationFlashCooldown.Value = settings.NotificationFlash.CooldownSeconds;
             _appProfilesEnabled.Checked = settings.AppProfiles.Enabled;
             _appProfiles.Rules = settings.AppProfiles.Rules;
+            _automationEnabled.Checked = settings.Automation.Enabled;
+            _sceneAutomation.SetPresets(settings.EffectPresets, settings.Effect.Music.CustomPresets);
+            _sceneAutomation.Automation = settings.Automation;
+            UpdateAutomationStatus();
             _updateInterval.SelectedIndex = UpdateIntervalToIndex(settings.Update.CheckInterval);
 
             var evening = settings.Schedule.Rules.FirstOrDefault(rule => rule.Name == "Evening");
@@ -674,14 +846,25 @@ public sealed class SettingsForm : Form
             settings.Effect.Music.BaseBrightness = _musicBaseBrightness.Value;
             settings.Effect.Music.PeakBrightness = _musicPeakBrightness.Value;
             settings.Effect.Music.FollowSystemVolume = _musicFollowSystemVolume.Checked;
+            _musicPlayerBinding.ColorSource = (MusicColorSource)Math.Max(0, _musicBindingColorSource.SelectedIndex);
+            _musicPlayerBinding.MediaSessionId = _musicMediaSession.SelectedIndex <= 0
+                ? ""
+                : _musicMediaSession.SelectedItem?.ToString() ?? "";
+            settings.Effect.Music.PlayerBinding = new MusicPlayerBinding
+            {
+                Enabled = _musicPlayerBinding.Enabled,
+                ProcessName = _musicPlayerBinding.ProcessName,
+                ExecutablePath = _musicPlayerBinding.ExecutablePath,
+                IncludeChildProcesses = _musicPlayerBinding.IncludeChildProcesses,
+                MediaSessionId = _musicPlayerBinding.MediaSessionId,
+                ColorSource = _musicPlayerBinding.ColorSource
+            };
             settings.Effect.Music.CustomPresets = _musicCustomPresets.Select(CloneMusicPreset).ToList();
             settings.EffectPresets = KeyboardSettings.CloneEffectPresets(_effectPresets);
             settings.IdleDim.Enabled = _idleEnabled.Checked;
             settings.IdleDim.AfterSeconds = IdleIndexToSeconds(_idleAfter.SelectedIndex);
             settings.IdleDim.Brightness = _idleBrightness.Value;
             settings.IdleDim.TurnOff = _idleTurnOff.Checked;
-            settings.Schedule.Enabled = _scheduleEnabled.Checked;
-            settings.Schedule.Rules = BuildScheduleRules();
             settings.TypingPulse.Enabled = _typingPulseEnabled.Checked;
             settings.TypingPulse.PeakBrightness = _typingPulsePeakBrightness.Value;
             settings.TypingPulse.HoldMs = _typingPulseHold.Value;
@@ -690,13 +873,19 @@ public sealed class SettingsForm : Form
             settings.NotificationFlash.Color = _notificationFlashColor.ColorHex;
             settings.NotificationFlash.Pulses = _notificationFlashPulses.Value;
             settings.NotificationFlash.CooldownSeconds = _notificationFlashCooldown.Value;
-            settings.AppProfiles.Enabled = _appProfilesEnabled.Checked;
-            settings.AppProfiles.Rules = _appProfiles.Rules;
+            settings.Automation.Enabled = _automationEnabled.Checked;
+            _sceneAutomation.SetPresets(_effectPresets, _musicCustomPresets);
+            var automation = _sceneAutomation.Automation;
+            settings.Automation.MusicApplications = automation.MusicApplications;
+            settings.Automation.LightingApplications = automation.LightingApplications;
+            settings.Automation.ScheduleRules = automation.ScheduleRules;
+            settings.Automation.Rules.Clear();
             settings.Update.CheckInterval = IndexToUpdateInterval(_updateInterval.SelectedIndex);
             settings.Brightness = _brightness.Enabled ? _brightness.Value : settings.Brightness;
             _settingsStore.Save(settings);
             _effectChangedByUser = false;
             UpdateStatusHeader();
+            UpdateAutomationStatus();
             Text = "ClevoLEDKeyboardControl 设置 - 已应用";
             SettingsSaved?.Invoke(this, EventArgs.Empty);
         }
@@ -1201,6 +1390,9 @@ public sealed class SettingsForm : Form
 
         var preset = new EffectPreset
         {
+            Id = originalIndex >= 0
+                ? presets[originalIndex].Id
+                : existingIndex >= 0 ? presets[existingIndex].Id : Guid.NewGuid().ToString("N"),
             Name = name,
             Effect = BuildCurrentEffectFromGeneralControls(effectType)
         }.Normalize(effectType);
@@ -1685,11 +1877,14 @@ public sealed class SettingsForm : Form
             return false;
         }
 
-        var preset = BuildMusicPresetFromControls(name);
         var existing = _musicCustomPresets.FindIndex(item => string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase));
         var originalIndex = string.IsNullOrWhiteSpace(originalName)
             ? -1
             : _musicCustomPresets.FindIndex(item => string.Equals(item.Name, originalName, StringComparison.OrdinalIgnoreCase));
+        var preset = BuildMusicPresetFromControls(name);
+        preset.Id = originalIndex >= 0
+            ? _musicCustomPresets[originalIndex].Id
+            : existing >= 0 ? _musicCustomPresets[existing].Id : Guid.NewGuid().ToString("N");
 
         if (existing >= 0 && existing != originalIndex)
         {
@@ -1841,6 +2036,7 @@ public sealed class SettingsForm : Form
     {
         return new MusicPreset
         {
+            Id = preset.Id,
             Name = preset.Name,
             ResponseMode = preset.ResponseMode,
             LowColor = preset.LowColor,
@@ -1862,6 +2058,36 @@ public sealed class SettingsForm : Form
         }.Normalize();
     }
 
+    private void UpdateAutomationStatus()
+    {
+        var status = AutomationStatus.Load();
+        if (status is null || DateTimeOffset.UtcNow - status.UpdatedUtc > TimeSpan.FromSeconds(10))
+        {
+            _automationStatus.Text = "服务状态尚未更新。应用条件需要托盘程序保持运行。";
+            RefreshMusicBindingStatus();
+            return;
+        }
+
+        RefreshMusicBindingStatus(status);
+
+        var foreground = status.ForegroundAvailable
+            ? $"前台：{status.ForegroundProcessName}"
+            : "应用检测不可用";
+        var active = string.IsNullOrWhiteSpace(status.ActiveRuleName)
+            ? "当前：基础设置"
+            : $"当前：{status.ActiveRuleName} → {status.TargetDescription}";
+        var idle = status.IdleOverrideActive ? "；空闲覆盖生效" : "";
+        var invalid = string.IsNullOrWhiteSpace(status.InvalidReason) ? "" : $"；提示：{status.InvalidReason}";
+        var audio = string.IsNullOrWhiteSpace(status.ActiveMusicApplication)
+            ? ""
+            : $"；音频：{status.ActiveMusicApplication} PID {string.Join(",", status.ActiveProcessIds)}，{status.AudioCaptureMode}";
+        var track = string.IsNullOrWhiteSpace(status.TrackTitle)
+            ? ""
+            : $"；歌曲：{status.TrackTitle}{(string.IsNullOrWhiteSpace(status.TrackArtist) ? "" : " - " + status.TrackArtist)}";
+        var color = string.IsNullOrWhiteSpace(status.AlbumColor) ? "" : $"；封面色：{status.AlbumColor}";
+        _automationStatus.Text = $"{active}；{foreground}{audio}{track}{color}{idle}{invalid}";
+    }
+
     private DiagnosticsSnapshot CollectDiagnostics()
     {
         var settings = _settingsStore.Load();
@@ -1870,21 +2096,18 @@ public sealed class SettingsForm : Form
             ? "无状态"
             : $"{foreground.ProcessName}，{FormatAge(DateTimeOffset.UtcNow - foreground.UpdatedUtc)}前更新";
 
-        var matched = "未命中";
-        if (foreground is not null && DateTimeOffset.UtcNow - foreground.UpdatedUtc <= TimeSpan.FromSeconds(10))
-        {
-            var rule = settings.AppProfiles.Rules.FirstOrDefault(item => item.Matches(foreground.ProcessName));
-            if (rule is not null)
-            {
-                matched = $"{rule.ProcessName}，{(rule.AutoColorEnabled ? "图标色" : "手动色")}，{EffectTypeLabel(rule.TargetEffect)}";
-            }
-        }
+        var automation = AutomationStatus.Load();
+        var matched = automation is null
+            ? "无自动化状态"
+            : string.IsNullOrWhiteSpace(automation.ActiveRuleName)
+                ? $"基础设置{(string.IsNullOrWhiteSpace(automation.InvalidReason) ? "" : $"；{automation.InvalidReason}")}"
+                : $"{automation.ActiveRuleName} → {automation.TargetDescription}{(automation.IdleOverrideActive ? "；空闲覆盖" : "")}";
 
         return new DiagnosticsSnapshot(
             ServiceStatus: GetServiceStatusText(),
             DriverStatus: GetDriverStatusText(),
             ForegroundApp: foregroundText,
-            MatchedProfile: settings.AppProfiles.Enabled ? matched : "应用场景未启用",
+            MatchedProfile: settings.Automation.Enabled ? matched : "场景自动化未启用",
             UpdateStatus: GetUpdateStatusText(settings.Update.CheckInterval),
             ConfigDirectory: AppPaths.ProgramDataDirectory);
     }
@@ -2491,6 +2714,911 @@ internal sealed class SequenceEditor : UserControl
         e.Graphics.DrawRectangle(Pens.Black, e.Bounds.Left + 4, e.Bounds.Top + 4, 28, 16);
         e.Graphics.DrawString(_colors[e.Index], e.Font ?? Font, Brushes.Black, e.Bounds.Left + 40, e.Bounds.Top + 4);
         e.DrawFocusRectangle();
+    }
+}
+
+internal sealed class SceneAutomationEditorV2 : UserControl
+{
+    private readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
+    private readonly ListBox _music = new() { Dock = DockStyle.Fill };
+    private readonly ListBox _lighting = new() { Dock = DockStyle.Fill };
+    private readonly ListBox _schedule = new() { Dock = DockStyle.Fill };
+    private AutomationSettings _automation = new();
+    private EffectPresetSettings _effectPresets = new();
+    private List<MusicPreset> _musicPresets = [];
+
+    public SceneAutomationEditorV2()
+    {
+        Width = UiMetrics.ContentWidth;
+        Height = 430;
+        Controls.Add(_tabs);
+        _tabs.TabPages.Add(BuildTab("音乐程序", _music, AddMusic, EditMusic, RemoveMusic, MoveMusic));
+        _tabs.TabPages.Add(BuildTab("灯效程序", _lighting, AddLighting, EditLighting, RemoveLighting, MoveLighting));
+        _tabs.TabPages.Add(BuildTab("时间计划", _schedule, AddSchedule, EditSchedule, RemoveSchedule, MoveSchedule));
+        _music.DoubleClick += (_, _) => EditMusic();
+        _lighting.DoubleClick += (_, _) => EditLighting();
+        _schedule.DoubleClick += (_, _) => EditSchedule();
+    }
+
+    public AutomationSettings Automation
+    {
+        get => Clone(_automation).Normalize();
+        set { _automation = Clone(value ?? new AutomationSettings()).Normalize(); RefreshLists(); }
+    }
+
+    public void SetPresets(EffectPresetSettings effects, IEnumerable<MusicPreset> music)
+    {
+        _effectPresets = KeyboardSettings.CloneEffectPresets(effects);
+        _musicPresets = MusicSettings.BuiltInPresets.Concat(music).Select(CloneMusicPreset).ToList();
+    }
+
+    private static TabPage BuildTab(string title, ListBox list, Action add, Action edit, Action remove, Action<int> move)
+    {
+        var page = new TabPage(title);
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 44, FlowDirection = FlowDirection.LeftToRight };
+        void Add(string text, Action action)
+        {
+            var button = new Button { Text = text, Width = 112, Height = 34 };
+            button.Click += (_, _) => action();
+            buttons.Controls.Add(button);
+        }
+        Add(title == "音乐程序" ? "绑定有声程序" : "添加", add);
+        Add("编辑", edit);
+        Add("删除", remove);
+        Add("上移", () => move(-1));
+        Add("下移", () => move(1));
+        page.Controls.Add(list);
+        page.Controls.Add(buttons);
+        return page;
+    }
+
+    private void AddMusic()
+    {
+        using var picker = new AudioApplicationPickerForm();
+        if (picker.ShowDialog() != DialogResult.OK || picker.Selected is null) return;
+        var rule = new MusicApplicationRule
+        {
+            Name = picker.Selected.ProcessName,
+            ProcessName = picker.Selected.ProcessName,
+            ExecutablePath = picker.Selected.ExecutablePath,
+            MediaSessionId = MediaPlaybackState.Load()?.Sessions.FirstOrDefault(session =>
+                session.SourceId.Contains(picker.Selected.ProcessName, StringComparison.OrdinalIgnoreCase))?.SourceId ?? ""
+        }.Normalize();
+        using var dialog = AutomationRuleDialog.ForMusic(rule, _musicPresets);
+        if (dialog.ShowDialog() != DialogResult.OK) return;
+        _automation.MusicApplications.Add(rule.Normalize());
+        RefreshLists();
+        _music.SelectedIndex = _automation.MusicApplications.Count - 1;
+    }
+
+    private void EditMusic()
+    {
+        if (_music.SelectedIndex < 0) return;
+        var rule = Clone(_automation.MusicApplications[_music.SelectedIndex]);
+        using var dialog = AutomationRuleDialog.ForMusic(rule, _musicPresets);
+        if (dialog.ShowDialog() != DialogResult.OK) return;
+        _automation.MusicApplications[_music.SelectedIndex] = rule.Normalize();
+        RefreshLists(_music.SelectedIndex, -1, -1);
+    }
+
+    private void AddLighting()
+    {
+        using var picker = new RunningAppsForm();
+        if (picker.ShowDialog() != DialogResult.OK || string.IsNullOrWhiteSpace(picker.SelectedProcessName)) return;
+        var rule = new LightingApplicationRule
+        {
+            Name = picker.SelectedProcessName,
+            ProcessNames = [picker.SelectedProcessName]
+        }.Normalize();
+        using var dialog = AutomationRuleDialog.ForLighting(rule, _effectPresets);
+        if (dialog.ShowDialog() != DialogResult.OK) return;
+        _automation.LightingApplications.Add(rule.Normalize());
+        RefreshLists();
+        _lighting.SelectedIndex = _automation.LightingApplications.Count - 1;
+    }
+
+    private void EditLighting()
+    {
+        if (_lighting.SelectedIndex < 0) return;
+        var rule = Clone(_automation.LightingApplications[_lighting.SelectedIndex]);
+        using var dialog = AutomationRuleDialog.ForLighting(rule, _effectPresets);
+        if (dialog.ShowDialog() != DialogResult.OK) return;
+        _automation.LightingApplications[_lighting.SelectedIndex] = rule.Normalize();
+        RefreshLists(-1, _lighting.SelectedIndex, -1);
+    }
+
+    private void AddSchedule()
+    {
+        var rule = new AutomationScheduleRule
+        {
+            TimeFilter = new AutomationTimeFilter { TimeEnabled = true, Start = "19:00", End = "23:00" }
+        }.Normalize();
+        using var dialog = AutomationRuleDialog.ForSchedule(rule, _effectPresets, _musicPresets);
+        if (dialog.ShowDialog() != DialogResult.OK) return;
+        _automation.ScheduleRules.Add(rule.Normalize());
+        RefreshLists();
+        _schedule.SelectedIndex = _automation.ScheduleRules.Count - 1;
+    }
+
+    private void EditSchedule()
+    {
+        if (_schedule.SelectedIndex < 0) return;
+        var rule = Clone(_automation.ScheduleRules[_schedule.SelectedIndex]);
+        using var dialog = AutomationRuleDialog.ForSchedule(rule, _effectPresets, _musicPresets);
+        if (dialog.ShowDialog() != DialogResult.OK) return;
+        _automation.ScheduleRules[_schedule.SelectedIndex] = rule.Normalize();
+        RefreshLists(-1, -1, _schedule.SelectedIndex);
+    }
+
+    private void RemoveMusic() { if (_music.SelectedIndex >= 0) { _automation.MusicApplications.RemoveAt(_music.SelectedIndex); RefreshLists(); } }
+    private void RemoveLighting() { if (_lighting.SelectedIndex >= 0) { _automation.LightingApplications.RemoveAt(_lighting.SelectedIndex); RefreshLists(); } }
+    private void RemoveSchedule() { if (_schedule.SelectedIndex >= 0) { _automation.ScheduleRules.RemoveAt(_schedule.SelectedIndex); RefreshLists(); } }
+    private void MoveMusic(int offset) => MoveRule(_automation.MusicApplications, _music, offset);
+    private void MoveLighting(int offset) => MoveRule(_automation.LightingApplications, _lighting, offset);
+    private void MoveSchedule(int offset) => MoveRule(_automation.ScheduleRules, _schedule, offset);
+
+    private void MoveRule<T>(List<T> rules, ListBox list, int offset)
+    {
+        var from = list.SelectedIndex;
+        var to = from + offset;
+        if (from < 0 || to < 0 || to >= rules.Count) return;
+        (rules[from], rules[to]) = (rules[to], rules[from]);
+        RefreshLists();
+        list.SelectedIndex = to;
+    }
+
+    private void RefreshLists(int music = -1, int lighting = -1, int schedule = -1)
+    {
+        _music.Items.Clear();
+        foreach (var rule in _automation.MusicApplications)
+            _music.Items.Add($"{(rule.Enabled ? "" : "[停用] ")}{rule.Name} — {rule.ProcessName} — {ColorLabel(rule.ColorSource)}");
+        _lighting.Items.Clear();
+        foreach (var rule in _automation.LightingApplications)
+            _lighting.Items.Add($"{(rule.Enabled ? "" : "[停用] ")}{rule.Name} — {string.Join(", ", rule.ProcessNames)}");
+        _schedule.Items.Clear();
+        foreach (var rule in _automation.ScheduleRules)
+            _schedule.Items.Add($"{(rule.Enabled ? "" : "[停用] ")}{rule.Name} — {rule.TimeFilter.Start}-{rule.TimeFilter.End}");
+        if (music >= 0 && music < _music.Items.Count) _music.SelectedIndex = music;
+        if (lighting >= 0 && lighting < _lighting.Items.Count) _lighting.SelectedIndex = lighting;
+        if (schedule >= 0 && schedule < _schedule.Items.Count) _schedule.SelectedIndex = schedule;
+    }
+
+    private static string ColorLabel(MusicColorSource source) => source switch
+    {
+        MusicColorSource.AlbumDominant => "封面主色",
+        MusicColorSource.AlbumPalette => "封面配色",
+        _ => "预设颜色"
+    };
+
+    private static T Clone<T>(T value) => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(value))!;
+    private static MusicPreset CloneMusicPreset(MusicPreset value) => Clone(value);
+}
+
+internal sealed class PalettePreviewControl : Control
+{
+    private List<string> _colors = [];
+
+    public PalettePreviewControl()
+    {
+        Width = 420;
+        Height = 30;
+        SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint, true);
+    }
+
+    public List<string> Colors
+    {
+        get => [.. _colors];
+        set
+        {
+            _colors = (value ?? []).Where(color => !string.IsNullOrWhiteSpace(color)).ToList();
+            Invalidate();
+        }
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        e.Graphics.Clear(SystemColors.Control);
+        if (_colors.Count == 0)
+        {
+            e.Graphics.DrawRectangle(SystemPens.ControlDark, 0, 0, Width - 1, Height - 1);
+            return;
+        }
+        var width = Math.Max(1, Width / _colors.Count);
+        for (var index = 0; index < _colors.Count; index++)
+        {
+            try
+            {
+                var rgb = RgbColor.FromHex(_colors[index]);
+                using var brush = new SolidBrush(Color.FromArgb(rgb.R, rgb.G, rgb.B));
+                var left = index * width;
+                var right = index == _colors.Count - 1 ? Width : left + width;
+                e.Graphics.FillRectangle(brush, left, 0, right - left, Height);
+            }
+            catch (FormatException) { }
+        }
+        e.Graphics.DrawRectangle(SystemPens.ControlDarkDark, 0, 0, Width - 1, Height - 1);
+    }
+}
+
+internal sealed class AudioApplicationPickerForm : Form
+{
+    private readonly ListView _list = new() { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true };
+    private readonly List<AudioApplicationStatus> _items;
+    public AudioApplicationStatus? Selected { get; private set; }
+
+    public AudioApplicationPickerForm(bool includeVisibleProcesses = false)
+    {
+        Text = "绑定正在运行的音乐程序";
+        StartPosition = FormStartPosition.CenterParent;
+        Size = new Size(720, 420);
+        _list.Columns.Add("程序", 180);
+        _list.Columns.Add("PID", 180);
+        _list.Columns.Add("电平", 100);
+        _list.Columns.Add("状态", 100);
+        _items = AutomationStatus.Load()?.AudioApplications.ToList() ?? [];
+        if (includeVisibleProcesses)
+        {
+            foreach (var process in Process.GetProcesses())
+            using (process)
+            {
+                try
+                {
+                    if (process.MainWindowHandle == IntPtr.Zero) continue;
+                    var name = AppProfileRule.NormalizeProcessName(process.ProcessName);
+                    var path = process.MainModule?.FileName ?? "";
+                    var existing = _items.FirstOrDefault(item =>
+                        string.Equals(item.ProcessName, name, StringComparison.OrdinalIgnoreCase) &&
+                        (string.IsNullOrWhiteSpace(item.ExecutablePath) ||
+                         string.Equals(item.ExecutablePath, path, StringComparison.OrdinalIgnoreCase)));
+                    if (existing is not null)
+                    {
+                        if (!existing.ProcessIds.Contains(process.Id)) existing.ProcessIds.Add(process.Id);
+                        continue;
+                    }
+                    _items.Add(new AudioApplicationStatus
+                    {
+                        ProcessName = name,
+                        ExecutablePath = path,
+                        ProcessIds = [process.Id]
+                    });
+                }
+                catch
+                {
+                }
+            }
+        }
+        _items = _items.OrderByDescending(item => item.IsPlaying)
+            .ThenByDescending(item => item.PeakLevel)
+            .ThenBy(item => item.ProcessName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        foreach (var app in _items)
+        {
+            var item = new ListViewItem(app.ProcessName);
+            item.SubItems.Add(string.Join(",", app.ProcessIds));
+            item.SubItems.Add($"{app.PeakLevel:P1}");
+            item.SubItems.Add(app.IsPlaying ? "正在播放" : "已静音");
+            _list.Items.Add(item);
+        }
+        var bind = new Button { Text = "绑定", Dock = DockStyle.Bottom, Height = 40 };
+        bind.Click += (_, _) => Accept();
+        _list.DoubleClick += (_, _) => Accept();
+        Controls.Add(_list);
+        Controls.Add(bind);
+    }
+
+    private void Accept()
+    {
+        if (_list.SelectedIndices.Count == 0) return;
+        Selected = _items[_list.SelectedIndices[0]];
+        DialogResult = DialogResult.OK;
+        Close();
+    }
+}
+
+internal sealed class AutomationRuleDialog : Form
+{
+    private enum RuleKind { Music, Lighting, Schedule }
+    private readonly RuleKind _kind;
+    private readonly MusicApplicationRule? _musicRule;
+    private readonly LightingApplicationRule? _lightingRule;
+    private readonly AutomationScheduleRule? _scheduleRule;
+    private readonly TextBox _name = new();
+    private readonly TextBox _process = new();
+    private readonly CheckBox _enabled = new() { Text = "启用规则" };
+    private readonly CheckBox _includeChildren = new() { Text = "包含子进程" };
+    private readonly CheckBox _timeEnabled = new() { Text = "限制时间" };
+    private readonly DateTimePicker _start = TimePicker();
+    private readonly DateTimePicker _end = TimePicker();
+    private readonly CheckedListBox _days = new() { Height = 72, CheckOnClick = true };
+    private readonly ComboBox _target = DropDown();
+    private readonly ComboBox _effectType = DropDown();
+    private readonly ComboBox _preset = DropDown();
+    private readonly ComboBox _colorSource = DropDown();
+    private readonly ComboBox _mediaSession = DropDown();
+    private readonly CheckBox _brightnessEnabled = new() { Text = "最大亮度" };
+    private readonly NumericUpDown _brightness = new() { Minimum = 0, Maximum = 100 };
+    private readonly ComboBox _typing = PolicyCombo();
+    private readonly ComboBox _notification = PolicyCombo();
+    private readonly EffectPresetSettings _effects;
+    private readonly List<MusicPreset> _musicPresets;
+
+    private AutomationRuleDialog(RuleKind kind, object rule, EffectPresetSettings effects, IEnumerable<MusicPreset> music)
+    {
+        _kind = kind;
+        _musicRule = rule as MusicApplicationRule;
+        _lightingRule = rule as LightingApplicationRule;
+        _scheduleRule = rule as AutomationScheduleRule;
+        _effects = effects;
+        _musicPresets = music.ToList();
+        Text = "编辑自动化规则";
+        StartPosition = FormStartPosition.CenterParent;
+        ClientSize = new Size(640, 650);
+        var panel = new TableLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, ColumnCount = 2, Padding = new Padding(12) };
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        Controls.Add(panel);
+        Add(panel, "名称", _name);
+        Add(panel, "状态", _enabled);
+        Add(panel, "进程名", _process);
+        Add(panel, "进程范围", _includeChildren);
+        Add(panel, "时间条件", _timeEnabled);
+        var range = new FlowLayoutPanel { AutoSize = true };
+        range.Controls.Add(_start); range.Controls.Add(new Label { Text = "至", AutoSize = true }); range.Controls.Add(_end);
+        Add(panel, "时间段", range);
+        _days.Items.AddRange(["周一", "周二", "周三", "周四", "周五", "周六", "周日"]);
+        Add(panel, "星期", _days);
+        _target.Items.AddRange(kind == RuleKind.Lighting
+            ? ["灯效预设", "关闭灯光"]
+            : ["灯效预设", "音乐预设", "关闭灯光"]);
+        _target.SelectedIndexChanged += (_, _) => RefreshPresets();
+        Add(panel, "动作", _target);
+        _effectType.Items.AddRange(["固定颜色", "RGB 循环", "单色呼吸", "颜色序列", "脉冲", "心跳"]);
+        _effectType.SelectedIndexChanged += (_, _) => RefreshPresets();
+        Add(panel, "灯效类型", _effectType);
+        Add(panel, "目标预设", _preset);
+        _colorSource.Items.AddRange(["预设颜色", "封面主色", "封面配色"]);
+        Add(panel, "颜色来源", _colorSource);
+        _mediaSession.Items.Add("自动匹配");
+        foreach (var session in MediaPlaybackState.Load()?.Sessions ?? []) _mediaSession.Items.Add(session.SourceId);
+        Add(panel, "媒体会话", _mediaSession);
+        var brightness = new FlowLayoutPanel { AutoSize = true }; brightness.Controls.Add(_brightnessEnabled); brightness.Controls.Add(_brightness);
+        Add(panel, "亮度", brightness);
+        Add(panel, "打字反馈", _typing);
+        Add(panel, "通知反馈", _notification);
+        var buttons = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.RightToLeft };
+        var ok = new Button { Text = "确定", DialogResult = DialogResult.OK };
+        var cancel = new Button { Text = "取消", DialogResult = DialogResult.Cancel };
+        ok.Click += (_, _) => Save();
+        buttons.Controls.Add(ok); buttons.Controls.Add(cancel);
+        Add(panel, "", buttons);
+        AcceptButton = ok;
+        CancelButton = cancel;
+        LoadRule();
+    }
+
+    public static AutomationRuleDialog ForMusic(MusicApplicationRule rule, IEnumerable<MusicPreset> music) =>
+        new(RuleKind.Music, rule, new EffectPresetSettings(), music);
+    public static AutomationRuleDialog ForLighting(LightingApplicationRule rule, EffectPresetSettings effects) =>
+        new(RuleKind.Lighting, rule, effects, []);
+    public static AutomationRuleDialog ForSchedule(AutomationScheduleRule rule, EffectPresetSettings effects, IEnumerable<MusicPreset> music) =>
+        new(RuleKind.Schedule, rule, effects, music);
+
+    private void LoadRule()
+    {
+        var filter = _musicRule?.TimeFilter ?? _lightingRule?.TimeFilter ?? _scheduleRule!.TimeFilter;
+        _name.Text = _musicRule?.Name ?? _lightingRule?.Name ?? _scheduleRule!.Name;
+        _enabled.Checked = _musicRule?.Enabled ?? _lightingRule?.Enabled ?? _scheduleRule!.Enabled;
+        _process.Text = _musicRule?.ProcessName ?? string.Join(", ", _lightingRule?.ProcessNames ?? []);
+        _includeChildren.Checked = _musicRule?.IncludeChildProcesses ?? false;
+        _timeEnabled.Checked = filter.TimeEnabled;
+        _start.Value = DateTime.Today + TimeOnly.Parse(filter.Start).ToTimeSpan();
+        _end.Value = DateTime.Today + TimeOnly.Parse(filter.End).ToTimeSpan();
+        var dayValues = new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday };
+        for (var i = 0; i < dayValues.Length; i++) _days.SetItemChecked(i, filter.Days.Contains(dayValues[i]));
+        _brightnessEnabled.Checked = (_musicRule?.BrightnessLimit ?? _lightingRule?.Action.BrightnessLimit ?? _scheduleRule?.Action.BrightnessLimit).HasValue;
+        _brightness.Value = _musicRule?.BrightnessLimit ?? _lightingRule?.Action.BrightnessLimit ?? _scheduleRule?.Action.BrightnessLimit ?? 100;
+        _typing.SelectedIndex = (int)(_musicRule?.TypingPolicy ?? _lightingRule?.TypingPolicy ?? EventPolicy.Inherit);
+        _notification.SelectedIndex = (int)(_musicRule?.NotificationPolicy ?? _lightingRule?.NotificationPolicy ?? EventPolicy.Inherit);
+        if (_kind == RuleKind.Music)
+        {
+            _target.SelectedIndex = (int)SceneTargetKind.MusicPreset;
+            _colorSource.SelectedIndex = (int)_musicRule!.ColorSource;
+            _mediaSession.SelectedIndex = FindItem(_mediaSession, _musicRule.MediaSessionId);
+            RefreshPresets(_musicRule.MusicPresetId);
+        }
+        else
+        {
+            var action = _lightingRule?.Action ?? _scheduleRule!.Action;
+            _target.SelectedIndex = _kind == RuleKind.Lighting && action.Target == SceneTargetKind.Off
+                ? 1
+                : (int)action.Target;
+            _effectType.SelectedIndex = EffectIndex(action.LightingEffectType);
+            RefreshPresets(action.PresetId);
+        }
+        _process.Enabled = _kind != RuleKind.Schedule;
+        _includeChildren.Visible = _kind == RuleKind.Music;
+        _colorSource.Visible = _kind == RuleKind.Music;
+        _mediaSession.Visible = _kind == RuleKind.Music;
+        _typing.Enabled = _kind != RuleKind.Schedule;
+        _notification.Enabled = _kind != RuleKind.Schedule;
+        _target.Enabled = _kind != RuleKind.Music;
+    }
+
+    private void Save()
+    {
+        var filter = _musicRule?.TimeFilter ?? _lightingRule?.TimeFilter ?? _scheduleRule!.TimeFilter;
+        filter.TimeEnabled = _timeEnabled.Checked;
+        filter.Start = _start.Value.ToString("HH:mm");
+        filter.End = _end.Value.ToString("HH:mm");
+        var dayValues = new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday };
+        filter.Days = dayValues.Where((_, index) => _days.GetItemChecked(index)).ToList();
+        int? limit = _brightnessEnabled.Checked ? (int)_brightness.Value : null;
+        if (_musicRule is not null)
+        {
+            _musicRule.Name = _name.Text; _musicRule.Enabled = _enabled.Checked;
+            _musicRule.ProcessName = AppProfileRule.NormalizeProcessName(_process.Text);
+            _musicRule.IncludeChildProcesses = _includeChildren.Checked;
+            _musicRule.MusicPresetId = (_preset.SelectedItem as PresetOption)?.Id ?? "";
+            _musicRule.ColorSource = (MusicColorSource)Math.Max(0, _colorSource.SelectedIndex);
+            _musicRule.MediaSessionId = _mediaSession.SelectedIndex <= 0 ? "" : _mediaSession.SelectedItem?.ToString() ?? "";
+            _musicRule.BrightnessLimit = limit;
+            _musicRule.TypingPolicy = (EventPolicy)Math.Max(0, _typing.SelectedIndex);
+            _musicRule.NotificationPolicy = (EventPolicy)Math.Max(0, _notification.SelectedIndex);
+        }
+        else
+        {
+            var action = _lightingRule?.Action ?? _scheduleRule!.Action;
+            action.Target = _kind == RuleKind.Lighting && _target.SelectedIndex == 1
+                ? SceneTargetKind.Off
+                : (SceneTargetKind)Math.Max(0, _target.SelectedIndex);
+            action.LightingEffectType = EffectTypes[Math.Max(0, _effectType.SelectedIndex)];
+            action.PresetId = (_preset.SelectedItem as PresetOption)?.Id ?? "";
+            action.BrightnessLimit = limit;
+            if (_lightingRule is not null)
+            {
+                _lightingRule.Name = _name.Text; _lightingRule.Enabled = _enabled.Checked;
+                _lightingRule.ProcessNames = _process.Text.Split([',', '，', ';'], StringSplitOptions.RemoveEmptyEntries).ToList();
+                _lightingRule.TypingPolicy = (EventPolicy)Math.Max(0, _typing.SelectedIndex);
+                _lightingRule.NotificationPolicy = (EventPolicy)Math.Max(0, _notification.SelectedIndex);
+            }
+            else { _scheduleRule!.Name = _name.Text; _scheduleRule.Enabled = _enabled.Checked; }
+        }
+    }
+
+    private void RefreshPresets(string? selectedId = null)
+    {
+        selectedId ??= (_preset.SelectedItem as PresetOption)?.Id;
+        _preset.Items.Clear();
+        var target = _kind == RuleKind.Lighting && _target.SelectedIndex == 1
+            ? SceneTargetKind.Off
+            : (SceneTargetKind)Math.Max(0, _target.SelectedIndex);
+        if (_kind == RuleKind.Music || target == SceneTargetKind.MusicPreset)
+            foreach (var item in _musicPresets) _preset.Items.Add(new PresetOption(item.Id, item.Name));
+        else if (target == SceneTargetKind.LightingPreset)
+        {
+            var type = EffectTypes[Math.Max(0, _effectType.SelectedIndex)];
+            _preset.Items.Add(new PresetOption(EffectPresetSettings.BuiltInId(type), "软件默认配置"));
+            foreach (var item in _effects.ForType(type)) _preset.Items.Add(new PresetOption(item.Id, item.Name));
+        }
+        for (var i = 0; i < _preset.Items.Count; i++) if ((_preset.Items[i] as PresetOption)?.Id == selectedId) _preset.SelectedIndex = i;
+        if (_preset.SelectedIndex < 0 && _preset.Items.Count > 0) _preset.SelectedIndex = 0;
+    }
+
+    private static readonly EffectType[] EffectTypes = [EffectType.Static, EffectType.Rainbow, EffectType.Breathing, EffectType.Sequence, EffectType.Pulse, EffectType.Heartbeat];
+    private static int EffectIndex(EffectType type) => Math.Max(0, Array.IndexOf(EffectTypes, type));
+    private static ComboBox DropDown() => new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 350 };
+    private static ComboBox PolicyCombo() { var c = DropDown(); c.Items.AddRange(["继承全局", "强制开启", "强制关闭"]); return c; }
+    private static DateTimePicker TimePicker() => new() { Format = DateTimePickerFormat.Custom, CustomFormat = "HH:mm", ShowUpDown = true, Width = 100 };
+    private static void Add(TableLayoutPanel panel, string label, Control control)
+    {
+        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        panel.Controls.Add(new Label { Text = label, AutoSize = true, Margin = new Padding(3, 8, 3, 3) });
+        control.Dock = DockStyle.Top;
+        panel.Controls.Add(control);
+    }
+    private static int FindItem(ComboBox combo, string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return 0;
+        for (var i = 0; i < combo.Items.Count; i++) if (string.Equals(combo.Items[i]?.ToString(), value, StringComparison.OrdinalIgnoreCase)) return i;
+        combo.Items.Add(value); return combo.Items.Count - 1;
+    }
+    private sealed record PresetOption(string Id, string Name) { public override string ToString() => Name; }
+}
+
+internal sealed class SceneAutomationEditor : UserControl
+{
+    private static readonly EffectType[] LightingTypes =
+    [
+        EffectType.Static, EffectType.Rainbow, EffectType.Breathing,
+        EffectType.Sequence, EffectType.Pulse, EffectType.Heartbeat
+    ];
+    private static readonly DayOfWeek[] DayValues =
+    [
+        DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday,
+        DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday
+    ];
+
+    private readonly ListBox _list = new();
+    private readonly TextBox _name = new();
+    private readonly CheckBox _enabled = new() { Text = "启用此规则", AutoSize = true };
+    private readonly CheckBox _timeEnabled = new() { Text = "限制时间段", AutoSize = true };
+    private readonly DateTimePicker _start = TimePicker();
+    private readonly DateTimePicker _end = TimePicker();
+    private readonly CheckBox[] _days =
+    [
+        new() { Text = "一", AutoSize = true }, new() { Text = "二", AutoSize = true },
+        new() { Text = "三", AutoSize = true }, new() { Text = "四", AutoSize = true },
+        new() { Text = "五", AutoSize = true }, new() { Text = "六", AutoSize = true },
+        new() { Text = "日", AutoSize = true }
+    ];
+    private readonly CheckBox _applicationsEnabled = new() { Text = "限制前台应用（多个进程任一匹配）", AutoSize = true };
+    private readonly TextBox _processNames = new();
+    private readonly ComboBox _target = new();
+    private readonly ComboBox _effectType = new();
+    private readonly ComboBox _preset = new();
+    private readonly CheckBox _brightnessEnabled = new() { Text = "限制最大亮度", AutoSize = true };
+    private readonly NumericUpDown _brightness = new() { Minimum = 0, Maximum = 100, Width = 90 };
+    private readonly Label _validation = new() { AutoSize = true, ForeColor = Color.Firebrick, MaximumSize = new Size(760, 0) };
+    private readonly List<SceneRule> _rules = [];
+    private EffectPresetSettings _effectPresets = new();
+    private List<MusicPreset> _musicPresets = [];
+    private bool _loading;
+
+    public SceneAutomationEditor()
+    {
+        Width = UiMetrics.ContentWidth;
+        Height = 610;
+        _list.SetBounds(0, 4, 350, 150);
+        _list.SelectedIndexChanged += (_, _) => LoadSelected();
+        Controls.Add(_list);
+        AddButton("添加", 370, 4, 82, AddRule);
+        AddButton("复制", 460, 4, 82, CloneRule);
+        AddButton("删除", 550, 4, 82, RemoveRule);
+        AddButton("上移", 370, 48, 82, () => MoveRule(-1));
+        AddButton("下移", 460, 48, 82, () => MoveRule(1));
+
+        AddLabel("名称", 0, 175);
+        _name.SetBounds(165, 171, 300, 28);
+        Controls.Add(_name);
+        _enabled.SetBounds(500, 174, 130, 26);
+        Controls.Add(_enabled);
+
+        _timeEnabled.SetBounds(0, 215, 130, 26);
+        Controls.Add(_timeEnabled);
+        _start.SetBounds(165, 211, 110, 28);
+        _end.SetBounds(315, 211, 110, 28);
+        Controls.Add(_start);
+        Controls.Add(_end);
+        Controls.Add(new Label { Text = "至", AutoSize = true, Location = new Point(286, 216) });
+
+        Controls.Add(new Label { Text = "星期（不选表示每天）", AutoSize = true, Location = new Point(0, 255) });
+        for (var i = 0; i < _days.Length; i++)
+        {
+            _days[i].Location = new Point(165 + i * 55, 251);
+            Controls.Add(_days[i]);
+        }
+
+        _applicationsEnabled.SetBounds(0, 291, 300, 26);
+        Controls.Add(_applicationsEnabled);
+        _processNames.SetBounds(165, 324, 420, 28);
+        Controls.Add(_processNames);
+        AddButton("选择运行应用", 600, 321, 140, PickApplication);
+        Controls.Add(new Label { Text = "进程名用逗号分隔", AutoSize = true, ForeColor = SystemColors.GrayText, Location = new Point(165, 355) });
+
+        AddLabel("场景动作", 0, 390);
+        _target.DropDownStyle = ComboBoxStyle.DropDownList;
+        _target.Items.AddRange(["灯效预设", "音乐预设", "关闭灯光"]);
+        _target.SetBounds(165, 386, 160, 28);
+        Controls.Add(_target);
+        _effectType.DropDownStyle = ComboBoxStyle.DropDownList;
+        _effectType.Items.AddRange(["固定颜色", "RGB 循环", "单色呼吸", "颜色序列", "脉冲", "心跳"]);
+        _effectType.SetBounds(340, 386, 160, 28);
+        Controls.Add(_effectType);
+
+        AddLabel("目标预设", 0, 432);
+        _preset.DropDownStyle = ComboBoxStyle.DropDownList;
+        _preset.SetBounds(165, 428, 335, 28);
+        Controls.Add(_preset);
+        _brightnessEnabled.SetBounds(0, 474, 150, 26);
+        _brightness.SetBounds(165, 470, 90, 28);
+        Controls.Add(_brightnessEnabled);
+        Controls.Add(_brightness);
+        Controls.Add(new Label { Text = "%", AutoSize = true, Location = new Point(260, 475) });
+        _validation.Location = new Point(0, 520);
+        Controls.Add(_validation);
+
+        _name.TextChanged += (_, _) => SaveSelected();
+        _enabled.CheckedChanged += (_, _) => SaveSelected();
+        _timeEnabled.CheckedChanged += (_, _) => SaveSelected();
+        _start.ValueChanged += (_, _) => SaveSelected();
+        _end.ValueChanged += (_, _) => SaveSelected();
+        foreach (var day in _days) day.CheckedChanged += (_, _) => SaveSelected();
+        _applicationsEnabled.CheckedChanged += (_, _) => SaveSelected();
+        _processNames.TextChanged += (_, _) => SaveSelected();
+        _target.SelectedIndexChanged += (_, _) => { if (!_loading) { RefreshPresetOptions(); SaveSelected(); } };
+        _effectType.SelectedIndexChanged += (_, _) => { if (!_loading) { RefreshPresetOptions(); SaveSelected(); } };
+        _preset.SelectedIndexChanged += (_, _) => SaveSelected();
+        _brightnessEnabled.CheckedChanged += (_, _) => SaveSelected();
+        _brightness.ValueChanged += (_, _) => SaveSelected();
+    }
+
+    public List<SceneRule> Rules
+    {
+        get => _rules.Select(Clone).ToList();
+        set
+        {
+            _rules.Clear();
+            _rules.AddRange((value ?? []).Select(Clone));
+            RefreshList();
+        }
+    }
+
+    public void SetPresets(EffectPresetSettings effects, IEnumerable<MusicPreset> music)
+    {
+        _effectPresets = KeyboardSettings.CloneEffectPresets(effects);
+        _musicPresets = MusicSettings.BuiltInPresets.Concat(music).Select(CloneMusic).ToList();
+        RefreshPresetOptions();
+    }
+
+    private void AddRule()
+    {
+        _rules.Add(new SceneRule
+        {
+            Name = "新场景",
+            Conditions = new SceneConditions { TimeEnabled = true, Start = "00:00", End = "00:00" }
+        }.Normalize());
+        RefreshList();
+        _list.SelectedIndex = _rules.Count - 1;
+    }
+
+    private void CloneRule()
+    {
+        if (SelectedRule is not { } selected) return;
+        var clone = Clone(selected);
+        clone.Id = Guid.NewGuid().ToString("N");
+        clone.Name += " 副本";
+        _rules.Insert(_list.SelectedIndex + 1, clone);
+        RefreshList();
+        _list.SelectedIndex++;
+    }
+
+    private void RemoveRule()
+    {
+        if (_list.SelectedIndex < 0) return;
+        var index = _list.SelectedIndex;
+        _rules.RemoveAt(index);
+        RefreshList();
+        if (_rules.Count > 0) _list.SelectedIndex = Math.Min(index, _rules.Count - 1);
+    }
+
+    private void MoveRule(int offset)
+    {
+        var index = _list.SelectedIndex;
+        var target = index + offset;
+        if (index < 0 || target < 0 || target >= _rules.Count) return;
+        (_rules[index], _rules[target]) = (_rules[target], _rules[index]);
+        RefreshList();
+        _list.SelectedIndex = target;
+    }
+
+    private void PickApplication()
+    {
+        using var dialog = new RunningAppsForm();
+        if (dialog.ShowDialog() != DialogResult.OK || string.IsNullOrWhiteSpace(dialog.SelectedProcessName)) return;
+        var names = ParseProcesses(_processNames.Text);
+        if (!names.Contains(dialog.SelectedProcessName, StringComparer.OrdinalIgnoreCase)) names.Add(dialog.SelectedProcessName);
+        _processNames.Text = string.Join(", ", names);
+        _applicationsEnabled.Checked = true;
+    }
+
+    private void LoadSelected()
+    {
+        _loading = true;
+        try
+        {
+            var rule = SelectedRule;
+            if (rule is null)
+            {
+                UpdateAvailability();
+                _validation.Text = "尚无规则，请点击“添加”。";
+                return;
+            }
+            _name.Text = rule.Name;
+            _enabled.Checked = rule.Enabled;
+            _timeEnabled.Checked = rule.Conditions.TimeEnabled;
+            _start.Value = DateTime.Today + TimeOnly.Parse(rule.Conditions.Start).ToTimeSpan();
+            _end.Value = DateTime.Today + TimeOnly.Parse(rule.Conditions.End).ToTimeSpan();
+            for (var i = 0; i < _days.Length; i++) _days[i].Checked = rule.Conditions.Days.Contains(DayValues[i]);
+            _applicationsEnabled.Checked = rule.Conditions.ApplicationsEnabled;
+            _processNames.Text = string.Join(", ", rule.Conditions.ProcessNames);
+            _target.SelectedIndex = (int)rule.Action.Target;
+            _effectType.SelectedIndex = Math.Max(0, Array.IndexOf(LightingTypes, rule.Action.LightingEffectType));
+            _brightnessEnabled.Checked = rule.Action.BrightnessLimit.HasValue;
+            _brightness.Value = rule.Action.BrightnessLimit ?? 100;
+            RefreshPresetOptions(rule.Action.PresetId);
+            UpdateAvailability();
+            UpdateValidation(rule);
+        }
+        finally { _loading = false; }
+    }
+
+    private void SaveSelected()
+    {
+        if (_loading || SelectedRule is not { } rule) return;
+        rule.Name = _name.Text;
+        rule.Enabled = _enabled.Checked;
+        rule.Conditions.TimeEnabled = _timeEnabled.Checked;
+        rule.Conditions.Start = _start.Value.ToString("HH:mm");
+        rule.Conditions.End = _end.Value.ToString("HH:mm");
+        rule.Conditions.Days = DayValues.Where((_, index) => _days[index].Checked).ToList();
+        rule.Conditions.ApplicationsEnabled = _applicationsEnabled.Checked;
+        rule.Conditions.ProcessNames = ParseProcesses(_processNames.Text);
+        rule.Action.Target = (SceneTargetKind)Math.Max(0, _target.SelectedIndex);
+        rule.Action.LightingEffectType = LightingTypes[Math.Max(0, _effectType.SelectedIndex)];
+        rule.Action.PresetId = (_preset.SelectedItem as ScenePresetOption)?.Id ?? "";
+        rule.Action.BrightnessLimit = _brightnessEnabled.Checked ? (int)_brightness.Value : null;
+        rule.Normalize();
+        UpdateAvailability();
+        UpdateValidation(rule);
+        RefreshList(true);
+    }
+
+    private void RefreshPresetOptions(string? selectedId = null)
+    {
+        if (_target.SelectedIndex < 0) return;
+        selectedId ??= (_preset.SelectedItem as ScenePresetOption)?.Id;
+        _preset.Items.Clear();
+        if (_target.SelectedIndex == (int)SceneTargetKind.LightingPreset)
+        {
+            var type = LightingTypes[Math.Max(0, _effectType.SelectedIndex)];
+            _preset.Items.Add(new ScenePresetOption(EffectPresetSettings.BuiltInId(type), "软件默认配置"));
+            foreach (var preset in _effectPresets.ForType(type)) _preset.Items.Add(new ScenePresetOption(preset.Id, preset.Name));
+        }
+        else if (_target.SelectedIndex == (int)SceneTargetKind.MusicPreset)
+        {
+            foreach (var preset in _musicPresets) _preset.Items.Add(new ScenePresetOption(preset.Id, preset.Name));
+        }
+        for (var i = 0; i < _preset.Items.Count; i++)
+        {
+            if ((_preset.Items[i] as ScenePresetOption)?.Id == selectedId) { _preset.SelectedIndex = i; break; }
+        }
+        if (_preset.SelectedIndex < 0 && !string.IsNullOrWhiteSpace(selectedId))
+        {
+            _preset.Items.Add(new ScenePresetOption(selectedId, "[缺失预设]"));
+            _preset.SelectedIndex = _preset.Items.Count - 1;
+        }
+        if (_preset.SelectedIndex < 0 && _preset.Items.Count > 0) _preset.SelectedIndex = 0;
+        UpdateAvailability();
+    }
+
+    private void UpdateAvailability()
+    {
+        var hasRule = SelectedRule is not null;
+        var lighting = _target.SelectedIndex == (int)SceneTargetKind.LightingPreset;
+        var off = _target.SelectedIndex == (int)SceneTargetKind.Off;
+        _name.Enabled = hasRule;
+        _enabled.Enabled = hasRule;
+        _timeEnabled.Enabled = hasRule;
+        foreach (var day in _days) day.Enabled = hasRule;
+        _applicationsEnabled.Enabled = hasRule;
+        _target.Enabled = hasRule;
+        _effectType.Enabled = hasRule;
+        _brightnessEnabled.Enabled = hasRule;
+        _effectType.Visible = lighting;
+        _preset.Enabled = hasRule && !off;
+        _brightness.Enabled = hasRule && _brightnessEnabled.Checked;
+        _start.Enabled = hasRule && _timeEnabled.Checked;
+        _end.Enabled = hasRule && _timeEnabled.Checked;
+        _processNames.Enabled = hasRule && _applicationsEnabled.Checked;
+        _validation.Enabled = true;
+    }
+
+    private void UpdateValidation(SceneRule rule)
+    {
+        string? error = !rule.Conditions.IsValid ? "请至少启用一个有效条件；应用条件必须包含进程名。" : null;
+        if (error is null && rule.Action.Target != SceneTargetKind.Off &&
+            !PresetExists(rule.Action)) error = "引用的预设不存在；此规则不会执行。";
+        _validation.Text = error ?? "规则有效。条件组之间按“并且”匹配，多个进程按“任一”匹配。";
+        _validation.ForeColor = error is null ? Color.DarkGreen : Color.Firebrick;
+    }
+
+    private bool PresetExists(SceneAction action) => action.Target switch
+    {
+        SceneTargetKind.Off => true,
+        SceneTargetKind.LightingPreset =>
+            action.PresetId == EffectPresetSettings.BuiltInId(action.LightingEffectType) ||
+            _effectPresets.ForType(action.LightingEffectType).Any(item => item.Id == action.PresetId),
+        SceneTargetKind.MusicPreset => _musicPresets.Any(item => item.Id == action.PresetId),
+        _ => false
+    };
+
+    private void RefreshList(bool preserveSelection = false)
+    {
+        var selected = preserveSelection ? _list.SelectedIndex : -1;
+        _list.Items.Clear();
+        foreach (var rule in _rules)
+            _list.Items.Add($"{(rule.Enabled ? "" : "[停用] ")}{rule.Name}");
+        if (_rules.Count == 0) { _list.SelectedIndex = -1; LoadSelected(); }
+        else _list.SelectedIndex = Math.Clamp(selected, 0, _rules.Count - 1);
+    }
+
+    private static List<string> ParseProcesses(string text) => text
+        .Split([',', ';', '，', '；'], StringSplitOptions.RemoveEmptyEntries)
+        .Select(AppProfileRule.NormalizeProcessName)
+        .Where(name => !string.IsNullOrWhiteSpace(name))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    private static SceneRule Clone(SceneRule rule) => new SceneRule
+    {
+        Id = rule.Id,
+        Name = rule.Name,
+        Enabled = rule.Enabled,
+        Conditions = new SceneConditions
+        {
+            TimeEnabled = rule.Conditions.TimeEnabled,
+            Start = rule.Conditions.Start,
+            End = rule.Conditions.End,
+            Days = [.. rule.Conditions.Days],
+            ApplicationsEnabled = rule.Conditions.ApplicationsEnabled,
+            ProcessNames = [.. rule.Conditions.ProcessNames]
+        },
+        Action = new SceneAction
+        {
+            Target = rule.Action.Target,
+            LightingEffectType = rule.Action.LightingEffectType,
+            PresetId = rule.Action.PresetId,
+            BrightnessLimit = rule.Action.BrightnessLimit
+        }
+    }.Normalize();
+
+    private static MusicPreset CloneMusic(MusicPreset preset)
+    {
+        var clone = new MusicPreset { Id = preset.Id, Name = preset.Name };
+        clone.ResponseMode = preset.ResponseMode;
+        clone.Colors = [.. preset.Colors];
+        clone.LowColor = preset.LowColor;
+        clone.HighColor = preset.HighColor;
+        clone.Sensitivity = preset.Sensitivity;
+        clone.AttackMs = preset.AttackMs;
+        clone.ReleaseMs = preset.ReleaseMs;
+        clone.BaseBrightness = preset.BaseBrightness;
+        clone.PeakBrightness = preset.PeakBrightness;
+        clone.IntervalMs = preset.IntervalMs;
+        clone.NoiseGate = preset.NoiseGate;
+        clone.BeatThreshold = preset.BeatThreshold;
+        clone.PeakHoldMs = preset.PeakHoldMs;
+        clone.FollowSystemVolume = preset.FollowSystemVolume;
+        clone.EqEnabled = preset.EqEnabled;
+        clone.EqLowHz = preset.EqLowHz;
+        clone.EqHighHz = preset.EqHighHz;
+        return clone.Normalize();
+    }
+
+    private SceneRule? SelectedRule => _list.SelectedIndex >= 0 && _list.SelectedIndex < _rules.Count
+        ? _rules[_list.SelectedIndex] : null;
+
+    private void AddButton(string text, int x, int y, int width, Action action)
+    {
+        var button = new Button { Text = text, Location = new Point(x, y), Width = width, Height = UiMetrics.ButtonHeight };
+        button.Click += (_, _) => action();
+        Controls.Add(button);
+    }
+
+    private void AddLabel(string text, int x, int y) =>
+        Controls.Add(new Label { Text = text, Width = UiMetrics.LabelWidth, Height = 28, Location = new Point(x, y) });
+
+    private static DateTimePicker TimePicker() => new()
+    {
+        Format = DateTimePickerFormat.Custom,
+        CustomFormat = "HH:mm",
+        ShowUpDown = true
+    };
+
+    private sealed record ScenePresetOption(string Id, string Name)
+    {
+        public override string ToString() => Name;
     }
 }
 

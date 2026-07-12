@@ -14,6 +14,7 @@ public sealed class MusicSettings : IMusicTunable
         "#FFD2A1", "#CFE8FF", "#FFB4DC", "#B4FFD2"
     ];
     public const string DefaultPresetName = "通用";
+    public const string BuiltInDefaultPresetId = "builtin:music:general";
     public const double BeatThresholdAlgorithmScale = 0.10;
 
     public static double ToAlgorithmBeatThreshold(double beatThreshold) =>
@@ -59,6 +60,12 @@ public sealed class MusicSettings : IMusicTunable
 
     public SpotifySettings Spotify { get; set; } = new();
 
+    /// <summary>
+    /// 音乐模式自己的播放器绑定。它不依赖场景自动化，仅在用户手动选择音乐模式时生效。
+    /// PID 只用于绑定时确认，持久化时保存稳定的进程身份与媒体会话身份。
+    /// </summary>
+    public MusicPlayerBinding PlayerBinding { get; set; } = new();
+
     public List<MusicPreset> CustomPresets { get; set; } = [];
 
     public MusicSettings Normalize()
@@ -68,6 +75,8 @@ public sealed class MusicSettings : IMusicTunable
         MusicSettingsNormalizer.Normalize(this, NormalizeColors, fallbackResponseMode);
         Spotify ??= new SpotifySettings();
         Spotify.Normalize();
+        PlayerBinding ??= new MusicPlayerBinding();
+        PlayerBinding.Normalize();
         LevelColorEnabled = ResponseMode == MusicResponseMode.LevelColor;
         CustomPresets = (CustomPresets ?? [])
             .Select(preset => preset.Normalize())
@@ -197,6 +206,7 @@ public sealed class MusicSettings : IMusicTunable
     [
         new MusicPreset
         {
+            Id = BuiltInDefaultPresetId,
             Name = DefaultPresetName,
             ResponseMode = MusicResponseMode.LevelColor,
             LowColor = "#FFD2A1",
@@ -266,6 +276,26 @@ public sealed class MusicSettings : IMusicTunable
     ];
 }
 
+public sealed class MusicPlayerBinding
+{
+    public bool Enabled { get; set; }
+    public string ProcessName { get; set; } = "";
+    public string ExecutablePath { get; set; } = "";
+    public bool IncludeChildProcesses { get; set; } = true;
+    public string MediaSessionId { get; set; } = "";
+    public MusicColorSource ColorSource { get; set; } = MusicColorSource.Preset;
+
+    public MusicPlayerBinding Normalize()
+    {
+        ProcessName = AppProfileRule.NormalizeProcessName(ProcessName);
+        ExecutablePath = (ExecutablePath ?? "").Trim();
+        MediaSessionId = (MediaSessionId ?? "").Trim();
+        if (!Enum.IsDefined(ColorSource)) ColorSource = MusicColorSource.Preset;
+        if (string.IsNullOrWhiteSpace(ProcessName)) Enabled = false;
+        return this;
+    }
+}
+
 public enum MusicResponseMode
 {
     LevelColor = 0,
@@ -274,6 +304,8 @@ public enum MusicResponseMode
 
 public sealed class MusicPreset : IMusicTunable
 {
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+
     public string Name { get; set; } = MusicSettings.DefaultPresetName;
 
     public MusicResponseMode ResponseMode { get; set; } = MusicResponseMode.LevelColor;
@@ -312,6 +344,7 @@ public sealed class MusicPreset : IMusicTunable
 
     public MusicPreset Normalize()
     {
+        Id = string.IsNullOrWhiteSpace(Id) ? Guid.NewGuid().ToString("N") : Id.Trim();
         Name = string.IsNullOrWhiteSpace(Name) ? "" : Name.Trim();
         MusicSettingsNormalizer.Normalize(this, NormalizeColors, MusicResponseMode.LevelColor);
         return this;
