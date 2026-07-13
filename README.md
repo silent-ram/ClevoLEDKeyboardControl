@@ -19,7 +19,7 @@
 2. 安装器会安装并启动键盘服务，同时启动当前用户的托盘程序。
 3. 首次启动后，从系统托盘打开“设置”，选择灯效模式或音乐模式。
 
-从旧版 `ClevoRGBControl` / `ColorfulLedKeyboard` 升级时，安装器会处理旧服务和注册表项。自动化配置升级前会备份为 `settings.json.pre-automation-v2.bak`。
+从旧版 `ClevoRGBControl` / `ColorfulLedKeyboard` 升级时，安装器会处理旧服务和注册表项。自动化和安全权限迁移前会分别保留配置备份。
 
 ## 功能概览
 
@@ -67,6 +67,8 @@
 - 多个音乐程序同时播放时，前台播放器优先；全部位于后台时按音乐规则列表顺序选择。
 - 无规则命中时自动恢复用户手动基础设置。
 - 亮度上限取音乐规则、前台灯效规则和空闲覆盖中的最小值。
+- 内置场景模拟器可以在不改变灯光的情况下检查时间、前台程序、播放程序和空闲状态的最终匹配结果。
+- 规则健康检查会提示预设丢失、进程为空、可能被前置规则覆盖及需要重新绑定的播放器。
 
 ### 事件反馈
 
@@ -88,6 +90,14 @@
 - 打开设置、诊断、配置目录，或重启键盘服务。
 
 托盘图标悬停文字也会显示当前播放器、歌曲、场景和可用更新。
+
+### 安全通信与配置恢复
+
+- 托盘通过受 ACL 保护的本地命名管道向服务提交配置和用户会话状态，并校验协议版本、消息大小与活动用户会话。
+- `C:\ProgramData\ClevoLEDKeyboardControl` 中的服务配置对普通用户只读，配置修改由服务原子写入。
+- 更新检查状态保存在当前用户的 `LocalAppData`，不与系统级服务配置混用。
+- 配置损坏时保留故障文件并优先恢复最近有效备份；高级设置支持导入、导出和手动恢复。
+- 安全管道不可用时设置界面进入只读状态，不回退为直接修改受保护配置文件。
 
 ### 自动更新提醒
 
@@ -154,6 +164,8 @@
 
 配置目录：`C:\ProgramData\ClevoLEDKeyboardControl`
 
+当前用户更新状态目录：`%LocalAppData%\ClevoLEDKeyboardControl`
+
 ## 卸载
 
 可以在 Windows“设置 → 应用”中卸载，或再次运行安装器选择卸载。
@@ -167,12 +179,12 @@ ClevoLEDKeyboardControlSetup.exe /uninstall
 ## 构建与测试
 
 ```powershell
-dotnet build .\ColorfulLedKeyboard.slnx -c Release
-dotnet test .\ColorfulLedKeyboard.slnx -c Release
+dotnet build .\ColorfulLedKeyboard.sln -c Release
+dotnet test .\ColorfulLedKeyboard.sln -c Release
 .\scripts\publish.ps1 -Configuration Release
 ```
 
-如果本机 SDK 不支持 `.slnx`，可以直接运行发布脚本。安装器输出位置：
+仓库中的 `global.json` 固定兼容的 .NET 8 SDK。安装器输出位置：
 
 ```text
 publish\ClevoLEDKeyboardControlSetup.exe
