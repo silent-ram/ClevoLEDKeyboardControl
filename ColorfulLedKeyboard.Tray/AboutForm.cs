@@ -3,7 +3,7 @@ using System.Reflection;
 
 namespace ColorfulLedKeyboard.Tray;
 
-public sealed class AboutForm : Form
+public sealed class AboutForm : ThemedForm
 {
     private const string RepositoryUrl = "https://github.com/silent-ram/ClevoLEDKeyboardControl";
     private const string IssuesUrl = "https://github.com/silent-ram/ClevoLEDKeyboardControl/issues";

@@ -45,11 +45,12 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         _notifyIcon.DoubleClick += (_, _) => OpenSettings();
         _notifyIcon.BalloonTipClicked += (_, _) => OpenBalloonRelease();
+        ThemeManager.ThemeChanged += OnThemeChanged;
         _foregroundTimer.Tick += (_, _) => UpdateForegroundAppState();
         _foregroundTimer.Start();
         _trayStatusTimer.Tick += (_, _) =>
         {
-            if (!(_notifyIcon.ContextMenuStrip?.Visible ?? false)) RefreshMenu(refreshEventMonitors: false);
+            if (!(_notifyIcon.ContextMenuStrip?.Visible ?? false)) RefreshMenu(refreshEventMonitors: false, reloadSettings: false);
             else UpdateNotifyIconText();
         };
         _trayStatusTimer.Start();
@@ -85,6 +86,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             _mediaSessionMonitor.Dispose();
             _audioSessionMonitor.Dispose();
             _audioStatusWatcher?.Dispose();
+            ThemeManager.ThemeChanged -= OnThemeChanged;
         }
 
         base.Dispose(disposing);
@@ -123,7 +125,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         var update = new ToolStripMenuItem(_availableUpdate?.Status == UpdateCheckStatus.Available
             ? $"发现新版本 v{_availableUpdate.LatestVersion?.ToString(3)}（点击下载）"
             : "检查更新");
-        update.ForeColor = _availableUpdate?.Status == UpdateCheckStatus.Available ? Color.Firebrick : SystemColors.ControlText;
+        update.ForeColor = _availableUpdate?.Status == UpdateCheckStatus.Available ? ThemeManager.Current.Error : ThemeManager.Current.Text;
         update.Click += async (_, _) =>
         {
             if (_availableUpdate?.Status == UpdateCheckStatus.Available && !string.IsNullOrWhiteSpace(_availableUpdate.ReleaseUrl))
@@ -141,9 +143,11 @@ public sealed class TrayApplicationContext : ApplicationContext
         var exit = new ToolStripMenuItem("退出");
         exit.Click += (_, _) => ExitApplication();
         menu.Items.Add(exit);
-
+        ThemeManager.Apply(menu);
         return menu;
     }
+
+    private void OnThemeChanged(object? sender, EventArgs e) => RefreshMenu(refreshEventMonitors: false, reloadSettings: false);
 
     private void AddRuntimeStatusItems(ContextMenuStrip menu)
     {
@@ -630,9 +634,9 @@ public sealed class TrayApplicationContext : ApplicationContext
         }
     }
 
-    private void RefreshMenu(bool refreshEventMonitors = true)
+    private void RefreshMenu(bool refreshEventMonitors = true, bool reloadSettings = true)
     {
-        _settings = _settingsStore.Load();
+        if (reloadSettings) _settings = _settingsStore.Load();
         if (refreshEventMonitors) RefreshEventMonitors();
         var oldMenu = _notifyIcon.ContextMenuStrip;
         _notifyIcon.ContextMenuStrip = BuildMenu();

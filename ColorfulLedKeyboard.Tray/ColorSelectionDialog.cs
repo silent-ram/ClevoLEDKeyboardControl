@@ -3,7 +3,7 @@ using static ColorfulLedKeyboard.Tray.UiMetrics;
 
 namespace ColorfulLedKeyboard.Tray;
 
-internal sealed class ColorSelectionDialog : Form
+internal sealed class ColorSelectionDialog : ThemedForm
 {
     private readonly ColorGrid _grid;
     private readonly ColorPlane _plane = new();
@@ -186,7 +186,7 @@ internal sealed class ColorSelectionDialog : Form
             _hueSlider.Hue = _currentHue;
             _preview.BackColor = Color.FromArgb(color.R, color.G, color.B);
             _hex.Text = color.Hex;
-            _hex.BackColor = SystemColors.Window;
+            _hex.BackColor = ThemeManager.Current.Field;
             _red.Value = color.R;
             _green.Value = color.G;
             _blue.Value = color.B;
@@ -210,7 +210,7 @@ internal sealed class ColorSelectionDialog : Form
         try
         {
             var color = RgbColor.FromHex(_hex.Text);
-            _hex.BackColor = SystemColors.Window;
+            _hex.BackColor = ThemeManager.Current.Field;
             SetCurrentChoiceColor(color);
             SetEditorColor(color);
         }
@@ -434,7 +434,7 @@ internal sealed class ColorGrid : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
-        e.Graphics.Clear(SystemColors.Window);
+        e.Graphics.Clear(ThemeManager.Current.Field);
         for (var i = 0; i < Choices.Count; i++)
         {
             var bounds = CellBounds(i);
@@ -462,7 +462,7 @@ internal sealed class ColorGrid : Control
 
             if (i == _selectedIndex)
             {
-                using var pen = new Pen(SystemColors.Highlight, 2);
+                using var pen = new Pen(ThemeManager.Current.Primary, 2);
                 e.Graphics.DrawRectangle(pen, bounds.Left + 1, bounds.Top + 1, bounds.Width - 3, bounds.Height - 3);
             }
         }

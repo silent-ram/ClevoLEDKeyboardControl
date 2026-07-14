@@ -8,6 +8,7 @@ static class Program
     static void Main(string[] args)
     {
         ApplicationConfiguration.Initialize();
+        ThemeManager.Initialize(UiStateStore.Shared.Load().Theme);
         var openSettingsOnStartup = args.Any(arg =>
             string.Equals(arg, "--settings", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(arg, "/settings", StringComparison.OrdinalIgnoreCase));

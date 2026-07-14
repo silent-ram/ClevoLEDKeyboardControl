@@ -10,6 +10,9 @@ public sealed class ForegroundAppState
 
     public static ForegroundAppState? Load()
     {
+        if (Environment.UserInteractive &&
+            ServiceIpc.TryRequest<object, ForegroundAppState>("GetForegroundState", new { }, out var remote, 350))
+            return remote;
         try
         {
             if (!File.Exists(AppPaths.ForegroundAppStatePath))

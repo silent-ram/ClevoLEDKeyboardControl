@@ -12,9 +12,12 @@ internal static class UiMetrics
     public const int ControlLeft = 165;
     public const int RowHeight = 48;
     public const int ButtonHeight = 34;
+
+    public static int ScaleForDpi(int logicalPixels, int dpi) =>
+        Math.Max(1, (int)Math.Round(logicalPixels * Math.Max(96, dpi) / 96d));
 }
 
-public sealed class SettingsForm : Form
+public sealed partial class SettingsForm : ThemedForm
 {
     private const int DefaultRainbowHoldMs = EffectPresetSettings.DefaultPeriodMs;
     private const string SoftwareDefaultPresetName = "软件默认配置";
@@ -132,21 +135,47 @@ public sealed class SettingsForm : Form
     public SettingsForm(SettingsStore settingsStore)
     {
         _settingsStore = settingsStore;
+        _uiStateStore = UiStateStore.Shared;
+        _initialUiState = _uiStateStore.Load().Clone();
         Text = "ClevoLEDKeyboardControl 设置";
-        StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(1040, 720);
-        ClientSize = new Size(1080, 780);
+        RestoreWindowState(_initialUiState);
 
         BuildUi();
+        WireDirtyTracking(this);
+        _typingPulseEnabled.CheckedChanged += (_, _) => UpdateEventFeedbackVisibility();
+        _notificationFlashEnabled.CheckedChanged += (_, _) => UpdateEventFeedbackVisibility();
+        _musicAdvanced.CheckedChanged += (_, _) =>
+        {
+            if (!_loadingSettings) _uiStateStore.Update(state => state.MusicAdvancedExpanded = _musicAdvanced.Checked);
+        };
+        _sceneAutomation.Changed += (_, _) => MarkDirty();
         LoadSettings();
+        _loadingSettings = true;
+        _musicAdvanced.Checked = _initialUiState.MusicAdvancedExpanded;
+        _loadingSettings = false;
+        UpdateMusicAdvancedVisibility();
         _automationStatusTimer.Tick += (_, _) => UpdateAutomationStatus();
         _automationStatusTimer.Start();
-        FormClosed += (_, _) => _automationStatusTimer.Dispose();
+        ThemeManager.ThemeChanged += OnThemeChanged;
+        FormClosing += OnSettingsFormClosing;
+        FormClosed += (_, _) =>
+        {
+            PersistWindowState();
+            ThemeManager.ThemeChanged -= OnThemeChanged;
+            _automationStatusTimer.Dispose();
+        };
+        TextChanged += (_, _) =>
+        {
+            if (!_loadingSettings && Text.Contains("未应用", StringComparison.Ordinal)) _settingsChanged = true;
+            UpdateSaveBar();
+        };
         _effectType.SelectedIndexChanged += (_, _) =>
         {
             if (!_loadingSettings)
             {
                 _effectChangedByUser = true;
+                MarkDirty();
             }
 
             UpdateBrightnessAvailability();
@@ -155,6 +184,10 @@ public sealed class SettingsForm : Form
             RefreshEffectPresetList();
         };
         UpdateAudioSourceLabel(AudioSourceStatusFile.Read());
+        UpdateEventFeedbackVisibility();
+        ThemeManager.Apply(this);
+        UpdateStatusHeader();
+        UpdateSaveBar();
     }
 
     public event EventHandler? SettingsSaved;
@@ -162,6 +195,7 @@ public sealed class SettingsForm : Form
     public void ReloadFromStore()
     {
         LoadSettings();
+        UpdateStatusHeader();
     }
 
     private void BuildUi()
@@ -170,20 +204,24 @@ public sealed class SettingsForm : Form
         {
             Dock = DockStyle.Fill,
             FixedPanel = FixedPanel.Panel1,
-            SplitterDistance = 150,
+            SplitterDistance = 330,
+            BackColor = ThemeManager.Current.Border,
             IsSplitterFixed = true
         };
+        ThemeManager.SetSurface(split, ThemeSurfaceRole.Window);
+        ThemeManager.SetSurface(split.Panel1, ThemeSurfaceRole.Sidebar);
+        ThemeManager.SetSurface(split.Panel2, ThemeSurfaceRole.Window);
+        split.Panel1MinSize = 190;
+        Shown += (_, _) => split.SplitterDistance = UiMetrics.ScaleForDpi(205, DeviceDpi);
 
-        var navigation = new ListBox
+        var navigation = new NavigationListBox
         {
             Dock = DockStyle.Fill,
-            IntegralHeight = false,
-            BorderStyle = BorderStyle.None,
-            Font = new Font(SystemFonts.MessageBoxFont ?? Control.DefaultFont, FontStyle.Regular)
+            AccessibleName = "设置页面导航"
         };
         _navigation = navigation;
 
-        var pages = new Panel { Dock = DockStyle.Fill };
+        var pages = ThemeManager.SetSurface(new Panel { Dock = DockStyle.Fill }, ThemeSurfaceRole.Window);
         var content = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -191,18 +229,21 @@ public sealed class SettingsForm : Form
             RowCount = 2
         };
         content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        content.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
+        content.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
         content.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var statusHeader = BuildStatusHeader();
         var pageDefinitions = new (string Title, Panel Page)[]
         {
-            ("常规", BuildGeneralPage()),
-            ("音乐", BuildMusicPage()),
+            ("当前状态", BuildOverviewPage()),
+            ("灯效设置", BuildGeneralPage()),
+            ("音乐模式", BuildMusicPage()),
             ("场景自动化", BuildAutomationPage()),
             ("事件反馈", BuildEventFeedbackPage()),
-            ("诊断", BuildDiagnosticsPage()),
-            ("高级", BuildAdvancedPage())
+            ("诊断与恢复", BuildDiagnosticsPage()),
+            ("软件设置", BuildAdvancedPage()),
+            ("关于", BuildAboutPage())
         };
+        ThemeManager.SetSurface(content, ThemeSurfaceRole.Window);
 
         foreach (var (title, page) in pageDefinitions)
         {
@@ -218,31 +259,49 @@ public sealed class SettingsForm : Form
             {
                 pageDefinitions[i].Page.Visible = i == navigation.SelectedIndex;
             }
+            if (navigation.SelectedIndex >= 0)
+            {
+                _pageTitle.Text = pageDefinitions[navigation.SelectedIndex].Title;
+                _uiStateStore.Update(state => state.LastPage = navigation.SelectedIndex);
+            }
         };
-        navigation.SelectedIndex = 0;
+        navigation.SelectedIndex = Math.Clamp(_initialUiState.LastPage, 0, pageDefinitions.Length - 1);
 
-        split.Panel1.Padding = new Padding(10, 12, 8, 12);
+        split.Panel1.BackColor = ThemeManager.Current.Sidebar;
+        split.Panel1.Padding = new Padding(10, 14, 8, 12);
         split.Panel1.Controls.Add(navigation);
         content.Controls.Add(statusHeader, 0, 0);
         content.Controls.Add(pages, 0, 1);
         split.Panel2.Controls.Add(content);
 
-        var buttons = new FlowLayoutPanel
+        var buttons = new TableLayoutPanel
         {
-            FlowDirection = FlowDirection.RightToLeft,
             Dock = DockStyle.Bottom,
-            Height = 52,
-            Padding = new Padding(0, 8, 14, 10)
+            Height = 58,
+            ColumnCount = 2,
+            Padding = new Padding(18, 9, 18, 9),
+            BackColor = ThemeManager.Current.Surface
         };
+        ThemeManager.SetSurface(buttons, ThemeSurfaceRole.Surface);
+        buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        buttons.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
-        var save = new Button { Text = "应用", Width = 96, Height = ButtonHeight };
-        save.Click += (_, _) => SaveSettings();
-
-        var cancel = new Button { Text = "取消", Width = 96, Height = ButtonHeight };
-        cancel.Click += (_, _) => Close();
-
-        buttons.Controls.Add(save);
-        buttons.Controls.Add(cancel);
+        _dirtyLabel.AutoSize = true;
+        _dirtyLabel.Margin = new Padding(0, 9, 0, 0);
+        var actions = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
+        _revertButton.Text = "恢复修改";
+        _revertButton.Width = 104;
+        _revertButton.Height = ButtonHeight;
+        _revertButton.Click += (_, _) => RevertChanges();
+        _applyButton.Text = "保存并应用";
+        _applyButton.Width = 120;
+        _applyButton.Height = ButtonHeight;
+        _applyButton.AccessibleDescription = "PrimaryAction";
+        _applyButton.Click += (_, _) => SaveSettings();
+        actions.Controls.Add(_revertButton);
+        actions.Controls.Add(_applyButton);
+        buttons.Controls.Add(_dirtyLabel, 0, 0);
+        buttons.Controls.Add(actions, 1, 0);
 
         Controls.Add(split);
         Controls.Add(buttons);
@@ -254,26 +313,26 @@ public sealed class SettingsForm : Form
         var panel = new Panel
         {
             Dock = DockStyle.Fill,
-            Padding = new Padding(18, 12, 18, 10),
-            BackColor = SystemColors.ControlLightLight
+            Padding = new Padding(18, 10, 18, 8),
+            BackColor = ThemeManager.Current.Surface
         };
+        ThemeManager.SetSurface(panel, ThemeSurfaceRole.Surface);
 
-        var title = new Label
-        {
-            Text = "当前状态",
-            Font = new Font(SystemFonts.MessageBoxFont ?? Control.DefaultFont, FontStyle.Bold),
-            Location = new Point(18, 10),
-            Size = new Size(150, 24)
-        };
-
-        ConfigureStatusLabel(_serviceSummary, 18, 42);
-        ConfigureStatusLabel(_componentSummary, 260, 42);
-        ConfigureStatusLabel(_controlSummary, 560, 42);
-
-        panel.Controls.Add(title);
-        panel.Controls.Add(_serviceSummary);
-        panel.Controls.Add(_componentSummary);
-        panel.Controls.Add(_controlSummary);
+        _pageTitle.Font = new Font("Segoe UI Semibold", 14F);
+        _pageTitle.Location = new Point(18, 17);
+        _pageTitle.Size = new Size(300, 32);
+        _headerStatus.AutoSize = true;
+        _headerStatus.Location = new Point(350, 24);
+        _themeQuickButton.Text = $"主题：{ThemeQuickName(ThemeManager.CurrentKind)}  ▾";
+        _themeQuickButton.Width = 215;
+        _themeQuickButton.Height = ButtonHeight;
+        _themeQuickButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        _themeQuickButton.Location = new Point(Math.Max(600, panel.Width - 210), 14);
+        panel.Resize += (_, _) => _themeQuickButton.Left = Math.Max(520, panel.ClientSize.Width - _themeQuickButton.Width - 18);
+        _themeQuickButton.Click += (_, _) => ShowThemeMenu(_themeQuickButton);
+        panel.Controls.Add(_pageTitle);
+        panel.Controls.Add(_headerStatus);
+        panel.Controls.Add(_themeQuickButton);
         return panel;
     }
 
@@ -296,6 +355,9 @@ public sealed class SettingsForm : Form
         _controlSummary.Text = serviceReady && componentReady
             ? "灯效控制：可用"
             : "灯效控制：需要检查";
+        _headerStatus.Text = serviceReady && componentReady ? "● 服务与灯控正常" : "⚠ 需要检查运行状态";
+        _headerStatus.ForeColor = serviceReady && componentReady ? ThemeManager.Current.Success : ThemeManager.Current.Warning;
+        UpdateOverviewStatus(diagnostics, serviceReady, componentReady);
     }
 
     private Panel BuildGeneralPage()
@@ -316,8 +378,6 @@ public sealed class SettingsForm : Form
         _modeLighting.CheckedChanged += (_, _) => OnModeChanged();
         _modeMusic.CheckedChanged += (_, _) => OnModeChanged();
         _modeOff.CheckedChanged += (_, _) => OnModeChanged();
-        page.Controls.Add(modeRow);
-
         _effectType.DropDownStyle = ComboBoxStyle.DropDownList;
         _effectType.Items.AddRange(["固定颜色", "RGB 循环", "单色呼吸", "循环呼吸", "脉冲", "心跳"]);
 
@@ -353,6 +413,7 @@ public sealed class SettingsForm : Form
             if (!_loadingSettings)
             {
                 _effectChangedByUser = true;
+                MarkDirty();
             }
 
             UpdateEffectConfigurationVisibility();
@@ -370,22 +431,10 @@ public sealed class SettingsForm : Form
         _effectPresetButtonsRow = ButtonRow(_effectSavePreset, _effectCreatePreset, _effectDeletePreset);
 
         _effectTypeRow = Row("当前效果", _effectType);
-        page.Controls.Add(_effectTypeRow);
-        page.Controls.Add(_brightness);
-        page.Controls.Add(_effectColor);
-        page.Controls.Add(_speedRow);
-        page.Controls.Add(_period);
-        page.Controls.Add(_minimumBrightness);
-        page.Controls.Add(_hardBlinkRow);
-        page.Controls.Add(_customColorsRow);
-        page.Controls.Add(_sequenceSection);
-        page.Controls.Add(_sequenceSummary);
-        page.Controls.Add(_sequence);
-        page.Controls.Add(_effectPresetSection);
-        page.Controls.Add(_effectPresetRow);
-        page.Controls.Add(_effectPresetNameRow);
-        page.Controls.Add(_effectPresetButtonsRow);
-        page.Controls.Add(_modeHint);
+        page.Controls.Add(new UiCard("模式", modeRow, _modeHint));
+        page.Controls.Add(new UiCard("灯效参数", _effectTypeRow, _brightness, _effectColor, _speedRow,
+            _period, _minimumBrightness, _hardBlinkRow, _customColorsRow, _sequenceSection, _sequenceSummary, _sequence));
+        page.Controls.Add(new UiCard("配置预设", _effectPresetRow, _effectPresetNameRow, _effectPresetButtonsRow));
         return page;
     }
 
@@ -438,38 +487,20 @@ public sealed class SettingsForm : Form
         _musicSequence.ColorsChanged += (_, _) => Text = "ClevoLEDKeyboardControl 设置 - 有未应用的更改";
         _musicAdvanced.CheckedChanged += (_, _) => UpdateMusicAdvancedVisibility();
 
-        page.Controls.Add(_audioSourceLabel);
-        page.Controls.Add(Section("播放器绑定（不依赖场景自动化）"));
-        page.Controls.Add(_musicBindingStatus);
-        page.Controls.Add(ButtonRow(_musicBindPlayer, _musicClearPlayer));
-        page.Controls.Add(Row("键盘颜色来源", _musicBindingColorSource));
-        page.Controls.Add(Row("歌曲封面来源", _musicMediaSession));
-        page.Controls.Add(_musicMediaMatchStatus);
-        page.Controls.Add(Row("当前实际颜色", _musicPalettePreview));
-        page.Controls.Add(_musicCurrentColorStatus);
-        page.Controls.Add(Row("音乐预设", _musicPreset));
-        page.Controls.Add(ButtonRow(_musicSavePreset, _musicCreatePreset, _musicDeletePreset));
-        page.Controls.Add(Row("当前预设", _musicPresetName));
-        page.Controls.Add(Row("音乐响应", _musicResponseMode));
-        page.Controls.Add(PlainRow(_musicCustomColors));
-        page.Controls.Add(Section("节拍颜色"));
-        page.Controls.Add(_musicSequence);
-        page.Controls.Add(_musicBaseBrightness);
-        page.Controls.Add(_musicPeakBrightness);
-        page.Controls.Add(PlainRow(_musicFollowSystemVolume));
-        page.Controls.Add(PlainRow(_musicAdvanced));
         _musicSensitivityRow = Row("灵敏度", _musicSensitivity);
         _musicAttackRow = Row("响应速度", _musicAttack);
         _musicReleaseRow = Row("衰减速度", _musicRelease);
-        page.Controls.Add(_musicSensitivityRow);
-        page.Controls.Add(_musicAttackRow);
-        page.Controls.Add(_musicReleaseRow);
-        page.Controls.Add(_musicNoiseGate);
-        page.Controls.Add(_musicBeatThreshold);
-        page.Controls.Add(PlainRow(_musicEqEnabled));
-        page.Controls.Add(PlainRow(_musicSystemMixFallback));
-        page.Controls.Add(_musicEqLow);
-        page.Controls.Add(_musicEqHigh);
+        page.Controls.Add(new UiCard("播放器与当前配色", _audioSourceLabel, _musicBindingStatus,
+            ButtonRow(_musicBindPlayer, _musicClearPlayer), Row("键盘颜色来源", _musicBindingColorSource),
+            Row("歌曲封面来源", _musicMediaSession), _musicMediaMatchStatus,
+            Row("当前实际颜色", _musicPalettePreview), _musicCurrentColorStatus));
+        page.Controls.Add(new UiCard("音乐预设与响应", Row("音乐预设", _musicPreset),
+            ButtonRow(_musicSavePreset, _musicCreatePreset, _musicDeletePreset), Row("当前预设", _musicPresetName),
+            Row("音乐响应", _musicResponseMode), PlainRow(_musicCustomColors), Section("节拍颜色"), _musicSequence,
+            _musicBaseBrightness, _musicPeakBrightness, PlainRow(_musicFollowSystemVolume)));
+        page.Controls.Add(new UiCard("高级音乐参数", PlainRow(_musicAdvanced), _musicSensitivityRow,
+            _musicAttackRow, _musicReleaseRow, _musicNoiseGate, _musicBeatThreshold, PlainRow(_musicEqEnabled),
+            PlainRow(_musicSystemMixFallback), _musicEqLow, _musicEqHigh));
         UpdateMusicAdvancedVisibility();
         return page;
     }
@@ -504,7 +535,7 @@ public sealed class SettingsForm : Form
         {
             _musicBindingStatus.Text = "未绑定：音乐模式使用系统混音和音乐预设颜色。";
             _musicMediaMatchStatus.Text = "媒体会话：未启用播放器绑定。";
-            _musicMediaMatchStatus.ForeColor = SystemColors.GrayText;
+            _musicMediaMatchStatus.ForeColor = ThemeManager.Current.MutedText;
             _musicPalettePreview.Colors = _musicSequence.Colors;
             _musicCurrentColorStatus.Text = "当前使用音乐预设配色。";
             _musicClearPlayer.Enabled = false;
@@ -532,14 +563,14 @@ public sealed class SettingsForm : Form
         if (source == MusicColorSource.Preset)
         {
             _musicMediaMatchStatus.Text = "媒体会话：颜色来源为音乐预设，封面匹配暂不参与输出。";
-            _musicMediaMatchStatus.ForeColor = SystemColors.GrayText;
+            _musicMediaMatchStatus.ForeColor = ThemeManager.Current.MutedText;
         }
         else if (playback is not null)
         {
             var mode = string.IsNullOrWhiteSpace(_musicPlayerBinding.MediaSessionId) ? "自动匹配成功" : "手动匹配成功";
             var cover = playback.Palette.Count > 0 ? $"已获取封面（{playback.Palette.Count} 色）" : "未获取封面，正在使用预设颜色";
             _musicMediaMatchStatus.Text = $"媒体会话：{mode} → {playback.SourceId}；{(playback.IsPlaying ? "正在播放" : "切歌/暂停过渡")}；{cover}";
-            _musicMediaMatchStatus.ForeColor = playback.Palette.Count > 0 ? Color.ForestGreen : Color.DarkOrange;
+            _musicMediaMatchStatus.ForeColor = playback.Palette.Count > 0 ? ThemeManager.Current.Success : ThemeManager.Current.Warning;
         }
         else
         {
@@ -551,7 +582,7 @@ public sealed class SettingsForm : Form
                 : automatic
                     ? $"媒体会话：自动匹配失败；当前可用：{string.Join("、", candidates)}。可在上方改为手动选择。"
                     : $"媒体会话：选择的会话当前不可用；当前可用：{string.Join("、", candidates)}。";
-            _musicMediaMatchStatus.ForeColor = Color.Firebrick;
+            _musicMediaMatchStatus.ForeColor = ThemeManager.Current.Error;
         }
         _musicCurrentColorStatus.Text = playback is null
             ? $"当前使用预设颜色：{string.Join("  ", colors)}"
@@ -583,19 +614,20 @@ public sealed class SettingsForm : Form
         _idleAfter.DropDownStyle = ComboBoxStyle.DropDownList;
         _idleAfter.Items.AddRange(["1 分钟", "3 分钟", "5 分钟", "10 分钟", "30 分钟"]);
 
-        page.Controls.Add(Section("运行状态"));
-        page.Controls.Add(_automationStatus);
-        var simulator = new Button { Text = "场景模拟器...", Width = 130 };
+        var simulator = new Button { Text = "场景模拟器...", Width = 150 };
         simulator.Click += (_, _) => ShowAutomationSimulator();
-        page.Controls.Add(PlainRow(simulator));
-        page.Controls.Add(Section("场景规则（列表靠前者优先）"));
-        page.Controls.Add(PlainRow(_automationEnabled));
-        page.Controls.Add(_sceneAutomation);
-        page.Controls.Add(Section("空闲最终覆盖"));
-        page.Controls.Add(PlainRow(_idleEnabled));
-        page.Controls.Add(Row("空闲时间", _idleAfter));
-        page.Controls.Add(_idleBrightness);
-        page.Controls.Add(PlainRow(_idleTurnOff));
+        var priority = new Label
+        {
+            Text = "有声音乐程序  →  前台灯效程序  →  时间计划  →  手动模式",
+            Width = ContentWidth,
+            Height = 34,
+            ForeColor = ThemeManager.Current.Primary,
+            Font = new Font("Segoe UI Semibold", 9.5F)
+        };
+        page.Controls.Add(new UiCard("运行状态", _automationStatus, priority, PlainRow(simulator)));
+        page.Controls.Add(new UiCard("场景规则", PlainRow(_automationEnabled), _sceneAutomation));
+        page.Controls.Add(new UiCard("空闲最终覆盖", PlainRow(_idleEnabled), Row("空闲时间", _idleAfter),
+            _idleBrightness, PlainRow(_idleTurnOff)));
         return page;
     }
 
@@ -633,22 +665,25 @@ public sealed class SettingsForm : Form
             new Label { Text = "播放程序", AutoSize = true }, audio, playing,
             new Label { Text = "模拟音量（%）", AutoSize = true }, level, idle, run, output]);
         dialog.Controls.Add(layout);
+        ThemeManager.Apply(dialog);
         dialog.ShowDialog(this);
     }
 
     private Panel BuildEventFeedbackPage()
     {
         var page = CreatePage();
-        page.Controls.Add(Section("敲字闪烁"));
-        page.Controls.Add(PlainRow(_typingPulseEnabled));
-        page.Controls.Add(_typingPulsePeakBrightness);
-        page.Controls.Add(_typingPulseHold);
-        page.Controls.Add(_typingPulseFade);
-        page.Controls.Add(Section("通知闪烁"));
-        page.Controls.Add(PlainRow(_notificationFlashEnabled));
-        page.Controls.Add(_notificationFlashColor);
-        page.Controls.Add(_notificationFlashPulses);
-        page.Controls.Add(_notificationFlashCooldown);
+        page.Controls.Add(new UiCard("敲字反馈", PlainRow(_typingPulseEnabled), _typingPulsePeakBrightness,
+            _typingPulseHold, _typingPulseFade));
+        page.Controls.Add(new UiCard("通知反馈", PlainRow(_notificationFlashEnabled), _notificationFlashColor,
+            _notificationFlashPulses, _notificationFlashCooldown));
+        var explanation = new Label
+        {
+            Text = "事件策略按“全局 → 音乐规则 → 前台灯效规则”覆盖；空闲关灯会抑制包括通知在内的全部输出。",
+            Width = ContentWidth,
+            Height = 42,
+            ForeColor = ThemeManager.Current.MutedText
+        };
+        page.Controls.Add(new UiCard("当前覆盖关系", explanation));
         return page;
     }
 
@@ -671,7 +706,7 @@ public sealed class SettingsForm : Form
         var monitorStatus = DiagnosticTextBox();
         var recoveryStatus = DiagnosticTextBox();
         var configDirectory = DiagnosticTextBox();
-        var refresh = new Button { Text = "刷新诊断信息", Width = 130 };
+        var refresh = new Button { Text = "刷新诊断信息", Width = 150 };
 
         void Refresh()
         {
@@ -689,15 +724,11 @@ public sealed class SettingsForm : Form
 
         refresh.Click += (_, _) => Refresh();
 
-        page.Controls.Add(Row("服务状态", serviceStatus));
-        page.Controls.Add(Row("驱动 DLL", driverStatus));
-        page.Controls.Add(Row("当前前台应用", foregroundApp));
-        page.Controls.Add(Row("命中应用场景", matchedProfile));
-        page.Controls.Add(Row("更新检查", updateStatus));
-        page.Controls.Add(Row("播放器监视", monitorStatus));
-        page.Controls.Add(Row("配置恢复", recoveryStatus));
-        page.Controls.Add(Row("配置目录", configDirectory));
-        page.Controls.Add(PlainRow(refresh));
+        page.Controls.Add(new UiCard("服务与硬件", Row("服务状态", serviceStatus), Row("驱动 DLL", driverStatus)));
+        page.Controls.Add(new UiCard("自动化与播放器", Row("当前前台应用", foregroundApp),
+            Row("命中应用场景", matchedProfile), Row("播放器监视", monitorStatus)));
+        page.Controls.Add(new UiCard("更新与配置恢复", Row("更新检查", updateStatus),
+            Row("配置恢复", recoveryStatus), Row("配置目录", configDirectory), PlainRow(refresh)));
         Refresh();
         return page;
     }
@@ -715,14 +746,14 @@ public sealed class SettingsForm : Form
             Width = 430
         };
 
-        var openFolder = new Button { Text = "打开配置目录", Width = 120 };
+        var openFolder = new Button { Text = "打开配置目录", Width = 150 };
         openFolder.Click += (_, _) =>
         {
             Directory.CreateDirectory(AppPaths.ProgramDataDirectory);
             Process.Start(new ProcessStartInfo("explorer.exe", AppPaths.ProgramDataDirectory) { UseShellExecute = true });
         };
 
-        var reset = new Button { Text = "恢复默认设置", Width = 120 };
+        var reset = new Button { Text = "恢复默认设置", Width = 150 };
         reset.Click += (_, _) =>
         {
             if (MessageBox.Show("确定恢复默认设置？", "ClevoLEDKeyboardControl", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
@@ -734,23 +765,20 @@ public sealed class SettingsForm : Form
             LoadSettings();
         };
 
-        var export = new Button { Text = "导出配置...", Width = 120 };
+        var export = new Button { Text = "导出配置...", Width = 140 };
         export.Click += (_, _) => ExportConfiguration();
-        var import = new Button { Text = "导入配置...", Width = 120 };
+        var import = new Button { Text = "导入配置...", Width = 140 };
         import.Click += (_, _) => ImportConfiguration();
-        var restore = new Button { Text = "恢复最近备份", Width = 120 };
+        var restore = new Button { Text = "恢复最近备份", Width = 150 };
         restore.Click += (_, _) => RestoreLastGoodConfiguration();
 
-        page.Controls.Add(Section("更新"));
-        page.Controls.Add(Row("自动检查更新", _updateInterval));
-        page.Controls.Add(Section("配置管理"));
-        page.Controls.Add(PlainRow(export));
-        page.Controls.Add(PlainRow(import));
-        page.Controls.Add(PlainRow(restore));
-        page.Controls.Add(Section("配置"));
-        page.Controls.Add(Row("配置文件", configPath));
-        page.Controls.Add(PlainRow(openFolder));
-        page.Controls.Add(PlainRow(reset));
+        var configActions = new FlowLayoutPanel { Width = ContentWidth, Height = 46, FlowDirection = FlowDirection.LeftToRight };
+        configActions.Controls.AddRange([export, import, restore]);
+        var folderActions = new FlowLayoutPanel { Width = ContentWidth, Height = 46, FlowDirection = FlowDirection.LeftToRight };
+        folderActions.Controls.AddRange([openFolder, reset]);
+        page.Controls.Add(BuildThemeSelector());
+        page.Controls.Add(new UiCard("自动更新", Row("自动检查更新", _updateInterval)));
+        page.Controls.Add(new UiCard("配置管理", configActions, Row("配置文件", configPath), folderActions));
         return page;
     }
 
@@ -758,6 +786,7 @@ public sealed class SettingsForm : Form
     {
         _loadingSettings = true;
         var settings = _settingsStore.Load();
+        _loadedSettingsSnapshot = settings;
         try
         {
             _modeLighting.Checked = settings.Enabled && settings.OperatingMode == OperatingMode.Lighting;
@@ -855,6 +884,7 @@ public sealed class SettingsForm : Form
         }
 
         UpdateModeAvailability();
+        UpdateEventFeedbackVisibility();
     }
 
     private void SaveSettings()
@@ -944,10 +974,18 @@ public sealed class SettingsForm : Form
             settings.Update.CheckInterval = IndexToUpdateInterval(_updateInterval.SelectedIndex);
             settings.Brightness = _brightness.Enabled ? _brightness.Value : settings.Brightness;
             _settingsStore.Save(settings);
+            _loadedSettingsSnapshot = settings;
             _effectChangedByUser = false;
             UpdateStatusHeader();
             UpdateAutomationStatus();
             Text = "ClevoLEDKeyboardControl 设置 - 已应用";
+            _settingsChanged = false;
+            _themeChanged = false;
+            _initialUiState = _uiStateStore.Load().Clone();
+            _initialUiState.Theme = ThemeManager.CurrentKind;
+            _initialUiState.MusicAdvancedExpanded = _musicAdvanced.Checked;
+            _uiStateStore.Save(_initialUiState);
+            UpdateSaveBar();
             SettingsSaved?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex) when (ex is FormatException or IOException or UnauthorizedAccessException)
@@ -991,6 +1029,7 @@ public sealed class SettingsForm : Form
             AutoScroll = true,
             Padding = new Padding(18, 18, 18, 28)
         };
+        ThemeManager.SetSurface(page, ThemeSurfaceRole.Window);
         return page;
     }
 
@@ -1087,7 +1126,7 @@ public sealed class SettingsForm : Form
         var brightnessEnabled = effect != EffectType.Off;
         _brightness.Enabled = brightnessEnabled && !_modeMusic.Checked && !_modeOff.Checked;
         _brightness.Visible = brightnessEnabled && !_modeMusic.Checked && !_modeOff.Checked;
-        _brightness.BackColor = _brightness.Enabled ? SystemColors.Window : SystemColors.Control;
+        _brightness.BackColor = _brightness.Enabled ? ThemeManager.Current.Surface : ThemeManager.Current.Window;
     }
 
     private void UpdateCustomColorsButton()
@@ -1396,6 +1435,7 @@ public sealed class SettingsForm : Form
         dialog.Controls.Add(cancel);
         dialog.AcceptButton = ok;
         dialog.CancelButton = cancel;
+        ThemeManager.Apply(dialog);
 
         while (dialog.ShowDialog(this) == DialogResult.OK)
         {
@@ -2126,6 +2166,8 @@ public sealed class SettingsForm : Form
         {
             _automationStatus.Text = "服务状态尚未更新。应用条件需要托盘程序保持运行。";
             RefreshMusicBindingStatus();
+            if (_navigation?.SelectedIndex == 3) _sceneAutomation.RefreshRuntimeState();
+            UpdateOverviewRuntime(status);
             return;
         }
 
@@ -2147,6 +2189,8 @@ public sealed class SettingsForm : Form
             : $"；歌曲：{status.TrackTitle}{(string.IsNullOrWhiteSpace(status.TrackArtist) ? "" : " - " + status.TrackArtist)}";
         var color = string.IsNullOrWhiteSpace(status.AlbumColor) ? "" : $"；封面色：{status.AlbumColor}";
         _automationStatus.Text = $"{active}；{foreground}{audio}{track}{color}{idle}{invalid}";
+        if (_navigation?.SelectedIndex == 3) _sceneAutomation.RefreshRuntimeState();
+        UpdateOverviewRuntime(status);
     }
 
     private DiagnosticsSnapshot CollectDiagnostics()
@@ -2566,7 +2610,7 @@ internal sealed class ColorPickerRow : UserControl
         var x = ControlLeft + 240;
         foreach (var color in palette)
         {
-            var button = new Button { BackColor = ColorTranslator.FromHtml(color), Location = new Point(x, 9), Size = new Size(24, 24), FlatStyle = FlatStyle.Flat };
+            var button = new Button { BackColor = ColorTranslator.FromHtml(color), Location = new Point(x, 9), Size = new Size(24, 24), FlatStyle = FlatStyle.Flat, AccessibleDescription = "ColorSwatch" };
             button.Click += (_, _) => ColorHex = color;
             Controls.Add(button);
             _paletteButtons.Add(button);
@@ -2621,7 +2665,7 @@ internal sealed class ColorPickerRow : UserControl
         {
             var previous = _swatch.BackColor;
             _swatch.BackColor = ColorTranslator.FromHtml(RgbColor.FromHex(_hex.Text).Hex);
-            _hex.BackColor = SystemColors.Window;
+            _hex.BackColor = ThemeManager.Current.Field;
             if (previous.ToArgb() != _swatch.BackColor.ToArgb())
             {
                 ColorChanged?.Invoke(this, EventArgs.Empty);
@@ -2842,9 +2886,9 @@ internal sealed class SequenceEditor : UserControl
 internal sealed class SceneAutomationEditorV2 : UserControl
 {
     private readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
-    private readonly ListBox _music = new() { Dock = DockStyle.Fill };
-    private readonly ListBox _lighting = new() { Dock = DockStyle.Fill };
-    private readonly ListBox _schedule = new() { Dock = DockStyle.Fill };
+    private readonly AutomationRuleListBox _music = new() { Dock = DockStyle.Fill };
+    private readonly AutomationRuleListBox _lighting = new() { Dock = DockStyle.Fill };
+    private readonly AutomationRuleListBox _schedule = new() { Dock = DockStyle.Fill };
     private AutomationSettings _automation = new();
     private EffectPresetSettings _effectPresets = new();
     private List<MusicPreset> _musicPresets = [];
@@ -2861,6 +2905,10 @@ internal sealed class SceneAutomationEditorV2 : UserControl
         _lighting.DoubleClick += (_, _) => EditLighting();
         _schedule.DoubleClick += (_, _) => EditSchedule();
     }
+
+    public event EventHandler? Changed;
+
+    public void RefreshRuntimeState() => RefreshLists(_music.SelectedIndex, _lighting.SelectedIndex, _schedule.SelectedIndex);
 
     public AutomationSettings Automation
     {
@@ -2911,6 +2959,7 @@ internal sealed class SceneAutomationEditorV2 : UserControl
         _automation.MusicApplications.Add(rule.Normalize());
         RefreshLists();
         _music.SelectedIndex = _automation.MusicApplications.Count - 1;
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     private void EditMusic()
@@ -2921,6 +2970,7 @@ internal sealed class SceneAutomationEditorV2 : UserControl
         if (dialog.ShowDialog() != DialogResult.OK) return;
         _automation.MusicApplications[_music.SelectedIndex] = rule.Normalize();
         RefreshLists(_music.SelectedIndex, -1, -1);
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     private void AddLighting()
@@ -2937,6 +2987,7 @@ internal sealed class SceneAutomationEditorV2 : UserControl
         _automation.LightingApplications.Add(rule.Normalize());
         RefreshLists();
         _lighting.SelectedIndex = _automation.LightingApplications.Count - 1;
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     private void EditLighting()
@@ -2947,6 +2998,7 @@ internal sealed class SceneAutomationEditorV2 : UserControl
         if (dialog.ShowDialog() != DialogResult.OK) return;
         _automation.LightingApplications[_lighting.SelectedIndex] = rule.Normalize();
         RefreshLists(-1, _lighting.SelectedIndex, -1);
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     private void AddSchedule()
@@ -2960,6 +3012,7 @@ internal sealed class SceneAutomationEditorV2 : UserControl
         _automation.ScheduleRules.Add(rule.Normalize());
         RefreshLists();
         _schedule.SelectedIndex = _automation.ScheduleRules.Count - 1;
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     private void EditSchedule()
@@ -2970,11 +3023,12 @@ internal sealed class SceneAutomationEditorV2 : UserControl
         if (dialog.ShowDialog() != DialogResult.OK) return;
         _automation.ScheduleRules[_schedule.SelectedIndex] = rule.Normalize();
         RefreshLists(-1, -1, _schedule.SelectedIndex);
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
-    private void RemoveMusic() { if (_music.SelectedIndex >= 0) { _automation.MusicApplications.RemoveAt(_music.SelectedIndex); RefreshLists(); } }
-    private void RemoveLighting() { if (_lighting.SelectedIndex >= 0) { _automation.LightingApplications.RemoveAt(_lighting.SelectedIndex); RefreshLists(); } }
-    private void RemoveSchedule() { if (_schedule.SelectedIndex >= 0) { _automation.ScheduleRules.RemoveAt(_schedule.SelectedIndex); RefreshLists(); } }
+    private void RemoveMusic() { if (_music.SelectedIndex >= 0) { _automation.MusicApplications.RemoveAt(_music.SelectedIndex); RefreshLists(); Changed?.Invoke(this, EventArgs.Empty); } }
+    private void RemoveLighting() { if (_lighting.SelectedIndex >= 0) { _automation.LightingApplications.RemoveAt(_lighting.SelectedIndex); RefreshLists(); Changed?.Invoke(this, EventArgs.Empty); } }
+    private void RemoveSchedule() { if (_schedule.SelectedIndex >= 0) { _automation.ScheduleRules.RemoveAt(_schedule.SelectedIndex); RefreshLists(); Changed?.Invoke(this, EventArgs.Empty); } }
     private void MoveMusic(int offset) => MoveRule(_automation.MusicApplications, _music, offset);
     private void MoveLighting(int offset) => MoveRule(_automation.LightingApplications, _lighting, offset);
     private void MoveSchedule(int offset) => MoveRule(_automation.ScheduleRules, _schedule, offset);
@@ -2987,19 +3041,40 @@ internal sealed class SceneAutomationEditorV2 : UserControl
         (rules[from], rules[to]) = (rules[to], rules[from]);
         RefreshLists();
         list.SelectedIndex = to;
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     private void RefreshLists(int music = -1, int lighting = -1, int schedule = -1)
     {
+        var activeRuleId = AutomationStatus.Load()?.ActiveRuleId ?? "";
         _music.Items.Clear();
         foreach (var rule in _automation.MusicApplications)
-            _music.Items.Add($"{(rule.Enabled ? "" : "[停用] ")}{rule.Name} — {rule.ProcessName} — {ColorLabel(rule.ColorSource)}");
+        {
+            var missingPreset = !_musicPresets.Any(preset => preset.Id == rule.MusicPresetId);
+            var state = !rule.Enabled ? AutomationRuleVisualState.Disabled :
+                string.IsNullOrWhiteSpace(rule.ProcessName) || missingPreset ? AutomationRuleVisualState.Error :
+                rule.Id == activeRuleId ? AutomationRuleVisualState.Active : AutomationRuleVisualState.Normal;
+            var reason = string.IsNullOrWhiteSpace(rule.ProcessName) ? "未配置进程" : missingPreset ? "音乐预设不存在" :
+                $"{rule.ProcessName} · {ColorLabel(rule.ColorSource)} · {PresetName(rule.MusicPresetId, _musicPresets)}";
+            _music.Items.Add(new AutomationRuleListItem(rule.Name, reason, state));
+        }
         _lighting.Items.Clear();
         foreach (var rule in _automation.LightingApplications)
-            _lighting.Items.Add($"{(rule.Enabled ? "" : "[停用] ")}{rule.Name} — {string.Join(", ", rule.ProcessNames)}");
+        {
+            var invalid = rule.ProcessNames.Count == 0 || !ActionExists(rule.Action);
+            var state = !rule.Enabled ? AutomationRuleVisualState.Disabled : invalid ? AutomationRuleVisualState.Error :
+                rule.Id == activeRuleId ? AutomationRuleVisualState.Active : AutomationRuleVisualState.Normal;
+            var process = rule.ProcessNames.Count == 0 ? "未配置前台进程" : string.Join("、", rule.ProcessNames);
+            _lighting.Items.Add(new AutomationRuleListItem(rule.Name, $"{process} · {ActionLabel(rule.Action)}", state));
+        }
         _schedule.Items.Clear();
         foreach (var rule in _automation.ScheduleRules)
-            _schedule.Items.Add($"{(rule.Enabled ? "" : "[停用] ")}{rule.Name} — {rule.TimeFilter.Start}-{rule.TimeFilter.End}");
+        {
+            var state = !rule.Enabled ? AutomationRuleVisualState.Disabled : !ActionExists(rule.Action) ? AutomationRuleVisualState.Error :
+                rule.Id == activeRuleId ? AutomationRuleVisualState.Active : AutomationRuleVisualState.Normal;
+            var time = rule.TimeFilter.TimeEnabled ? $"{rule.TimeFilter.Start}–{rule.TimeFilter.End}" : "全天";
+            _schedule.Items.Add(new AutomationRuleListItem(rule.Name, $"{time} · {ActionLabel(rule.Action)}", state));
+        }
         if (music >= 0 && music < _music.Items.Count) _music.SelectedIndex = music;
         if (lighting >= 0 && lighting < _lighting.Items.Count) _lighting.SelectedIndex = lighting;
         if (schedule >= 0 && schedule < _schedule.Items.Count) _schedule.SelectedIndex = schedule;
@@ -3012,8 +3087,86 @@ internal sealed class SceneAutomationEditorV2 : UserControl
         _ => "预设颜色"
     };
 
+    private bool ActionExists(SceneAction action) => action.Target switch
+    {
+        SceneTargetKind.Off => true,
+        SceneTargetKind.MusicPreset => _musicPresets.Any(preset => preset.Id == action.PresetId),
+        SceneTargetKind.LightingPreset => action.PresetId == EffectPresetSettings.BuiltInId(action.LightingEffectType) ||
+            _effectPresets.ForType(action.LightingEffectType).Any(preset => preset.Id == action.PresetId),
+        _ => false
+    };
+
+    private string ActionLabel(SceneAction action) => action.Target switch
+    {
+        SceneTargetKind.Off => "关闭灯光",
+        SceneTargetKind.MusicPreset => $"音乐：{PresetName(action.PresetId, _musicPresets)}",
+        SceneTargetKind.LightingPreset => $"灯效：{_effectPresets.ForType(action.LightingEffectType).FirstOrDefault(p => p.Id == action.PresetId)?.Name ?? action.LightingEffectType.ToString()}",
+        _ => "动作无效"
+    };
+
+    private static string PresetName(string id, IEnumerable<MusicPreset> presets) =>
+        presets.FirstOrDefault(preset => preset.Id == id)?.Name ?? "预设不存在";
+
     private static T Clone<T>(T value) => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(value))!;
     private static MusicPreset CloneMusicPreset(MusicPreset value) => Clone(value);
+}
+
+internal enum AutomationRuleVisualState { Normal, Active, Disabled, Error }
+internal sealed record AutomationRuleListItem(string Title, string Detail, AutomationRuleVisualState State)
+{
+    public override string ToString() => Title;
+}
+
+internal sealed class AutomationRuleListBox : ListBox
+{
+    public AutomationRuleListBox()
+    {
+        DrawMode = DrawMode.OwnerDrawFixed;
+        ItemHeight = 58;
+        BorderStyle = BorderStyle.None;
+        IntegralHeight = false;
+        Font = new Font("Segoe UI", 9F);
+    }
+
+    protected override void OnDrawItem(DrawItemEventArgs e)
+    {
+        if (e.Index < 0 || e.Index >= Items.Count) return;
+        var theme = ThemeManager.Current;
+        var selected = (e.State & DrawItemState.Selected) != 0;
+        var item = Items[e.Index] as AutomationRuleListItem ?? new AutomationRuleListItem(Items[e.Index]?.ToString() ?? "", "", AutomationRuleVisualState.Normal);
+        var bounds = Rectangle.Inflate(e.Bounds, -5, -4);
+        using var background = new SolidBrush(selected ? theme.PrimarySoft : theme.Surface);
+        using var border = new Pen(selected ? theme.Primary : theme.Border);
+        e.Graphics.FillRectangle(background, bounds);
+        e.Graphics.DrawRectangle(border, bounds);
+        var stateColor = item.State switch
+        {
+            AutomationRuleVisualState.Active => theme.Success,
+            AutomationRuleVisualState.Error => theme.Error,
+            AutomationRuleVisualState.Disabled => theme.MutedText,
+            _ => theme.Primary
+        };
+        using var stateBrush = new SolidBrush(stateColor);
+        e.Graphics.FillEllipse(stateBrush, bounds.X + 10, bounds.Y + 12, 8, 8);
+        var stateText = item.State switch
+        {
+            AutomationRuleVisualState.Active => "生效中",
+            AutomationRuleVisualState.Error => "需要处理",
+            AutomationRuleVisualState.Disabled => "已停用",
+            _ => "已启用"
+        };
+        using var titleFont = new Font("Segoe UI Semibold", 9F);
+        TextRenderer.DrawText(e.Graphics, item.Title, titleFont,
+            new Rectangle(bounds.X + 26, bounds.Y + 5, bounds.Width - 120, 23), theme.Text,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        TextRenderer.DrawText(e.Graphics, stateText, Font,
+            new Rectangle(bounds.Right - 88, bounds.Y + 5, 78, 23), stateColor,
+            TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
+        TextRenderer.DrawText(e.Graphics, item.Detail, Font,
+            new Rectangle(bounds.X + 26, bounds.Y + 28, bounds.Width - 36, 22), theme.MutedText,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        if ((e.State & DrawItemState.Focus) != 0) e.DrawFocusRectangle();
+    }
 }
 
 internal sealed class PalettePreviewControl : Control
@@ -3040,10 +3193,11 @@ internal sealed class PalettePreviewControl : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
-        e.Graphics.Clear(SystemColors.Control);
+        e.Graphics.Clear(ThemeManager.Current.Window);
         if (_colors.Count == 0)
         {
-            e.Graphics.DrawRectangle(SystemPens.ControlDark, 0, 0, Width - 1, Height - 1);
+            using var emptyBorder = new Pen(ThemeManager.Current.Border);
+            e.Graphics.DrawRectangle(emptyBorder, 0, 0, Width - 1, Height - 1);
             return;
         }
         var width = Math.Max(1, Width / _colors.Count);
@@ -3059,11 +3213,12 @@ internal sealed class PalettePreviewControl : Control
             }
             catch (FormatException) { }
         }
-        e.Graphics.DrawRectangle(SystemPens.ControlDarkDark, 0, 0, Width - 1, Height - 1);
+        using var border = new Pen(ThemeManager.Current.Border);
+        e.Graphics.DrawRectangle(border, 0, 0, Width - 1, Height - 1);
     }
 }
 
-internal sealed class AudioApplicationPickerForm : Form
+internal sealed class AudioApplicationPickerForm : ThemedForm
 {
     private readonly ListView _list = new() { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true };
     private readonly List<AudioApplicationStatus> _items;
@@ -3078,7 +3233,9 @@ internal sealed class AudioApplicationPickerForm : Form
         _list.Columns.Add("PID", 180);
         _list.Columns.Add("电平", 100);
         _list.Columns.Add("状态", 100);
-        _items = AutomationStatus.Load()?.AudioApplications.ToList() ?? [];
+        _items = AudioApplicationsState.Load()?.Applications.ToList()
+            ?? AutomationStatus.Load()?.AudioApplications.ToList()
+            ?? [];
         if (includeVisibleProcesses)
         {
             foreach (var process in Process.GetProcesses())
@@ -3119,7 +3276,7 @@ internal sealed class AudioApplicationPickerForm : Form
             var item = new ListViewItem(app.ProcessName);
             item.SubItems.Add(string.Join(",", app.ProcessIds));
             item.SubItems.Add($"{app.PeakLevel:P1}");
-            item.SubItems.Add(app.IsPlaying ? "正在播放" : "已静音");
+            item.SubItems.Add(app.IsPlaying ? "正在播放" : app.PeakLevel > 0.001f ? "检测声音中" : "已静音");
             _list.Items.Add(item);
         }
         var bind = new Button { Text = "绑定", Dock = DockStyle.Bottom, Height = 40 };
@@ -3138,7 +3295,7 @@ internal sealed class AudioApplicationPickerForm : Form
     }
 }
 
-internal sealed class AutomationRuleDialog : Form
+internal sealed class AutomationRuleDialog : ThemedForm
 {
     private enum RuleKind { Music, Lighting, Schedule }
     private readonly RuleKind _kind;
@@ -4002,7 +4159,7 @@ internal sealed class AppProfileEditor : UserControl
     };
 
 }
-internal sealed class RunningAppsForm : Form
+internal sealed class RunningAppsForm : ThemedForm
 {
     private readonly ListView _list = new();
 
