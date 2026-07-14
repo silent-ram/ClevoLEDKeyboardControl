@@ -2493,20 +2493,13 @@ public sealed partial class SettingsForm : ThemedForm
 
     private void RestoreLastGoodConfiguration()
     {
-        var path = AppPaths.SettingsPath + SettingsStore.LastGoodSuffix;
-        if (!File.Exists(path))
-        {
-            MessageBox.Show("没有可用的最近备份。", "恢复配置", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-        if (!SettingsStore.TryParse(File.ReadAllText(path), out var settings, out var error))
-        {
-            MessageBox.Show($"最近备份无效：{error}", "恢复配置", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-        _settingsStore.Save(settings);
-        LoadSettings();
-        MessageBox.Show("已恢复最近一次有效配置。", "恢复配置", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        var result = _settingsStore.RestoreLastGood();
+        if (result.Success) LoadSettings();
+        MessageBox.Show(
+            result.Message,
+            "恢复配置",
+            MessageBoxButtons.OK,
+            result.Success ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
     }
 }
 

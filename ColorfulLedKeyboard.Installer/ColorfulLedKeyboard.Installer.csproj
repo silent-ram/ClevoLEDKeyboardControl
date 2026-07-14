@@ -16,4 +16,8 @@
     <EmbeddedResource Include="Payload\payload.zip" LogicalName="payload.zip" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="ColorfulLedKeyboard.Tests" />
+  </ItemGroup>
+
 </Project>

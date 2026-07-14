@@ -39,6 +39,8 @@ internal static class Program
     private static readonly string ProgramDataDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
         "ClevoLEDKeyboardControl");
+    private static readonly string SettingsPath = Path.Combine(ProgramDataDirectory, "settings.json");
+    private static readonly string UpgradeBackupDirectory = Path.Combine(ProgramDataDirectory, "Backups");
 
     private static readonly string StartMenuShortcutPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu),
@@ -136,6 +138,14 @@ internal static class Program
 
     private static void Install()
     {
+        // 覆盖安装必须先在停止旧服务前取得配置快照。之后任何安装步骤即使意外改写或
+        // 删除 settings.json，也会在新服务启动前恢复，避免默认配置覆盖用户数据。
+        var configurationGuard = new UpgradeConfigurationGuard(SettingsPath, UpgradeBackupDirectory);
+        var serviceSettings = TryReadSettingsFromService();
+        var configurationSnapshot = serviceSettings is null
+            ? CaptureSettingsWithLegacyAclRecovery(configurationGuard)
+            : configurationGuard.Capture(serviceSettings);
+
         StopAndDeleteServiceIfPresent(ServiceName);
         StopAndDeleteServiceIfPresent(LegacyServiceName);
         StopAndDeleteServiceIfPresent(LegacyServiceNameClevoRgb);
@@ -145,6 +155,7 @@ internal static class Program
         RemoveLegacyInstalledSetup();
         ExtractPayload();
         EnsureProgramDataPermissions();
+        RestoreSettingsWithLegacyAclRecovery(configurationGuard, configurationSnapshot);
         TryInstallDriverDll();
 
         if (!File.Exists(ServiceExe))
@@ -163,6 +174,44 @@ internal static class Program
         AddTrayStartup();
         RegisterUninstaller();
         CreateUserShortcuts();  // 失败不抛，仅返回 false
+    }
+
+    private static UpgradeConfigurationSnapshot? CaptureSettingsWithLegacyAclRecovery(
+        UpgradeConfigurationGuard configurationGuard)
+    {
+        try
+        {
+            return configurationGuard.Capture();
+        }
+        catch (IOException) when (File.Exists(SettingsPath))
+        {
+            // 某些旧安装留下了仅 SYSTEM 可读且不继承父目录的 settings.json；服务若已
+            // 不存在便无法通过 IPC 取回。只修复此文件的所有权和 ACL，不触碰文件内容。
+            RepairSettingsFileAcl();
+            return configurationGuard.Capture();
+        }
+    }
+
+    private static void RestoreSettingsWithLegacyAclRecovery(
+        UpgradeConfigurationGuard configurationGuard,
+        UpgradeConfigurationSnapshot? configurationSnapshot)
+    {
+        try
+        {
+            configurationGuard.RestoreIfChanged(configurationSnapshot);
+        }
+        catch (IOException) when (File.Exists(SettingsPath))
+        {
+            RepairSettingsFileAcl();
+            configurationGuard.RestoreIfChanged(configurationSnapshot);
+        }
+    }
+
+    private static void RepairSettingsFileAcl()
+    {
+        Run("takeown.exe", $"/F \"{SettingsPath}\" /A", allowFailure: true);
+        Run("icacls.exe", $"\"{SettingsPath}\" /reset /C /Q", allowFailure: true);
+        Run("icacls.exe", $"\"{SettingsPath}\" /inheritance:r /grant:r *S-1-5-18:F *S-1-5-32-544:F *S-1-5-32-545:RX /C /Q");
     }
 
     private static bool TryInstallDriverDll()
@@ -513,12 +562,16 @@ internal static class Program
     private static void EnsureProgramDataPermissions()
     {
         Directory.CreateDirectory(ProgramDataDirectory);
-        var settingsPath = Path.Combine(ProgramDataDirectory, "settings.json");
-        var securityBackup = settingsPath + ".pre-security-v2.4.bak";
-        if (File.Exists(settingsPath) && !File.Exists(securityBackup))
-            File.Copy(settingsPath, securityBackup);
-        Run("icacls.exe", $"\"{ProgramDataDirectory}\" /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F *S-1-5-32-545:(OI)(CI)RX /T /C");
-        Run("icacls.exe", $"\"{Path.Combine(ProgramDataDirectory, "*")}\" /inheritance:e /reset /T /C", allowFailure: true);
+        // 先取得旧目录及子项所有权并清除受保护 ACL。安全 ACL 只设置在父目录，
+        // 然后让子文件继承；不能把带 (OI)(CI) 的目录权限递归直接写到普通文件。
+        Run("takeown.exe", $"/F \"{ProgramDataDirectory}\" /A /R", allowFailure: true);
+        Run("icacls.exe", $"\"{ProgramDataDirectory}\" /reset /T /C /Q", allowFailure: true);
+        Run("icacls.exe", $"\"{ProgramDataDirectory}\" /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F *S-1-5-32-545:(OI)(CI)RX /C /Q");
+        Run("icacls.exe", $"\"{Path.Combine(ProgramDataDirectory, "*")}\" /reset /T /C /Q", allowFailure: true);
+
+        var securityBackup = SettingsPath + ".pre-security-v2.4.bak";
+        if (File.Exists(SettingsPath) && !File.Exists(securityBackup))
+            File.Copy(SettingsPath, securityBackup);
     }
 
     private static void ExtractPayload()
@@ -592,6 +645,60 @@ internal static class Program
             return CanPingServicePipeAsync(timeout.Token).GetAwaiter().GetResult();
         }
         catch (Exception ex) when (ex is IOException or TimeoutException or UnauthorizedAccessException or OperationCanceledException)
+        {
+            return false;
+        }
+    }
+
+    private static byte[]? TryReadSettingsFromService()
+    {
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            return ReadSettingsFromServiceAsync(timeout.Token).GetAwaiter().GetResult();
+        }
+        catch (Exception ex) when (ex is IOException or TimeoutException or UnauthorizedAccessException or OperationCanceledException or JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static async Task<byte[]?> ReadSettingsFromServiceAsync(CancellationToken cancellationToken)
+    {
+        using var pipe = new NamedPipeClientStream(".", ServicePipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+        await pipe.ConnectAsync(cancellationToken);
+        var request = Encoding.UTF8.GetBytes("{\"Version\":1,\"Kind\":\"GetSettings\",\"Payload\":{}}");
+        await pipe.WriteAsync(BitConverter.GetBytes(request.Length), cancellationToken);
+        await pipe.WriteAsync(request, cancellationToken);
+        await pipe.FlushAsync(cancellationToken);
+
+        var lengthBytes = new byte[sizeof(int)];
+        await pipe.ReadExactlyAsync(lengthBytes, cancellationToken);
+        var length = BitConverter.ToInt32(lengthBytes);
+        if (length <= 0 || length > 1024 * 1024) return null;
+
+        var response = new byte[length];
+        await pipe.ReadExactlyAsync(response, cancellationToken);
+        return TryExtractSettingsPayload(response, out var settings) ? settings : null;
+    }
+
+    internal static bool TryExtractSettingsPayload(byte[] response, out byte[] settings)
+    {
+        settings = [];
+        try
+        {
+            using var document = JsonDocument.Parse(response);
+            var root = document.RootElement;
+            if (!root.TryGetProperty("Success", out var success) || !success.GetBoolean() ||
+                !root.TryGetProperty("Payload", out var payload) || payload.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
+            settings = Encoding.UTF8.GetBytes(payload.GetRawText());
+            return settings.Length > 0;
+        }
+        catch (JsonException)
         {
             return false;
         }

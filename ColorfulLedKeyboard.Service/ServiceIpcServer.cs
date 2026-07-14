@@ -111,6 +111,14 @@ public sealed class ServiceIpcServer : IDisposable
             case "GetSettingsRecovery":
                 await ReplyAsync(pipe, true, "", ReadJson<SettingsRecoveryState>(AppPaths.SettingsRecoveryStatePath), cancellationToken);
                 break;
+            case "RestoreLastGoodSettings":
+                await _settingsGate.WaitAsync(cancellationToken);
+                try
+                {
+                    await ReplyAsync(pipe, true, "", new SettingsStore().RestoreLastGoodLocal(), cancellationToken);
+                }
+                finally { _settingsGate.Release(); }
+                break;
             case "SaveSettings":
             {
                 var settings = payload.Deserialize<KeyboardSettings>();

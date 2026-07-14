@@ -338,6 +338,52 @@ public sealed class SettingsStore
         }
     }
 
+    public SettingsRestoreResult RestoreLastGood()
+    {
+        if (IsInteractiveDefaultStore &&
+            ServiceIpc.TryRequest<object, SettingsRestoreResult>(
+                "RestoreLastGoodSettings", new { }, out var remote, timeoutMs: 1500) && remote is not null)
+        {
+            return remote;
+        }
+
+        return RestoreLastGoodLocal();
+    }
+
+    public SettingsRestoreResult RestoreLastGoodLocal()
+    {
+        var backupPath = SettingsPath + LastGoodSuffix;
+        if (!File.Exists(backupPath))
+        {
+            return new SettingsRestoreResult(false, "没有可用的最近备份。");
+        }
+
+        string json;
+        try
+        {
+            json = File.ReadAllText(backupPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return new SettingsRestoreResult(false, "无法读取最近备份，请检查服务和文件权限。");
+        }
+
+        if (!TryParse(json, out var settings, out var error))
+        {
+            return new SettingsRestoreResult(false, $"最近备份无效：{error}");
+        }
+
+        try
+        {
+            SaveLocal(settings);
+            return new SettingsRestoreResult(true, "已恢复最近一次有效配置。");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return new SettingsRestoreResult(false, "备份有效，但写回配置失败，请检查服务和文件权限。");
+        }
+    }
+
     private bool IsInteractiveDefaultStore => Environment.UserInteractive &&
         string.Equals(Path.GetFullPath(SettingsPath), Path.GetFullPath(AppPaths.SettingsPath), StringComparison.OrdinalIgnoreCase);
 
@@ -444,6 +490,8 @@ public sealed class SettingsStore
         }
     }
 }
+
+public sealed record SettingsRestoreResult(bool Success, string Message);
 
 public sealed class SettingsRecoveryState
 {

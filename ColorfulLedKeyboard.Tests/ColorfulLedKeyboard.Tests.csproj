@@ -22,6 +22,7 @@
     <ProjectReference Include="..\ColorfulLedKeyboard.Core\ColorfulLedKeyboard.Core.csproj" />
     <ProjectReference Include="..\ColorfulLedKeyboard.Service\ColorfulLedKeyboard.Service.csproj" />
     <ProjectReference Include="..\ColorfulLedKeyboard.Tray\ColorfulLedKeyboard.Tray.csproj" />
+    <ProjectReference Include="..\ColorfulLedKeyboard.Installer\ColorfulLedKeyboard.Installer.csproj" />
   </ItemGroup>
 
 </Project>
