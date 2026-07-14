@@ -12,6 +12,7 @@ public sealed class SettingsStore
     {
         WriteIndented = true
     };
+    private static readonly object SaveSync = new();
 
     static SettingsStore()
     {
@@ -28,7 +29,7 @@ public sealed class SettingsStore
     public KeyboardSettings Load()
     {
         if (IsInteractiveDefaultStore &&
-            ServiceIpc.TryRequest<object, KeyboardSettings>("GetSettings", new { }, out var remote) && remote is not null)
+            ServiceIpc.TryRequest<object, KeyboardSettings>("GetSettings", new { }, out var remote, timeoutMs: 250) && remote is not null)
             return remote.Normalize();
         return LoadLocal();
     }
@@ -310,7 +311,7 @@ public sealed class SettingsStore
     {
         if (IsInteractiveDefaultStore)
         {
-            if (!ServiceIpc.TrySend("SaveSettings", settings.Normalize()))
+            if (!ServiceIpc.TrySendWithRetry("SaveSettings", settings.Normalize(), attempts: 4, timeoutMs: 750, delayMs: 150))
                 throw new IOException("服务通信不可用，配置处于只读状态。");
             return;
         }
@@ -319,19 +320,21 @@ public sealed class SettingsStore
 
     public void SaveLocal(KeyboardSettings settings)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
-        var json = JsonSerializer.Serialize(settings.Normalize(), SerializerOptions);
-        var tempPath = $"{SettingsPath}.{Environment.ProcessId}.tmp";
-        File.WriteAllText(tempPath, json);
-
-        if (File.Exists(SettingsPath))
+        lock (SaveSync)
         {
-            TryPreserveLastGood(SettingsPath);
-            File.Replace(tempPath, SettingsPath, destinationBackupFileName: null);
-        }
-        else
-        {
-            File.Move(tempPath, SettingsPath);
+            Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
+            var json = JsonSerializer.Serialize(settings.Normalize(), SerializerOptions);
+            var tempPath = $"{SettingsPath}.{Environment.ProcessId}.{Guid.NewGuid():N}.tmp";
+            try
+            {
+                File.WriteAllText(tempPath, json);
+                if (File.Exists(SettingsPath)) TryPreserveLastGood(SettingsPath);
+                File.Move(tempPath, SettingsPath, overwrite: true);
+            }
+            finally
+            {
+                try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+            }
         }
     }
 
@@ -451,6 +454,9 @@ public sealed class SettingsRecoveryState
 
     public static SettingsRecoveryState? Load()
     {
+        if (Environment.UserInteractive &&
+            ServiceIpc.TryRequest<object, SettingsRecoveryState>("GetSettingsRecovery", new { }, out var remote, 350))
+            return remote;
         try
         {
             return File.Exists(AppPaths.SettingsRecoveryStatePath)

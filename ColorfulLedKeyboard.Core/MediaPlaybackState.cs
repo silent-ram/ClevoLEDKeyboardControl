@@ -41,6 +41,9 @@ public sealed class MediaPlaybackState
 
     public static MediaPlaybackState? Load()
     {
+        if (Environment.UserInteractive &&
+            ServiceIpc.TryRequest<object, MediaPlaybackState>("GetMediaPlayback", new { }, out var remote, 350))
+            return remote;
         try
         {
             return File.Exists(AppPaths.MediaPlaybackStatePath)
@@ -58,8 +61,7 @@ public sealed class MediaPlaybackState
             Directory.CreateDirectory(AppPaths.ProgramDataDirectory);
             var temp = $"{AppPaths.MediaPlaybackStatePath}.{Environment.ProcessId}.tmp";
             File.WriteAllText(temp, JsonSerializer.Serialize(this));
-            if (File.Exists(AppPaths.MediaPlaybackStatePath)) File.Replace(temp, AppPaths.MediaPlaybackStatePath, null);
-            else File.Move(temp, AppPaths.MediaPlaybackStatePath);
+            File.Move(temp, AppPaths.MediaPlaybackStatePath, overwrite: true);
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }

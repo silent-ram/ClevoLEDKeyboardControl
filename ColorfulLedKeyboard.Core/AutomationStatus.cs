@@ -11,6 +11,9 @@ public sealed class AutomationStatus
     public string ActiveRuleName { get; set; } = "";
     public string TargetDescription { get; set; } = "基础设置";
     public bool IdleOverrideActive { get; set; }
+    public int FinalBrightnessLimit { get; set; } = 100;
+    public string BrightnessDisplay { get; set; } = "";
+    public string BrightnessDescription { get; set; } = "";
     public string InvalidReason { get; set; } = "";
     public string ActiveMusicApplication { get; set; } = "";
     public List<int> ActiveProcessIds { get; set; } = [];
@@ -22,6 +25,9 @@ public sealed class AutomationStatus
 
     public static AutomationStatus? Load()
     {
+        if (Environment.UserInteractive &&
+            ServiceIpc.TryRequest<object, AutomationStatus>("GetAutomationStatus", new { }, out var remote, 350))
+            return remote;
         try
         {
             return File.Exists(AppPaths.AutomationStatusPath)
@@ -40,8 +46,7 @@ public sealed class AutomationStatus
             Directory.CreateDirectory(AppPaths.ProgramDataDirectory);
             var temp = $"{AppPaths.AutomationStatusPath}.{Environment.ProcessId}.tmp";
             File.WriteAllText(temp, JsonSerializer.Serialize(this));
-            if (File.Exists(AppPaths.AutomationStatusPath)) File.Replace(temp, AppPaths.AutomationStatusPath, null);
-            else File.Move(temp, AppPaths.AutomationStatusPath);
+            File.Move(temp, AppPaths.AutomationStatusPath, overwrite: true);
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
@@ -67,6 +72,9 @@ public sealed class AudioApplicationsState
 
     public static AudioApplicationsState? Load()
     {
+        if (Environment.UserInteractive &&
+            ServiceIpc.TryRequest<object, AudioApplicationsState>("GetAudioApplications", new { }, out var remote, 350))
+            return remote;
         try
         {
             return File.Exists(AppPaths.AudioApplicationsStatePath)
@@ -84,8 +92,7 @@ public sealed class AudioApplicationsState
             Directory.CreateDirectory(AppPaths.ProgramDataDirectory);
             var temp = $"{AppPaths.AudioApplicationsStatePath}.{Environment.ProcessId}.tmp";
             File.WriteAllText(temp, JsonSerializer.Serialize(this));
-            if (File.Exists(AppPaths.AudioApplicationsStatePath)) File.Replace(temp, AppPaths.AudioApplicationsStatePath, null);
-            else File.Move(temp, AppPaths.AudioApplicationsStatePath);
+            File.Move(temp, AppPaths.AudioApplicationsStatePath, overwrite: true);
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }

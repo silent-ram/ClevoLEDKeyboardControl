@@ -326,6 +326,7 @@ public class Worker : BackgroundService
         var runtime = settings.CloneForRuntime();
         var status = ApplyAutomation(runtime);
         status.IdleOverrideActive = ApplyIdleDim(runtime);
+        ApplyBrightnessStatus(runtime, status);
         status.UpdatedUtc = DateTimeOffset.UtcNow;
         PublishAutomationStatus(status);
         return runtime.Normalize();
@@ -335,12 +336,47 @@ public class Worker : BackgroundService
     {
         var signature = string.Join("|", status.ActiveRuleId, status.ForegroundProcessName,
             status.ActiveMusicApplication, string.Join(",", status.ActiveProcessIds), status.TrackTitle,
-            status.AlbumColor, status.IdleOverrideActive, status.InvalidReason);
+            status.AlbumColor, status.IdleOverrideActive, status.FinalBrightnessLimit,
+            status.BrightnessDisplay, status.BrightnessDescription, status.InvalidReason);
         if (signature == _lastAutomationStatusSignature &&
             DateTimeOffset.UtcNow - _lastAutomationStatusWrite < TimeSpan.FromSeconds(1)) return;
         _lastAutomationStatusSignature = signature;
         _lastAutomationStatusWrite = DateTimeOffset.UtcNow;
         status.Save();
+    }
+
+    internal static void ApplyBrightnessStatus(KeyboardSettings settings, AutomationStatus status)
+    {
+        var outputLimit = Math.Clamp(settings.OutputBrightnessLimit, 0, 100);
+        if (!settings.Enabled || settings.Effect.Type == EffectType.Off || outputLimit == 0)
+        {
+            status.FinalBrightnessLimit = 0;
+            status.BrightnessDisplay = "已关闭";
+            status.BrightnessDescription = status.IdleOverrideActive ? "空闲关灯覆盖" : "当前模式关闭灯光";
+            return;
+        }
+
+        if (settings.OperatingMode == OperatingMode.Music)
+        {
+            var low = Math.Min(settings.Effect.Music.BaseBrightness, outputLimit);
+            var high = Math.Min(settings.Effect.Music.PeakBrightness, outputLimit);
+            if (low > high) low = high;
+            status.FinalBrightnessLimit = high;
+            status.BrightnessDisplay = low == high ? $"{high}%" : $"{low}–{high}%";
+            status.BrightnessDescription = status.IdleOverrideActive
+                ? $"音乐动态范围 · 空闲上限 {outputLimit}%"
+                : $"音乐动态范围 · 输出上限 {outputLimit}%";
+            return;
+        }
+
+        var final = Math.Min(settings.Brightness, outputLimit);
+        status.FinalBrightnessLimit = final;
+        status.BrightnessDisplay = $"{final}%";
+        status.BrightnessDescription = status.IdleOverrideActive
+            ? $"灯效亮度 · 空闲上限 {outputLimit}%"
+            : outputLimit < settings.Brightness
+                ? $"灯效亮度 · 场景上限 {outputLimit}%"
+                : "灯效实际亮度";
     }
 
     private bool ShouldRebuildRuntimeSettings(KeyboardSettings current)

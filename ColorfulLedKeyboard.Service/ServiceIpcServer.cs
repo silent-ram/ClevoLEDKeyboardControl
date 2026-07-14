@@ -13,6 +13,7 @@ public sealed class ServiceIpcServer : IDisposable
 {
     private readonly ILogger<ServiceIpcServer> _logger;
     private readonly CancellationTokenSource _stop = new();
+    private readonly SemaphoreSlim _settingsGate = new(1, 1);
     private Task? _loop;
 
     public ServiceIpcServer(ILogger<ServiceIpcServer> logger) => _logger = logger;
@@ -25,12 +26,22 @@ public sealed class ServiceIpcServer : IDisposable
         {
             try
             {
-                using var pipe = CreatePipe();
+                var pipe = CreatePipe();
                 await pipe.WaitForConnectionAsync(cancellationToken);
-                await HandleAsync(pipe, cancellationToken);
+                _ = HandleConnectedPipeAsync(pipe, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
             catch (Exception ex) { _logger.LogWarning(ex, "IPC request failed"); }
+        }
+    }
+
+    private async Task HandleConnectedPipeAsync(NamedPipeServerStream pipe, CancellationToken cancellationToken)
+    {
+        using (pipe)
+        {
+            try { await HandleAsync(pipe, cancellationToken); }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+            catch (Exception ex) { _logger.LogWarning(ex, "IPC client request failed"); }
         }
     }
 
@@ -76,17 +87,46 @@ public sealed class ServiceIpcServer : IDisposable
         {
             case "Ping": await ReplyAsync(pipe, true, "", true, cancellationToken); break;
             case "GetSettings":
-                await ReplyAsync(pipe, true, "", new SettingsStore().LoadLocal(), cancellationToken);
+            {
+                await _settingsGate.WaitAsync(cancellationToken);
+                try { await ReplyAsync(pipe, true, "", new SettingsStore().LoadLocal(), cancellationToken); }
+                finally { _settingsGate.Release(); }
+                break;
+            }
+            case "GetAutomationStatus":
+                await ReplyAsync(pipe, true, "", ReadJson<AutomationStatus>(AppPaths.AutomationStatusPath), cancellationToken);
+                break;
+            case "GetAudioApplications":
+                await ReplyAsync(pipe, true, "", ReadJson<AudioApplicationsState>(AppPaths.AudioApplicationsStatePath), cancellationToken);
+                break;
+            case "GetMediaPlayback":
+                await ReplyAsync(pipe, true, "", ReadJson<MediaPlaybackState>(AppPaths.MediaPlaybackStatePath), cancellationToken);
+                break;
+            case "GetForegroundState":
+                await ReplyAsync(pipe, true, "", ReadJson<ForegroundAppState>(AppPaths.ForegroundAppStatePath), cancellationToken);
+                break;
+            case "GetAudioSourceStatus":
+                await ReplyAsync(pipe, true, "", AudioSourceStatusFile.ReadFrom(AppPaths.AudioSourceStatusPath), cancellationToken);
+                break;
+            case "GetSettingsRecovery":
+                await ReplyAsync(pipe, true, "", ReadJson<SettingsRecoveryState>(AppPaths.SettingsRecoveryStatePath), cancellationToken);
                 break;
             case "SaveSettings":
+            {
                 var settings = payload.Deserialize<KeyboardSettings>();
                 if (settings is null) await ReplyAsync(pipe, false, "Invalid settings", false, cancellationToken);
                 else
                 {
-                    new SettingsStore().SaveLocal(settings);
-                    await ReplyAsync(pipe, true, "", true, cancellationToken);
+                    await _settingsGate.WaitAsync(cancellationToken);
+                    try
+                    {
+                        new SettingsStore().SaveLocal(settings);
+                        await ReplyAsync(pipe, true, "", true, cancellationToken);
+                    }
+                    finally { _settingsGate.Release(); }
                 }
                 break;
+            }
             case "ForegroundState": SaveJson(AppPaths.ForegroundAppStatePath, payload); await ReplyAsync(pipe, true, "", true, cancellationToken); break;
             case "TypingPulse": SaveJson(AppPaths.TypingPulseStatePath, payload); await ReplyAsync(pipe, true, "", true, cancellationToken); break;
             case "NotificationFlash": SaveJson(AppPaths.NotificationFlashStatePath, payload); await ReplyAsync(pipe, true, "", true, cancellationToken); break;
@@ -99,10 +139,28 @@ public sealed class ServiceIpcServer : IDisposable
     private static void SaveJson(string destination, JsonElement payload)
     {
         Directory.CreateDirectory(AppPaths.ProgramDataDirectory);
-        var temp = destination + ".ipc.tmp";
-        File.WriteAllText(temp, payload.GetRawText());
-        if (File.Exists(destination)) File.Replace(temp, destination, null);
-        else File.Move(temp, destination);
+        var temp = $"{destination}.{Guid.NewGuid():N}.ipc.tmp";
+        try
+        {
+            File.WriteAllText(temp, payload.GetRawText());
+            File.Move(temp, destination, overwrite: true);
+        }
+        finally
+        {
+            try { if (File.Exists(temp)) File.Delete(temp); } catch { }
+        }
+    }
+
+    private static T? ReadJson<T>(string source)
+    {
+        try
+        {
+            return File.Exists(source) ? JsonSerializer.Deserialize<T>(File.ReadAllText(source)) : default;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return default;
+        }
     }
 
     private static async Task ReplyAsync<T>(Stream stream, bool success, string error, T payload, CancellationToken token)

@@ -17,7 +17,13 @@ public static class AudioSourceStatusFile
 
     public static void Write(AudioSourceStatusInfo info) => WriteTo(Path, info);
 
-    public static AudioSourceStatusInfo? Read() => ReadFrom(Path);
+    public static AudioSourceStatusInfo? Read()
+    {
+        if (Environment.UserInteractive &&
+            ServiceIpc.TryRequest<object, AudioSourceStatusInfo>("GetAudioSourceStatus", new { }, out var remote, 350))
+            return remote;
+        return ReadFrom(Path);
+    }
 
     public static void WriteTo(string path, AudioSourceStatusInfo info)
     {

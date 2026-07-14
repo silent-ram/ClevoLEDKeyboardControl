@@ -78,7 +78,7 @@ internal sealed class AudioSessionMonitor : IDisposable
                 UpdateLatch(latch, observed.TryGetValue(key, out var app) ? app.PeakLevel : 0, now);
             }
 
-            var foreground = ForegroundAppState.Load()?.ProcessName ?? "";
+            var foreground = ForegroundWindowProcessName.GetName() ?? "";
             new AudioApplicationsState
             {
                 UpdatedUtc = now,

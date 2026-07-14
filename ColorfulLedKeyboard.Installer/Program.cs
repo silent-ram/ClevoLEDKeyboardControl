@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Compression;
+using System.IO.Pipes;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
@@ -22,6 +23,7 @@ internal static class Program
     private const string LegacyUninstallKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\ColorfulLedKeyboard";
     private const string LegacyUninstallKeyPathClevoRgb = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\ClevoRGBControl";
     private const string DriverDllName = "InsydeDCHU.dll";
+    private const string ServicePipeName = "ClevoLEDKeyboardControl.v2";
 
     private static readonly string InstallDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
@@ -153,6 +155,10 @@ internal static class Program
         Run("sc.exe", $"create {ServiceName} binPath= \"{ServiceExe}\" start= auto DisplayName= \"{DisplayName}\"");
         Run("sc.exe", $"description {ServiceName} \"Controls Clevo-compatible keyboard RGB lighting in the background.\"");
         Run("sc.exe", $"start {ServiceName}", allowFailure: true);
+        if (!WaitForServiceIpcReady(TimeSpan.FromSeconds(15)))
+        {
+            throw new InvalidOperationException("服务已安装，但安全通信通道未能及时启动。请检查服务状态后重试安装。");
+        }
 
         AddTrayStartup();
         RegisterUninstaller();
@@ -404,18 +410,24 @@ internal static class Program
             return;
         }
 
-        try
+        Exception? lastError = null;
+        for (var attempt = 0; attempt < 30; attempt++)
         {
-            Directory.Delete(directory, recursive: true);
+            try
+            {
+                if (!Directory.Exists(directory)) return;
+                Directory.Delete(directory, recursive: true);
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                lastError = ex;
+                Thread.Sleep(250);
+            }
         }
-        catch (IOException)
-        {
-            throw new InvalidOperationException($"Failed to clean old install directory. Close running {AppName} processes and try again: {directory}");
-        }
-        catch (UnauthorizedAccessException)
-        {
-            throw new InvalidOperationException($"Failed to clean old install directory. Close running {AppName} processes and try again: {directory}");
-        }
+
+        throw new InvalidOperationException(
+            $"Failed to clean old install directory after waiting for running processes to exit: {directory}", lastError);
     }
 
     private static void ScheduleDirectoryRemoval(string directory, string operation)
@@ -506,6 +518,7 @@ internal static class Program
         if (File.Exists(settingsPath) && !File.Exists(securityBackup))
             File.Copy(settingsPath, securityBackup);
         Run("icacls.exe", $"\"{ProgramDataDirectory}\" /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F *S-1-5-32-545:(OI)(CI)RX /T /C");
+        Run("icacls.exe", $"\"{Path.Combine(ProgramDataDirectory, "*")}\" /inheritance:e /reset /T /C", allowFailure: true);
     }
 
     private static void ExtractPayload()
@@ -525,10 +538,92 @@ internal static class Program
             return;
         }
 
+        var queryEx = Run("sc.exe", $"queryex {serviceName}", allowFailure: true);
+        var processId = ParseServiceProcessId(queryEx.Output);
         Run("sc.exe", $"stop {serviceName}", allowFailure: true);
-        Thread.Sleep(1500);
-        Run("sc.exe", $"delete {serviceName}");
-        Thread.Sleep(1000);
+        WaitUntil(() =>
+        {
+            var state = Run("sc.exe", $"query {serviceName}", allowFailure: true);
+            return state.ExitCode != 0 || state.Output.Contains("STOPPED", StringComparison.OrdinalIgnoreCase);
+        }, TimeSpan.FromSeconds(15));
+
+        if (processId > 0)
+        {
+            try
+            {
+                using var process = Process.GetProcessById(processId);
+                process.WaitForExit(5000);
+            }
+            catch (ArgumentException)
+            {
+            }
+        }
+
+        Run("sc.exe", $"delete {serviceName}", allowFailure: true);
+        WaitUntil(() => Run("sc.exe", $"query {serviceName}", allowFailure: true).ExitCode != 0,
+            TimeSpan.FromSeconds(10));
+    }
+
+    private static int ParseServiceProcessId(string output)
+    {
+        foreach (var line in output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var separator = line.IndexOf(':');
+            if (separator < 0 || !line[..separator].Contains("PID", StringComparison.OrdinalIgnoreCase)) continue;
+            if (int.TryParse(line[(separator + 1)..].Trim(), out var processId)) return processId;
+        }
+        return 0;
+    }
+
+    private static bool WaitForServiceIpcReady(TimeSpan timeout)
+    {
+        return WaitUntil(() =>
+        {
+            var state = Run("sc.exe", $"query {ServiceName}", allowFailure: true);
+            return state.ExitCode == 0 && state.Output.Contains("RUNNING", StringComparison.OrdinalIgnoreCase) && CanPingServicePipe();
+        }, timeout);
+    }
+
+    private static bool CanPingServicePipe()
+    {
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+            return CanPingServicePipeAsync(timeout.Token).GetAwaiter().GetResult();
+        }
+        catch (Exception ex) when (ex is IOException or TimeoutException or UnauthorizedAccessException or OperationCanceledException)
+        {
+            return false;
+        }
+    }
+
+    private static async Task<bool> CanPingServicePipeAsync(CancellationToken cancellationToken)
+    {
+        using var pipe = new NamedPipeClientStream(".", ServicePipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+        await pipe.ConnectAsync(cancellationToken);
+        var payload = Encoding.UTF8.GetBytes("{\"Version\":1,\"Kind\":\"Ping\",\"Payload\":true}");
+        await pipe.WriteAsync(BitConverter.GetBytes(payload.Length), cancellationToken);
+        await pipe.WriteAsync(payload, cancellationToken);
+        await pipe.FlushAsync(cancellationToken);
+        var lengthBytes = new byte[sizeof(int)];
+        await pipe.ReadExactlyAsync(lengthBytes, cancellationToken);
+        var length = BitConverter.ToInt32(lengthBytes);
+        if (length <= 0 || length > 4096) return false;
+        var responseBytes = new byte[length];
+        await pipe.ReadExactlyAsync(responseBytes, cancellationToken);
+        var response = Encoding.UTF8.GetString(responseBytes);
+        return response.Contains("\"Success\":true", StringComparison.Ordinal);
+    }
+
+    private static bool WaitUntil(Func<bool> condition, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        do
+        {
+            if (condition()) return true;
+            Thread.Sleep(250);
+        } while (DateTime.UtcNow < deadline);
+        return condition();
     }
 
     private static void AddTrayStartup()
@@ -667,8 +762,17 @@ internal static class Program
     {
         foreach (var process in Process.GetProcessesByName("ColorfulLedKeyboard.Tray"))
         {
-            process.Kill(entireProcessTree: true);
-            process.WaitForExit(5000);
+            using (process)
+            {
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                    process.WaitForExit(10000);
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+                {
+                }
+            }
         }
     }
 
