@@ -531,10 +531,11 @@ public sealed class TrayApplicationContext : ApplicationContext
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        catch (Exception ex) when (ex is UpdateCheckException or HttpRequestException or TaskCanceledException or InvalidOperationException)
         {
             var detail = ex switch
             {
+                UpdateCheckException update => update.Message,
                 TaskCanceledException => "连接 GitHub 超时，请稍后重试。",
                 HttpRequestException http when http.StatusCode == System.Net.HttpStatusCode.Forbidden =>
                     "GitHub 暂时限制了更新检查请求，请稍后重试。",

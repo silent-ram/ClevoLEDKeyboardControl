@@ -1,23 +1,57 @@
 using ColorfulLedKeyboard.Core;
 using System.Diagnostics;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text.Json;
+using System.Xml;
+using System.Xml.Linq;
 
 namespace ColorfulLedKeyboard.Tray;
 
 public sealed class UpdateChecker
 {
     private readonly IUpdatePackageVerifier _packageVerifier;
+    private readonly Func<HttpMessageHandler> _httpHandlerFactory;
+    private readonly TimeSpan _requestTimeout;
+    private readonly Func<TimeSpan, CancellationToken, Task> _delayAsync;
+    private readonly Version _currentVersion;
     public const string ReleasesUrl = "https://github.com/silent-ram/ClevoLEDKeyboardControl/releases";
     private const string LatestReleaseUrl = "https://github.com/silent-ram/ClevoLEDKeyboardControl/releases/latest";
+    private const string ReleasesFeedUrl = "https://github.com/silent-ram/ClevoLEDKeyboardControl/releases.atom";
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    public Version CurrentVersion { get; } = Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0, 0);
+    public Version CurrentVersion => _currentVersion;
     public bool CanInstallAutomatically => _packageVerifier.CanInstallAutomatically;
 
-    public UpdateChecker(IUpdatePackageVerifier? packageVerifier = null) =>
-        _packageVerifier = packageVerifier ?? new ManualReleaseVerifier();
+    public UpdateChecker(IUpdatePackageVerifier? packageVerifier = null)
+        : this(
+            packageVerifier ?? new ManualReleaseVerifier(),
+            () => new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                AutomaticDecompression = DecompressionMethods.All,
+                ConnectTimeout = TimeSpan.FromSeconds(10)
+            },
+            Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0, 0),
+            TimeSpan.FromSeconds(15),
+            Task.Delay)
+    {
+    }
+
+    internal UpdateChecker(
+        IUpdatePackageVerifier packageVerifier,
+        Func<HttpMessageHandler> httpHandlerFactory,
+        Version currentVersion,
+        TimeSpan requestTimeout,
+        Func<TimeSpan, CancellationToken, Task>? delayAsync = null)
+    {
+        _packageVerifier = packageVerifier;
+        _httpHandlerFactory = httpHandlerFactory;
+        _currentVersion = currentVersion;
+        _requestTimeout = requestTimeout;
+        _delayAsync = delayAsync ?? Task.Delay;
+    }
 
     public async Task<UpdateCheckResult> CheckAsync(bool force, UpdateCheckInterval interval, CancellationToken cancellationToken = default)
     {
@@ -26,19 +60,9 @@ public sealed class UpdateChecker
             return UpdateCheckResult.Skipped(CurrentVersion);
         }
 
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-        client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("ClevoLEDKeyboardControl", CurrentVersion.ToString(3)));
-        client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/html"));
-
-        // releases/latest 通过普通网页 302 跳转到 /releases/tag/vX.Y.Z，
-        // 不消耗 GitHub REST API 的匿名限额，避免多个用户共享公网 IP 时出现 403。
-        using var response = await client.GetAsync(LatestReleaseUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        response.EnsureSuccessStatusCode();
-        var releaseUrl = response.RequestMessage?.RequestUri?.ToString() ?? LatestReleaseUrl;
-        var tagName = TryGetTagFromReleaseUrl(releaseUrl);
-        var latestVersion = ParseVersion(tagName);
-        if (latestVersion == new Version(0, 0, 0))
-            throw new InvalidOperationException("无法从 GitHub 最新发布地址识别版本号。");
+        var release = await ResolveLatestReleaseAsync(cancellationToken);
+        var releaseUrl = release.ReleaseUrl;
+        var latestVersion = release.Version;
         var state = LoadState() ?? new UpdateCheckState();
         state.LastCheckedUtc = DateTimeOffset.UtcNow;
         state.LastAvailableVersion = latestVersion.CompareTo(CurrentVersion) > 0 ? latestVersion.ToString(3) : null;
@@ -49,6 +73,118 @@ public sealed class UpdateChecker
             ? UpdateCheckResult.Available(CurrentVersion, latestVersion, releaseUrl)
             : UpdateCheckResult.UpToDate(CurrentVersion, latestVersion);
     }
+
+    internal async Task<LatestReleaseInfo> ResolveLatestReleaseAsync(CancellationToken cancellationToken = default)
+    {
+        Exception? redirectFailure = null;
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            try
+            {
+                return await ResolveFromRedirectAsync(cancellationToken);
+            }
+            catch (Exception ex) when (IsRetryable(ex, cancellationToken))
+            {
+                redirectFailure = ex;
+                if (attempt == 0)
+                {
+                    await _delayAsync(TimeSpan.FromMilliseconds(350), cancellationToken);
+                }
+            }
+            catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
+            {
+                redirectFailure = ex;
+                break;
+            }
+        }
+
+        try
+        {
+            return await ResolveFromFeedAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception feedFailure) when (feedFailure is HttpRequestException or TaskCanceledException or InvalidOperationException or XmlException)
+        {
+            throw UpdateCheckException.FromFailures(redirectFailure, feedFailure);
+        }
+    }
+
+    private async Task<LatestReleaseInfo> ResolveFromRedirectAsync(CancellationToken cancellationToken)
+    {
+        using var client = CreateHttpClient("text/html");
+        using var response = await client.GetAsync(LatestReleaseUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+        var releaseUri = response.Headers.Location;
+        if (releaseUri is not null && !releaseUri.IsAbsoluteUri)
+        {
+            releaseUri = new Uri(new Uri(LatestReleaseUrl), releaseUri);
+        }
+
+        if (releaseUri is null && response.IsSuccessStatusCode)
+        {
+            releaseUri = response.RequestMessage?.RequestUri;
+        }
+
+        if (releaseUri is null || ParseVersion(TryGetTagFromReleaseUrl(releaseUri.ToString())) == new Version(0, 0, 0))
+        {
+            response.EnsureSuccessStatusCode();
+            throw new InvalidOperationException("GitHub 最新发布地址未返回有效的版本标签。");
+        }
+
+        var version = ParseVersion(TryGetTagFromReleaseUrl(releaseUri.ToString()));
+        return new LatestReleaseInfo(version, releaseUri.ToString());
+    }
+
+    private async Task<LatestReleaseInfo> ResolveFromFeedAsync(CancellationToken cancellationToken)
+    {
+        using var client = CreateHttpClient("application/atom+xml");
+        using var response = await client.GetAsync(ReleasesFeedUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var reader = XmlReader.Create(stream, new XmlReaderSettings
+        {
+            Async = true,
+            DtdProcessing = DtdProcessing.Prohibit,
+            XmlResolver = null
+        });
+        var document = await XDocument.LoadAsync(reader, LoadOptions.None, cancellationToken);
+        XNamespace atom = "http://www.w3.org/2005/Atom";
+        var entry = document.Root?.Elements(atom + "entry").FirstOrDefault();
+        var releaseUrl = entry?
+            .Elements(atom + "link")
+            .Select(link => (string?)link.Attribute("href"))
+            .FirstOrDefault(url => !string.IsNullOrWhiteSpace(url) && url.Contains("/releases/tag/", StringComparison.OrdinalIgnoreCase));
+        var tag = releaseUrl is null
+            ? entry?.Element(atom + "title")?.Value
+            : TryGetTagFromReleaseUrl(releaseUrl);
+        var version = ParseVersion(tag);
+        if (version == new Version(0, 0, 0))
+        {
+            throw new InvalidOperationException("GitHub 发布源未返回有效的版本标签。");
+        }
+
+        return new LatestReleaseInfo(version, releaseUrl ?? ReleasesUrl);
+    }
+
+    private HttpClient CreateHttpClient(string accept)
+    {
+        var client = new HttpClient(_httpHandlerFactory(), disposeHandler: true)
+        {
+            Timeout = _requestTimeout
+        };
+        client.DefaultRequestHeaders.UserAgent.Add(
+            new ProductInfoHeaderValue("ClevoLEDKeyboardControl", CurrentVersion.ToString(3)));
+        client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue(accept));
+        return client;
+    }
+
+    private static bool IsRetryable(Exception exception, CancellationToken cancellationToken) =>
+        exception is TaskCanceledException && !cancellationToken.IsCancellationRequested ||
+        exception is HttpRequestException { StatusCode: null } ||
+        exception is HttpRequestException { StatusCode: >= HttpStatusCode.InternalServerError };
 
     public static void OpenReleases()
     {
@@ -171,6 +307,61 @@ public sealed class UpdateChecker
         public string? LastAvailableVersion { get; set; }
         public string? LastReleaseUrl { get; set; }
         public string? LastPromptedVersion { get; set; }
+    }
+}
+
+internal sealed record LatestReleaseInfo(Version Version, string ReleaseUrl);
+
+public enum UpdateCheckFailureKind
+{
+    Timeout,
+    HttpStatus,
+    Network,
+    InvalidResponse
+}
+
+public sealed class UpdateCheckException : Exception
+{
+    public UpdateCheckFailureKind Kind { get; }
+    public HttpStatusCode? StatusCode { get; }
+
+    private UpdateCheckException(
+        string message,
+        UpdateCheckFailureKind kind,
+        HttpStatusCode? statusCode,
+        Exception innerException)
+        : base(message, innerException)
+    {
+        Kind = kind;
+        StatusCode = statusCode;
+    }
+
+    internal static UpdateCheckException FromFailures(Exception? redirectFailure, Exception feedFailure)
+    {
+        var failures = new[] { feedFailure, redirectFailure }.Where(exception => exception is not null).Cast<Exception>();
+        var timeout = failures.FirstOrDefault(exception => exception is TaskCanceledException);
+        if (timeout is not null)
+        {
+            return new UpdateCheckException("连接 GitHub 超时，请检查网络或代理后重试。", UpdateCheckFailureKind.Timeout, null, timeout);
+        }
+
+        var http = failures.OfType<HttpRequestException>().FirstOrDefault(exception => exception.StatusCode.HasValue);
+        if (http is not null)
+        {
+            return new UpdateCheckException(
+                $"GitHub 返回状态码 {(int)http.StatusCode!.Value}，请稍后重试。",
+                UpdateCheckFailureKind.HttpStatus,
+                http.StatusCode,
+                http);
+        }
+
+        var network = failures.OfType<HttpRequestException>().FirstOrDefault();
+        if (network is not null)
+        {
+            return new UpdateCheckException("无法连接 GitHub，请检查网络、DNS 或代理设置。", UpdateCheckFailureKind.Network, null, network);
+        }
+
+        return new UpdateCheckException("无法识别 GitHub 最新版本信息，请稍后重试。", UpdateCheckFailureKind.InvalidResponse, null, feedFailure);
     }
 }
 
