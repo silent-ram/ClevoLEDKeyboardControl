@@ -1,4 +1,5 @@
 using ColorfulLedKeyboard.Core;
+using ColorfulLedKeyboard.Tray;
 
 namespace ColorfulLedKeyboard.Tests;
 
@@ -93,6 +94,74 @@ public sealed class AutomationSettingsTests
 
         Assert.Null(state.Find(new MusicPlayerBinding { ProcessName = "" }));
         Assert.Null(state.Find(new MusicPlayerBinding { ProcessName = "browser" }));
+    }
+
+    [Fact]
+    public void AutomaticMediaBinding_IgnoresOtherPlayers()
+    {
+        var state = new MediaPlaybackState
+        {
+            Sessions =
+            [
+                new MediaSessionState { SourceId = "QQMusic.exe", Title = "QQ", IsPlaying = false },
+                new MediaSessionState { SourceId = "Spotify.exe", Title = "Spotify", IsPlaying = true }
+            ]
+        };
+
+        Assert.Equal("QQ", state.Find(new MusicPlayerBinding { ProcessName = "QQMusic" })?.Title);
+        Assert.Null(state.Find(new MusicPlayerBinding { ProcessName = "cloudmusic" }));
+    }
+
+    [Fact]
+    public void AutomaticMediaBinding_UsesWindowsApplicationIdentityForPackagedPlayers()
+    {
+        var state = new MediaPlaybackState
+        {
+            Sessions =
+            [
+                new MediaSessionState
+                {
+                    SourceId = "Publisher.Package_family!Player",
+                    ProcessNames = ["CustomPlayer"],
+                    Title = "正确歌曲"
+                },
+                new MediaSessionState { SourceId = "OtherPlayer.exe", Title = "错误歌曲", IsPlaying = true }
+            ]
+        };
+
+        Assert.Equal("正确歌曲", state.Find(new MusicPlayerBinding { ProcessName = "CustomPlayer.exe" })?.Title);
+    }
+
+    [Fact]
+    public void WindowsApplicationIdentityLookup_IsAvailableOnSupportedWindows()
+    {
+        var exception = Record.Exception(() => MediaSessionProcessMapper.GetAppUserModelId(Environment.ProcessId));
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void MediaSessionCache_RecognizesRunningClassicPlayerProcess()
+    {
+        using var current = System.Diagnostics.Process.GetCurrentProcess();
+        var session = new MediaSessionState { SourceId = current.ProcessName + ".exe" };
+
+        Assert.True(MediaSessionProcessMapper.IsSourceProcessRunning(session));
+        Assert.False(MediaSessionProcessMapper.IsSourceProcessRunning(
+            new MediaSessionState { SourceId = "definitely-not-running-player.exe" }));
+    }
+
+    [Fact]
+    public void MediaSessionProcessMapping_DoesNotRequireExeSuffixOrKnownPlayerName()
+    {
+        using var current = System.Diagnostics.Process.GetCurrentProcess();
+        var source = current.ProcessName;
+
+        var mapping = MediaSessionProcessMapper.Resolve([source]);
+
+        Assert.Contains(current.ProcessName, mapping[source], StringComparer.OrdinalIgnoreCase);
+        Assert.True(MediaSessionProcessMapper.IsSourceProcessRunning(
+            new MediaSessionState { SourceId = source }));
     }
 
     [Fact]

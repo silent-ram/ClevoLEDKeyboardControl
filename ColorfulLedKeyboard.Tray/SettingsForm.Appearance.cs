@@ -166,6 +166,7 @@ public sealed partial class SettingsForm
         UpdateStatusHeader();
         UpdateMusicPresetEditState();
         UpdateSaveBar();
+        if (_updateAvailableStatus.Visible) _updateAvailableStatus.LinkColor = ThemeManager.Current.Error;
         Invalidate(true);
     }
 
