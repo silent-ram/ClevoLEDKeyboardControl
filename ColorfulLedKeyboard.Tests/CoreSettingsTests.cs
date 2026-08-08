@@ -399,6 +399,29 @@ public sealed class CoreSettingsTests
     }
 
     [Fact]
+    public void MusicSettings_ApplyPreset_SwitchesBeatDetectionWithPreset()
+    {
+        var settings = new MusicSettings();
+        var beatPreset = new MusicPreset { Name = "鼓点", EqEnabled = true };
+        var rhythmPreset = new MusicPreset { Name = "律动", EqEnabled = false };
+
+        settings.ApplyPreset(beatPreset);
+        Assert.True(settings.EqEnabled);
+
+        settings.ApplyPreset(rhythmPreset);
+        Assert.False(settings.EqEnabled);
+    }
+
+    [Theory]
+    [InlineData(false, 0)]
+    [InlineData(true, 1)]
+    public void SettingsForm_MusicResponseIndex_MapsBeatDetection(bool enabled, int expectedIndex)
+    {
+        Assert.Equal(expectedIndex, ColorfulLedKeyboard.Tray.SettingsForm.MusicResponseIndex(enabled));
+        Assert.Equal(enabled, ColorfulLedKeyboard.Tray.SettingsForm.MusicResponseUsesBeatDetection(expectedIndex));
+    }
+
+    [Fact]
     public void MusicSettings_Normalize_BackfillsColorListFromLegacyLowHighColors()
     {
         var settings = new MusicSettings
@@ -710,22 +733,44 @@ public sealed class CoreSettingsTests
     }
 
     [Fact]
-    public void EffectPresetSettings_SoftwareDefaults_UseThreeSecondPeriod()
+    public void EffectPresetSettings_SoftwareDefaults_UseRequestedInstallColorsAndPeriods()
     {
+        var expectedColors = new[] { "#FF0000", "#FFFF00", "#00FF00", "#00FFFF", "#0000FF", "#FF00FF" };
+        var @static = EffectPresetSettings.CreateSoftwareDefault(EffectType.Static);
         var rainbow = EffectPresetSettings.CreateSoftwareDefault(EffectType.Rainbow);
         var breathing = EffectPresetSettings.CreateSoftwareDefault(EffectType.Breathing);
         var sequence = EffectPresetSettings.CreateSoftwareDefault(EffectType.Sequence);
         var pulse = EffectPresetSettings.CreateSoftwareDefault(EffectType.Pulse);
         var heartbeat = EffectPresetSettings.CreateSoftwareDefault(EffectType.Heartbeat);
 
+        Assert.Equal("#FF0000", @static.Color);
+        Assert.Equal("#FF0000", breathing.Color);
+        Assert.Equal(expectedColors, rainbow.Sequence.Select(item => item.Color));
         Assert.All(rainbow.Sequence, item => Assert.Equal(3000, item.HoldMs));
         Assert.Equal(3000, breathing.PeriodMs);
         Assert.Equal(3000, sequence.PeriodMs);
+        Assert.Equal(expectedColors, sequence.Sequence.Select(item => item.Color));
         Assert.All(sequence.Sequence, item => Assert.Equal(3000, item.HoldMs));
         Assert.Equal(2000, pulse.PeriodMs);
-        Assert.Equal(["#00FFFF", "#0060FF", "#8000FF"], pulse.Sequence.Select(item => item.Color).ToArray());
+        Assert.Equal(expectedColors, pulse.Sequence.Select(item => item.Color));
         Assert.Equal(1500, heartbeat.PeriodMs);
-        Assert.Equal(["#FF0000", "#FF4080"], heartbeat.Sequence.Select(item => item.Color).ToArray());
+        Assert.Equal(expectedColors, heartbeat.Sequence.Select(item => item.Color));
+    }
+
+    [Fact]
+    public void KeyboardSettings_NewInstall_UsesRequestedEventFeedbackDefaults()
+    {
+        var settings = new KeyboardSettings().Normalize();
+
+        Assert.True(settings.TypingPulse.Enabled);
+        Assert.Equal(100, settings.TypingPulse.PeakBrightness);
+        Assert.Equal(80, settings.TypingPulse.HoldMs);
+        Assert.Equal(70, settings.TypingPulse.FadeMs);
+        Assert.Equal("#FF0000", settings.NotificationFlash.Color);
+        Assert.Equal(2, settings.NotificationFlash.Pulses);
+        Assert.Equal(2, settings.NotificationFlash.CooldownSeconds);
+        Assert.Equal(EffectType.Rainbow, settings.Effect.Type);
+        Assert.Equal(EffectPresetSettings.DefaultSequenceColors, settings.Effect.Sequence.Select(item => item.Color));
     }
 
     [Fact]

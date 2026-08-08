@@ -19,10 +19,7 @@ public sealed class LightingEffectSettings
     public bool CustomSequenceColorsEnabled { get; set; }
 
     public List<SequenceColor> Sequence { get; set; } =
-    [
-        new SequenceColor { Color = "#FF0000" },
-        new SequenceColor { Color = "#0000FF" }
-    ];
+        CreateDefaultSequence();
 
     public MusicSettings Music { get; set; } = new();
 
@@ -56,12 +53,17 @@ public sealed class LightingEffectSettings
             return normalized;
         }
 
-        return
-        [
-            new SequenceColor { Color = "#FF0000" },
-            new SequenceColor { Color = "#0000FF" }
-        ];
+        return CreateDefaultSequence();
     }
+
+    private static List<SequenceColor> CreateDefaultSequence() =>
+        EffectPresetSettings.DefaultSequenceColors.Select(color => new SequenceColor
+        {
+            Color = color,
+            HoldMs = EffectPresetSettings.DefaultPeriodMs,
+            TransitionMs = 0,
+            Breathing = false
+        }).ToList();
 
     internal static string NormalizeHex(string value, string fallback)
     {

@@ -16,7 +16,7 @@ public sealed class KeyboardSettings
 
     public OperatingMode OperatingMode { get; set; } = OperatingMode.Lighting;
 
-    public LightingEffectSettings Effect { get; set; } = new();
+    public LightingEffectSettings Effect { get; set; } = EffectPresetSettings.CreateSoftwareDefault(EffectType.Rainbow);
 
     public EffectMemorySettings SavedEffects { get; set; } = new();
 
@@ -431,35 +431,16 @@ public sealed class KeyboardSettings
 public sealed class EffectMemorySettings
 {
     public LightingEffectSettings Static { get; set; } =
-        new() { Type = EffectType.Static, Color = "#FF0000" };
+        EffectPresetSettings.CreateSoftwareDefault(EffectType.Static);
 
     public LightingEffectSettings Rainbow { get; set; } =
-        new()
-        {
-            Type = EffectType.Rainbow,
-            PeriodMs = EffectPresetSettings.DefaultPeriodMs,
-            CustomSequenceColorsEnabled = true,
-            Sequence =
-            [
-                new SequenceColor { Color = "#FF0000", HoldMs = EffectPresetSettings.DefaultPeriodMs, TransitionMs = 0, Breathing = false },
-                new SequenceColor { Color = "#0000FF", HoldMs = EffectPresetSettings.DefaultPeriodMs, TransitionMs = 0, Breathing = false }
-            ]
-        };
+        EffectPresetSettings.CreateSoftwareDefault(EffectType.Rainbow);
 
     public LightingEffectSettings Breathing { get; set; } =
-        new() { Type = EffectType.Breathing, Color = "#FF0000", PeriodMs = EffectPresetSettings.DefaultPeriodMs };
+        EffectPresetSettings.CreateSoftwareDefault(EffectType.Breathing);
 
     public LightingEffectSettings Sequence { get; set; } =
-        new()
-        {
-            Type = EffectType.Sequence,
-            PeriodMs = EffectPresetSettings.DefaultPeriodMs,
-            Sequence =
-            [
-                new SequenceColor { Color = "#FF0000", HoldMs = EffectPresetSettings.DefaultPeriodMs, TransitionMs = 0, Breathing = true },
-                new SequenceColor { Color = "#0000FF", HoldMs = EffectPresetSettings.DefaultPeriodMs, TransitionMs = 0, Breathing = true }
-            ]
-        };
+        EffectPresetSettings.CreateSoftwareDefault(EffectType.Sequence);
 
     public LightingEffectSettings Pulse { get; set; } =
         EffectPresetSettings.CreateSoftwareDefault(EffectType.Pulse);
@@ -493,9 +474,7 @@ public sealed class EffectMemorySettings
 
     private static LightingEffectSettings NormalizeForType(LightingEffectSettings? effect, EffectType type)
     {
-        effect ??= type is EffectType.Pulse or EffectType.Heartbeat
-            ? EffectPresetSettings.CreateSoftwareDefault(type)
-            : new LightingEffectSettings();
+        effect ??= EffectPresetSettings.CreateSoftwareDefault(type);
         effect.Type = type;
         return effect.Normalize();
     }
@@ -507,6 +486,8 @@ public sealed class EffectPresetSettings
     public const int DefaultPulsePeriodMs = 2000;
     public const int DefaultHeartbeatPeriodMs = 1500;
     public const int MaxPresetsPerMode = 16;
+    public static IReadOnlyList<string> DefaultSequenceColors { get; } =
+        ["#FF0000", "#FFFF00", "#00FF00", "#00FFFF", "#0000FF", "#FF00FF"];
 
     public static string BuiltInId(EffectType type) => $"builtin:lighting:{type.ToString().ToLowerInvariant()}";
 
@@ -565,52 +546,40 @@ public sealed class EffectPresetSettings
             {
                 Type = EffectType.Sequence,
                 PeriodMs = DefaultPeriodMs,
-                Sequence =
-                [
-                    new SequenceColor { Color = "#FF0000", HoldMs = DefaultPeriodMs, TransitionMs = 0, Breathing = true },
-                    new SequenceColor { Color = "#0000FF", HoldMs = DefaultPeriodMs, TransitionMs = 0, Breathing = true }
-                ]
+                Sequence = CreateDefaultSequence(DefaultPeriodMs, breathing: true)
             },
             EffectType.Pulse => new LightingEffectSettings
             {
                 Type = EffectType.Pulse,
                 PeriodMs = DefaultPulsePeriodMs,
-                Sequence =
-                [
-                    new SequenceColor { Color = "#00FFFF", HoldMs = DefaultPulsePeriodMs, TransitionMs = 0, Breathing = false },
-                    new SequenceColor { Color = "#0060FF", HoldMs = DefaultPulsePeriodMs, TransitionMs = 0, Breathing = false },
-                    new SequenceColor { Color = "#8000FF", HoldMs = DefaultPulsePeriodMs, TransitionMs = 0, Breathing = false }
-                ]
+                Sequence = CreateDefaultSequence(DefaultPulsePeriodMs, breathing: false)
             },
             EffectType.Heartbeat => new LightingEffectSettings
             {
                 Type = EffectType.Heartbeat,
                 PeriodMs = DefaultHeartbeatPeriodMs,
-                Sequence =
-                [
-                    new SequenceColor { Color = "#FF0000", HoldMs = DefaultHeartbeatPeriodMs, TransitionMs = 0, Breathing = false },
-                    new SequenceColor { Color = "#FF4080", HoldMs = DefaultHeartbeatPeriodMs, TransitionMs = 0, Breathing = false }
-                ]
+                Sequence = CreateDefaultSequence(DefaultHeartbeatPeriodMs, breathing: false)
             },
             _ => new LightingEffectSettings
             {
                 Type = EffectType.Rainbow,
                 PeriodMs = DefaultPeriodMs,
                 CustomSequenceColorsEnabled = true,
-                Sequence =
-                [
-                    new SequenceColor { Color = "#FF0000", HoldMs = DefaultPeriodMs, TransitionMs = 0, Breathing = false },
-                    new SequenceColor { Color = "#FFFF00", HoldMs = DefaultPeriodMs, TransitionMs = 0, Breathing = false },
-                    new SequenceColor { Color = "#00FF00", HoldMs = DefaultPeriodMs, TransitionMs = 0, Breathing = false },
-                    new SequenceColor { Color = "#00FFFF", HoldMs = DefaultPeriodMs, TransitionMs = 0, Breathing = false },
-                    new SequenceColor { Color = "#0000FF", HoldMs = DefaultPeriodMs, TransitionMs = 0, Breathing = false },
-                    new SequenceColor { Color = "#FF00FF", HoldMs = DefaultPeriodMs, TransitionMs = 0, Breathing = false }
-                ]
+                Sequence = CreateDefaultSequence(DefaultPeriodMs, breathing: false)
             }
         };
 
         return effect.Normalize();
     }
+
+    private static List<SequenceColor> CreateDefaultSequence(int holdMs, bool breathing) =>
+        DefaultSequenceColors.Select(color => new SequenceColor
+        {
+            Color = color,
+            HoldMs = holdMs,
+            TransitionMs = 0,
+            Breathing = breathing
+        }).ToList();
 
     private static List<EffectPreset> NormalizeList(List<EffectPreset>? presets, EffectType type)
     {

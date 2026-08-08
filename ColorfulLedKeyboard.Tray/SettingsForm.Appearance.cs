@@ -164,6 +164,7 @@ public sealed partial class SettingsForm
         _themeQuickButton.Text = $"主题：{ThemeQuickName(ThemeManager.CurrentKind)}  ▾";
         UpdateModeAvailability();
         UpdateStatusHeader();
+        UpdateMusicPresetEditState();
         UpdateSaveBar();
         Invalidate(true);
     }
@@ -248,7 +249,9 @@ public sealed partial class SettingsForm
     private void UpdateSaveBar()
     {
         var dirty = HasUnsavedChanges;
-        _dirtyLabel.Text = dirty ? "● 有尚未保存的修改" : "✓ 设置已保存";
+        _dirtyLabel.Text = _musicPresetChanged
+            ? "● 音乐预设尚未保存，请先点击页面内的“保存预设修改”"
+            : dirty ? "● 有尚未保存的修改" : "✓ 设置已保存";
         _dirtyLabel.ForeColor = dirty ? ThemeManager.Current.Warning : ThemeManager.Current.Success;
         _applyButton.Enabled = dirty;
         _revertButton.Enabled = dirty;

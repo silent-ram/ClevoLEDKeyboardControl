@@ -281,6 +281,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             color.DropDownItems.Add(item);
         }
         parent.DropDownItems.Add(color);
+        parent.DropDownItems.Add(BuildMusicResponseMenu());
         var clear = new ToolStripMenuItem("取消绑定") { Enabled = binding.Enabled };
         clear.Click += (_, _) => ApplyEffect(settings => settings.Effect.Music.PlayerBinding = new MusicPlayerBinding());
         parent.DropDownItems.Add(clear);
@@ -289,6 +290,34 @@ public sealed class TrayApplicationContext : ApplicationContext
         open.Click += (_, _) => OpenSettings();
         parent.DropDownItems.Add(open);
         return parent;
+    }
+
+    private ToolStripMenuItem BuildMusicResponseMenu()
+    {
+        var beatDetectionEnabled = _settings.Effect.Music.EqEnabled;
+        var current = beatDetectionEnabled ? "鼓点响应" : "节奏律动";
+        var parent = new ToolStripMenuItem($"音乐响应（{current}）");
+
+        AddMusicResponseItem(parent, "节奏律动", beatDetectionEnabled: false);
+        AddMusicResponseItem(parent, "鼓点响应", beatDetectionEnabled: true);
+        return parent;
+    }
+
+    private void AddMusicResponseItem(ToolStripMenuItem parent, string label, bool beatDetectionEnabled)
+    {
+        var item = new ToolStripMenuItem(label)
+        {
+            Checked = _settings.Effect.Music.EqEnabled == beatDetectionEnabled
+        };
+        item.Click += (_, _) => ApplyEffect(settings =>
+        {
+            settings.Enabled = true;
+            settings.OperatingMode = OperatingMode.Music;
+            settings.Effect.Music.ResponseMode = MusicResponseMode.LevelColor;
+            settings.Effect.Music.LevelColorEnabled = true;
+            settings.Effect.Music.EqEnabled = beatDetectionEnabled;
+        });
+        parent.DropDownItems.Add(item);
     }
 
     private ToolStripMenuItem BuildEventFeedbackMenu()
