@@ -19,6 +19,7 @@ internal static class UiMetrics
 
 public sealed partial class SettingsForm : ThemedForm
 {
+    private const int SoftwareSettingsPageIndex = 6;
     private const int DefaultRainbowHoldMs = EffectPresetSettings.DefaultPeriodMs;
     private const string SoftwareDefaultPresetName = "软件默认配置";
     private const string UnsavedEffectPresetName = "当前设置（未保存为预设）";
@@ -26,7 +27,7 @@ public sealed partial class SettingsForm : ThemedForm
     private readonly RadioButton _modeLighting = new() { Text = "灯效模式", AutoSize = true };
     private readonly RadioButton _modeMusic = new() { Text = "音乐模式", AutoSize = true };
     private readonly RadioButton _modeOff = new() { Text = "关闭", AutoSize = true };
-    private ListBox? _navigation;
+    private NavigationListBox? _navigation;
     private readonly ComboBox _effectType = new();
     private readonly SliderRow _brightness = new("全局亮度", 0, 100, "%");
     private readonly ComboBox _speed = new();
@@ -127,6 +128,12 @@ public sealed partial class SettingsForm : ThemedForm
     private readonly PalettePreviewControl _musicPalettePreview = new();
     private readonly System.Windows.Forms.Timer _automationStatusTimer = new() { Interval = 1000 };
     private readonly ComboBox _updateInterval = new();
+    private readonly LinkLabel _updateAvailableStatus = new()
+    {
+        AutoSize = true,
+        Visible = false
+    };
+    private Panel? _updateAvailableStatusRow;
     private readonly Label _serviceSummary = new();
     private readonly Label _componentSummary = new();
     private readonly Label _controlSummary = new();
@@ -138,6 +145,11 @@ public sealed partial class SettingsForm : ThemedForm
     private EffectType _lastSelectedEffectType = EffectType.Rainbow;
     private List<MusicPreset> _musicCustomPresets = [];
     private MusicPlayerBinding _musicPlayerBinding = new();
+    private bool _refreshingMusicMediaSessions;
+    private readonly Action _requestMediaSessionRefresh;
+    private readonly Func<Task<UpdateCheckResult?>>? _checkUpdatesSilently;
+    private string? _updateReleaseUrl;
+    private int _checkingUpdates;
     private bool _loadingSettings;
     private bool _effectChangedByUser;
     private bool _loadingEffectPreset;
@@ -147,9 +159,14 @@ public sealed partial class SettingsForm : ThemedForm
     private bool _musicPresetChangesStaged;
     private bool _customSequenceColorsEnabled;
 
-    public SettingsForm(SettingsStore settingsStore)
+    public SettingsForm(
+        SettingsStore settingsStore,
+        Action? requestMediaSessionRefresh = null,
+        Func<Task<UpdateCheckResult?>>? checkUpdatesSilently = null)
     {
         _settingsStore = settingsStore;
+        _requestMediaSessionRefresh = requestMediaSessionRefresh ?? (() => { });
+        _checkUpdatesSilently = checkUpdatesSilently;
         _uiStateStore = UiStateStore.Shared;
         _initialUiState = _uiStateStore.Load().Clone();
         Text = "ClevoLEDKeyboardControl 设置";
@@ -157,6 +174,10 @@ public sealed partial class SettingsForm : ThemedForm
         RestoreWindowState(_initialUiState);
 
         BuildUi();
+        _updateAvailableStatus.LinkClicked += (_, _) =>
+        {
+            if (!string.IsNullOrWhiteSpace(_updateReleaseUrl)) UpdateChecker.OpenUrl(_updateReleaseUrl);
+        };
         WireDirtyTracking(this);
         _typingPulseEnabled.CheckedChanged += (_, _) => UpdateEventFeedbackVisibility();
         _notificationFlashEnabled.CheckedChanged += (_, _) => UpdateEventFeedbackVisibility();
@@ -481,7 +502,7 @@ public sealed partial class SettingsForm : ThemedForm
         _musicMediaSession.SelectedIndex = 0;
         _musicMediaSession.SelectedIndexChanged += (_, _) =>
         {
-            if (_loadingSettings || _musicMediaSession.SelectedIndex < 0) return;
+            if (_loadingSettings || _refreshingMusicMediaSessions || _musicMediaSession.SelectedIndex < 0) return;
             _musicPlayerBinding.MediaSessionId = _musicMediaSession.SelectedIndex == 0
                 ? ""
                 : _musicMediaSession.SelectedItem?.ToString() ?? "";
@@ -548,8 +569,8 @@ public sealed partial class SettingsForm : ThemedForm
         _musicPlayerBinding.ProcessName = selected.ProcessName;
         _musicPlayerBinding.ExecutablePath = selected.ExecutablePath;
         _musicPlayerBinding.IncludeChildProcesses = true;
-        _musicPlayerBinding.MediaSessionId = MediaPlaybackState.Load()?.Sessions.FirstOrDefault(session =>
-            session.SourceId.Contains(selected.ProcessName, StringComparison.OrdinalIgnoreCase))?.SourceId ?? "";
+        _musicPlayerBinding.MediaSessionId = "";
+        _requestMediaSessionRefresh();
         RefreshMusicMediaSessions(_musicPlayerBinding.MediaSessionId);
         RefreshMusicBindingStatus();
         Text = "ClevoLEDKeyboardControl 设置 - 有未应用的更改";
@@ -613,10 +634,17 @@ public sealed partial class SettingsForm : ThemedForm
             var candidates = mediaState?.Sessions.Select(item => item.SourceId)
                 .Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.OrdinalIgnoreCase).ToList() ?? [];
             var automatic = string.IsNullOrWhiteSpace(_musicPlayerBinding.MediaSessionId);
+            var matchingCandidates = mediaState?.Sessions.Where(session =>
+                    MediaPlaybackState.SessionMatchesProcess(session, _musicPlayerBinding.ProcessName))
+                .Select(session => session.SourceId).Distinct(StringComparer.OrdinalIgnoreCase).ToList() ?? [];
+            var otherPlayers = candidates.Where(id => !matchingCandidates.Contains(id, StringComparer.OrdinalIgnoreCase)).ToList();
             _musicMediaMatchStatus.Text = candidates.Count == 0
                 ? "媒体会话：尚未检测到 Windows 播放器会话，请先播放歌曲。"
                 : automatic
-                    ? $"媒体会话：自动匹配失败；当前可用：{string.Join("、", candidates)}。可在上方改为手动选择。"
+                    ? matchingCandidates.Count > 0
+                        ? $"媒体会话：检测到多个可能属于 {_musicPlayerBinding.ProcessName} 的来源（{string.Join("、", matchingCandidates)}），请在上方手动选择。"
+                        : $"媒体会话：{_musicPlayerBinding.ProcessName} 未提供可识别的 Windows 媒体会话。" +
+                          (otherPlayers.Count == 0 ? "" : $"检测到的 {string.Join("、", otherPlayers)} 属于其他播放器，不会使用。")
                     : $"媒体会话：选择的会话当前不可用；当前可用：{string.Join("、", candidates)}。";
             _musicMediaMatchStatus.ForeColor = ThemeManager.Current.Error;
         }
@@ -634,14 +662,26 @@ public sealed partial class SettingsForm : ThemedForm
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(source => source, StringComparer.OrdinalIgnoreCase)
             .ToList() ?? [];
-        _musicMediaSession.Items.Clear();
-        _musicMediaSession.Items.Add("自动匹配播放器");
-        foreach (var source in sources) _musicMediaSession.Items.Add(source);
-        var index = string.IsNullOrWhiteSpace(selectedSource)
+        if (!string.IsNullOrWhiteSpace(selectedSource) && !sources.Contains(selectedSource, StringComparer.OrdinalIgnoreCase))
+            sources.Add(selectedSource);
+        var desiredItems = new[] { "自动匹配播放器" }.Concat(sources).ToList();
+        var currentItems = _musicMediaSession.Items.Cast<object>().Select(item => item?.ToString() ?? "").ToList();
+        var desiredIndex = string.IsNullOrWhiteSpace(selectedSource)
             ? 0
-            : Enumerable.Range(1, _musicMediaSession.Items.Count - 1)
-                .FirstOrDefault(i => string.Equals(_musicMediaSession.Items[i]?.ToString(), selectedSource, StringComparison.OrdinalIgnoreCase));
-        _musicMediaSession.SelectedIndex = index;
+            : desiredItems.FindIndex(item => string.Equals(item, selectedSource, StringComparison.OrdinalIgnoreCase));
+        if (currentItems.SequenceEqual(desiredItems, StringComparer.OrdinalIgnoreCase) &&
+            _musicMediaSession.SelectedIndex == Math.Max(0, desiredIndex)) return;
+        _refreshingMusicMediaSessions = true;
+        try
+        {
+            _musicMediaSession.Items.Clear();
+            foreach (var item in desiredItems) _musicMediaSession.Items.Add(item);
+            _musicMediaSession.SelectedIndex = Math.Max(0, desiredIndex);
+        }
+        finally
+        {
+            _refreshingMusicMediaSessions = false;
+        }
     }
 
     private Panel BuildAutomationPage()
@@ -813,9 +853,41 @@ public sealed partial class SettingsForm : ThemedForm
         var folderActions = new FlowLayoutPanel { Width = ContentWidth, Height = 46, FlowDirection = FlowDirection.LeftToRight };
         folderActions.Controls.AddRange([openFolder, reset]);
         page.Controls.Add(BuildThemeSelector());
-        page.Controls.Add(new UiCard("自动更新", Row("自动检查更新", _updateInterval)));
+        _updateAvailableStatusRow = PlainRow(_updateAvailableStatus);
+        _updateAvailableStatusRow.Visible = false;
+        page.Controls.Add(new UiCard("自动更新", Row("自动检查更新", _updateInterval), _updateAvailableStatusRow));
         page.Controls.Add(new UiCard("配置管理", configActions, Row("配置文件", configPath), folderActions));
         return page;
+    }
+
+    internal async Task CheckForUpdatesNowAsync()
+    {
+        if (_checkUpdatesSilently is null || Interlocked.Exchange(ref _checkingUpdates, 1) != 0) return;
+        try
+        {
+            var result = await _checkUpdatesSilently();
+            if (!IsDisposed) ApplyUpdateAvailability(result);
+        }
+        catch
+        {
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _checkingUpdates, 0);
+        }
+    }
+
+    private void ApplyUpdateAvailability(UpdateCheckResult? result)
+    {
+        var available = result?.Status == UpdateCheckStatus.Available && result.LatestVersion is not null;
+        _updateReleaseUrl = available ? result!.ReleaseUrl : null;
+        _updateAvailableStatus.Text = available
+            ? $"发现新版本 v{result!.LatestVersion!.ToString(3)}，点击打开下载页面"
+            : "";
+        _updateAvailableStatus.Visible = available;
+        if (_updateAvailableStatusRow is not null) _updateAvailableStatusRow.Visible = available;
+        _updateAvailableStatus.LinkColor = ThemeManager.Current.Error;
+        _navigation?.SetBadge(SoftwareSettingsPageIndex, available ? "新版本" : null);
     }
 
     private void LoadSettings()
@@ -2336,6 +2408,7 @@ public sealed partial class SettingsForm : ThemedForm
 
     private void UpdateAutomationStatus()
     {
+        RefreshMusicMediaSessions();
         var status = AutomationStatus.Load();
         if (status is null || DateTimeOffset.UtcNow - status.UpdatedUtc > TimeSpan.FromSeconds(10))
         {
@@ -3119,8 +3192,7 @@ internal sealed class SceneAutomationEditorV2 : UserControl
             Name = picker.Selected.ProcessName,
             ProcessName = picker.Selected.ProcessName,
             ExecutablePath = picker.Selected.ExecutablePath,
-            MediaSessionId = MediaPlaybackState.Load()?.Sessions.FirstOrDefault(session =>
-                session.SourceId.Contains(picker.Selected.ProcessName, StringComparison.OrdinalIgnoreCase))?.SourceId ?? ""
+            MediaSessionId = ""
         }.Normalize();
         using var dialog = AutomationRuleDialog.ForMusic(rule, _musicPresets);
         if (dialog.ShowDialog() != DialogResult.OK) return;

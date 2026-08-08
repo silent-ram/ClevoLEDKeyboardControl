@@ -27,15 +27,31 @@ public sealed class MediaPlaybackState
     {
         if (string.IsNullOrWhiteSpace(processName)) return null;
         var normalized = AppProfileRule.NormalizeProcessName(processName);
-        var matches = Sessions.Where(item =>
-            item.SourceId.Contains(normalized, StringComparison.OrdinalIgnoreCase)).ToList();
+        var matches = Sessions.Where(item => SessionMatchesProcess(item, normalized)).ToList();
         // 未绑定时只接受唯一候选；多个相似 SourceId 的置信度不足，避免套用错误封面。
         return matches.Count == 1 ? BestSession(item => ReferenceEquals(item, matches[0])) : null;
+    }
+
+    public static bool SourceMatchesProcess(string sourceId, string processName)
+    {
+        var normalized = AppProfileRule.NormalizeProcessName(processName);
+        return !string.IsNullOrWhiteSpace(normalized) &&
+            (string.Equals(AppProfileRule.NormalizeProcessName(sourceId), normalized, StringComparison.OrdinalIgnoreCase) ||
+             sourceId.Contains(normalized, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public static bool SessionMatchesProcess(MediaSessionState session, string processName)
+    {
+        var normalized = AppProfileRule.NormalizeProcessName(processName);
+        return (session.ProcessNames ?? []).Any(name =>
+                   string.Equals(AppProfileRule.NormalizeProcessName(name), normalized, StringComparison.OrdinalIgnoreCase)) ||
+               SourceMatchesProcess(session.SourceId, normalized);
     }
 
     private MediaSessionState? BestSession(Func<MediaSessionState, bool> matches) =>
         Sessions.Where(matches)
             .OrderByDescending(item => item.IsPlaying)
+            .ThenByDescending(item => item.IsCurrent)
             .ThenByDescending(item => item.Palette.Count > 0 || !string.IsNullOrWhiteSpace(item.DominantColor))
             .FirstOrDefault();
 
@@ -75,6 +91,8 @@ public sealed class MediaSessionState
     public string Artist { get; set; } = "";
     public string TrackId { get; set; } = "";
     public bool IsPlaying { get; set; }
+    public bool IsCurrent { get; set; }
+    public List<string> ProcessNames { get; set; } = [];
     public string DominantColor { get; set; } = "";
     public List<string> Palette { get; set; } = [];
 }

@@ -18,7 +18,6 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly System.Windows.Forms.Timer _foregroundTimer = new() { Interval = 1000 };
     private readonly System.Windows.Forms.Timer _trayStatusTimer = new() { Interval = 2000 };
     private readonly System.Windows.Forms.Timer _updateTimer = new() { Interval = 6 * 60 * 60 * 1000 };
-    private string? _balloonReleaseUrl;
     private string? _lastForegroundProcess;
     private DateTimeOffset _lastForegroundStateSaved = DateTimeOffset.MinValue;
     private KeyboardSettings _settings;
@@ -44,7 +43,6 @@ public sealed class TrayApplicationContext : ApplicationContext
         };
 
         _notifyIcon.DoubleClick += (_, _) => OpenSettings();
-        _notifyIcon.BalloonTipClicked += (_, _) => OpenBalloonRelease();
         ThemeManager.ThemeChanged += OnThemeChanged;
         _foregroundTimer.Tick += (_, _) => UpdateForegroundAppState();
         _foregroundTimer.Start();
@@ -258,8 +256,7 @@ public sealed class TrayApplicationContext : ApplicationContext
                     ProcessName = copy.ProcessName,
                     ExecutablePath = copy.ExecutablePath,
                     IncludeChildProcesses = true,
-                    MediaSessionId = MediaPlaybackState.Load()?.Sessions.FirstOrDefault(session =>
-                        session.SourceId.Contains(copy.ProcessName, StringComparison.OrdinalIgnoreCase))?.SourceId ?? "",
+                    MediaSessionId = "",
                     ColorSource = settings.Effect.Music.PlayerBinding.ColorSource
                 };
             });
@@ -474,11 +471,19 @@ public sealed class TrayApplicationContext : ApplicationContext
         if (_settingsForm is { IsDisposed: false })
         {
             ActivateSettingsWindow(_settingsForm);
+            _ = _settingsForm.CheckForUpdatesNowAsync();
             return;
         }
 
-        _settingsForm = new SettingsForm(_settingsStore);
-        _settingsForm.SettingsSaved += (_, _) => RefreshMenu();
+        _settingsForm = new SettingsForm(
+            _settingsStore,
+            _mediaSessionMonitor.ForceRefresh,
+            CheckForUpdatesWhenSettingsOpenAsync);
+        _settingsForm.SettingsSaved += (_, _) =>
+        {
+            _mediaSessionMonitor.ForceRefresh();
+            RefreshMenu();
+        };
         _settingsForm.FormClosed += (_, _) =>
         {
             _settingsForm = null;
@@ -486,6 +491,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         };
         _settingsForm.Show();
         ActivateSettingsWindow(_settingsForm);
+        _ = _settingsForm.CheckForUpdatesNowAsync();
     }
 
     private void OpenSettingsAfterStartup()
@@ -532,11 +538,30 @@ public sealed class TrayApplicationContext : ApplicationContext
             {
                 _availableUpdate = result;
                 RefreshMenu(refreshEventMonitors: false);
-                ShowUpdateAvailable(result, passive: true);
+            }
+            else if (result.Status == UpdateCheckStatus.UpToDate)
+            {
+                _availableUpdate = null;
+                RefreshMenu(refreshEventMonitors: false);
             }
         }
         catch
         {
+        }
+    }
+
+    private async Task<UpdateCheckResult?> CheckForUpdatesWhenSettingsOpenAsync()
+    {
+        try
+        {
+            var result = await _updateChecker.CheckAsync(force: true, UpdateCheckInterval.Daily);
+            _availableUpdate = result.Status == UpdateCheckStatus.Available ? result : null;
+            RefreshMenu(refreshEventMonitors: false);
+            return _availableUpdate;
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -550,7 +575,7 @@ public sealed class TrayApplicationContext : ApplicationContext
                 _availableUpdate = result;
                 RefreshMenu(refreshEventMonitors: false);
                 if (result.LatestVersion is not null) UpdateChecker.MarkPrompted(result.LatestVersion);
-                ShowUpdateAvailable(result, passive: false);
+                ShowUpdateAvailable(result);
                 return;
             }
 
@@ -581,26 +606,9 @@ public sealed class TrayApplicationContext : ApplicationContext
         }
     }
 
-    private void ShowUpdateAvailable(UpdateCheckResult result, bool passive)
+    private void ShowUpdateAvailable(UpdateCheckResult result)
     {
         var latest = result.LatestVersion?.ToString(3) ?? "未知";
-        if (passive)
-        {
-            if (result.LatestVersion is null || !UpdateChecker.ShouldPrompt(result.LatestVersion)) return;
-            UpdateChecker.MarkPrompted(result.LatestVersion);
-            _balloonReleaseUrl = result.ReleaseUrl;
-            _notifyIcon.BalloonTipTitle = "ClevoLEDKeyboardControl 有新版本";
-            _notifyIcon.BalloonTipText = $"最新版本：{latest}。托盘菜单会持续显示更新入口。";
-            _notifyIcon.ShowBalloonTip(8000);
-            var passiveChoice = MessageBox.Show(
-                $"发现新版本：{latest}\n当前版本：{result.CurrentVersion.ToString(3)}\n\n是否立即打开下载页面？\n选择“否”后仍可从托盘菜单下载。",
-                "ClevoLEDKeyboardControl 自动更新提醒",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Information);
-            if (passiveChoice == DialogResult.Yes && !string.IsNullOrWhiteSpace(result.ReleaseUrl))
-                UpdateChecker.OpenUrl(result.ReleaseUrl);
-            return;
-        }
 
         var choice = MessageBox.Show(
             $"发现新版本：{latest}\n当前版本：{result.CurrentVersion.ToString(3)}\n\n是否打开下载页面？",
@@ -612,16 +620,6 @@ public sealed class TrayApplicationContext : ApplicationContext
         {
             UpdateChecker.OpenReleases();
         }
-    }
-
-    private void OpenBalloonRelease()
-    {
-        if (string.IsNullOrWhiteSpace(_balloonReleaseUrl))
-        {
-            return;
-        }
-
-        UpdateChecker.OpenUrl(_balloonReleaseUrl);
     }
 
     private void ApplyEffect(Action<KeyboardSettings> update)
@@ -644,6 +642,7 @@ public sealed class TrayApplicationContext : ApplicationContext
 
             update(_settings);
             _settingsStore.Save(_settings);
+            _mediaSessionMonitor.ForceRefresh();
             RefreshEventMonitors();
             _settingsForm?.ReloadFromStore();
             return true;

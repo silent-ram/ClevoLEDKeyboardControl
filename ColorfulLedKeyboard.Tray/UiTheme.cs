@@ -337,6 +337,7 @@ internal sealed class UiCard : FlowLayoutPanel
 internal sealed class NavigationListBox : ListBox
 {
     private UiTheme _theme = ThemeManager.Current;
+    private readonly Dictionary<int, string> _badges = [];
 
     public NavigationListBox()
     {
@@ -353,6 +354,13 @@ internal sealed class NavigationListBox : ListBox
         BackColor = theme.Sidebar;
         ForeColor = theme.Text;
         Invalidate();
+    }
+
+    public void SetBadge(int index, string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) _badges.Remove(index);
+        else _badges[index] = text;
+        Invalidate(GetItemRectangle(index));
     }
 
     protected override void OnDrawItem(DrawItemEventArgs e)
@@ -380,12 +388,21 @@ internal sealed class NavigationListBox : ListBox
             _ => "•"
         };
         var color = selected ? _theme.Primary : _theme.Text;
+        var badge = _badges.GetValueOrDefault(e.Index);
+        using var badgeFont = new Font(Font.FontFamily, 8.5F, FontStyle.Bold);
+        var badgeWidth = string.IsNullOrWhiteSpace(badge)
+            ? 0
+            : TextRenderer.MeasureText(e.Graphics, badge, badgeFont, Size.Empty, TextFormatFlags.NoPadding).Width + 12;
         using var glyphFont = new Font("Segoe UI Symbol", 10F);
         TextRenderer.DrawText(e.Graphics, glyph, glyphFont,
             new Rectangle(e.Bounds.X + 15, e.Bounds.Y, 24, e.Bounds.Height), color,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
-        TextRenderer.DrawText(e.Graphics, text, Font, new Rectangle(e.Bounds.X + 45, e.Bounds.Y, e.Bounds.Width - 50, e.Bounds.Height),
+        TextRenderer.DrawText(e.Graphics, text, Font, new Rectangle(e.Bounds.X + 45, e.Bounds.Y, e.Bounds.Width - 50 - badgeWidth, e.Bounds.Height),
             color, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        if (!string.IsNullOrWhiteSpace(badge))
+            TextRenderer.DrawText(e.Graphics, badge, badgeFont,
+                new Rectangle(e.Bounds.Right - badgeWidth - 6, e.Bounds.Y, badgeWidth, e.Bounds.Height),
+                _theme.Error, TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
         if ((e.State & DrawItemState.Focus) != 0) e.DrawFocusRectangle();
     }
 }

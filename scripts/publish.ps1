@@ -1,5 +1,6 @@
 param(
-    [string]$Configuration = "Release"
+    [string]$Configuration = "Release",
+    [string]$Version = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -10,6 +11,15 @@ $trayPublish = Join-Path $publishRoot "Tray"
 $installerPayload = Join-Path $root "ColorfulLedKeyboard.Installer\Payload\payload.zip"
 $installerPublish = Join-Path $publishRoot "Setup"
 $driverDllName = "InsydeDCHU.dll"
+$versionArgs = @()
+if (-not [string]::IsNullOrWhiteSpace($Version)) {
+    $versionArgs = @(
+        "-p:Version=$Version",
+        "-p:AssemblyVersion=$Version.0",
+        "-p:FileVersion=$Version.0",
+        "-p:InformationalVersion=$Version"
+    )
+}
 
 function Get-DriverCandidatePaths {
     if (-not [string]::IsNullOrWhiteSpace($env:CLEVO_DRIVER_DLL)) {
@@ -51,13 +61,15 @@ dotnet publish (Join-Path $root "ColorfulLedKeyboard.Service\ColorfulLedKeyboard
     -c $Configuration `
     -r win-x64 `
     --self-contained false `
-    -o $servicePublish
+    -o $servicePublish `
+    @versionArgs
 
 dotnet publish (Join-Path $root "ColorfulLedKeyboard.Tray\ColorfulLedKeyboard.Tray.csproj") `
     -c $Configuration `
     -r win-x64 `
     --self-contained false `
-    -o $trayPublish
+    -o $trayPublish `
+    @versionArgs
 
 if (Test-Path $installerPayload) {
     Remove-Item -LiteralPath $installerPayload -Force
@@ -88,7 +100,8 @@ dotnet publish (Join-Path $root "ColorfulLedKeyboard.Installer\ColorfulLedKeyboa
     --self-contained true `
     -p:PublishSingleFile=true `
     -p:EnableCompressionInSingleFile=true `
-    -o $installerPublish
+    -o $installerPublish `
+    @versionArgs
 
 Copy-Item -LiteralPath (Join-Path $installerPublish "ClevoLEDKeyboardControlSetup.exe") -Destination (Join-Path $publishRoot "ClevoLEDKeyboardControlSetup.exe") -Force
 
