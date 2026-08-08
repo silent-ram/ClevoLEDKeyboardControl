@@ -27,6 +27,25 @@ public sealed class SettingsStoreMigrationTests : IDisposable
     }
 
     [Fact]
+    public void Load_MissingSettings_UsesRequestedInstallDefaults()
+    {
+        var loaded = _store.Load();
+
+        Assert.True(loaded.TypingPulse.Enabled);
+        Assert.Equal(100, loaded.TypingPulse.PeakBrightness);
+        Assert.Equal(80, loaded.TypingPulse.HoldMs);
+        Assert.Equal(70, loaded.TypingPulse.FadeMs);
+        Assert.Equal("#FF0000", loaded.NotificationFlash.Color);
+        Assert.Equal(2, loaded.NotificationFlash.Pulses);
+        Assert.Equal(2, loaded.NotificationFlash.CooldownSeconds);
+        Assert.Equal("#FF0000", loaded.SavedEffects.Static.Color);
+        Assert.Equal(EffectPresetSettings.DefaultSequenceColors, loaded.SavedEffects.Rainbow.Sequence.Select(item => item.Color));
+        Assert.Equal(EffectPresetSettings.DefaultSequenceColors, loaded.SavedEffects.Sequence.Sequence.Select(item => item.Color));
+        Assert.Equal(EffectPresetSettings.DefaultSequenceColors, loaded.SavedEffects.Pulse.Sequence.Select(item => item.Color));
+        Assert.Equal(EffectPresetSettings.DefaultSequenceColors, loaded.SavedEffects.Heartbeat.Sequence.Select(item => item.Color));
+    }
+
+    [Fact]
     public void Load_LegacyMusicJson_MigratesToOperatingModeMusicAndPreservesPresets()
     {
         var legacyJson = """

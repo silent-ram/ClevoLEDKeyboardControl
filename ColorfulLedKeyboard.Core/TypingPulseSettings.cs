@@ -2,15 +2,15 @@ namespace ColorfulLedKeyboard.Core;
 
 public sealed class TypingPulseSettings
 {
-    public bool Enabled { get; set; }
+    public bool Enabled { get; set; } = true;
 
     public int BaseBrightness { get; set; } = 50;
 
     public int PeakBrightness { get; set; } = 100;
 
-    public int HoldMs { get; set; } = 120;
+    public int HoldMs { get; set; } = 80;
 
-    public int FadeMs { get; set; } = 650;
+    public int FadeMs { get; set; } = 70;
 
     public TypingPulseSettings Normalize()
     {

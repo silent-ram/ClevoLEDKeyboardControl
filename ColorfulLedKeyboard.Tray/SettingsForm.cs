@@ -21,6 +21,7 @@ public sealed partial class SettingsForm : ThemedForm
 {
     private const int DefaultRainbowHoldMs = EffectPresetSettings.DefaultPeriodMs;
     private const string SoftwareDefaultPresetName = "软件默认配置";
+    private const string UnsavedEffectPresetName = "当前设置（未保存为预设）";
     private readonly SettingsStore _settingsStore;
     private readonly RadioButton _modeLighting = new() { Text = "灯效模式", AutoSize = true };
     private readonly RadioButton _modeMusic = new() { Text = "音乐模式", AutoSize = true };
@@ -48,7 +49,7 @@ public sealed partial class SettingsForm : ThemedForm
     private Panel? _effectPresetButtonsRow;
     private readonly ComboBox _effectPreset = new();
     private readonly TextBox _effectPresetName = new();
-    private readonly Button _effectSavePreset = new() { Text = "保存修改" };
+    private readonly Button _effectSavePreset = new() { Text = "保存灯效预设修改", Width = 160 };
     private readonly Button _effectCreatePreset = new() { Text = "新建/另存为" };
     private readonly Button _effectDeletePreset = new() { Text = "删除预设" };
     private readonly Button _musicCustomColors = new() { Text = "自定义颜色", Width = 128, Height = ButtonHeight };
@@ -63,7 +64,9 @@ public sealed partial class SettingsForm : ThemedForm
         Margin = new Padding(0, 4, 0, 8),
     };
     private readonly TextBox _musicPresetName = new();
-    private readonly Button _musicSavePreset = new() { Text = "保存修改" };
+    private readonly Button _musicSavePreset = new() { Text = "保存预设修改", Width = 140 };
+    private readonly Label _musicPresetSaveHint = new() { AutoSize = true };
+    private Panel? _musicPresetSaveHintRow;
     private readonly Button _musicCreatePreset = new() { Text = "新建/另存为" };
     private readonly Button _musicDeletePreset = new() { Text = "删除预设" };
     private readonly CheckBox _musicAdvanced = new() { Text = "显示高级参数" };
@@ -76,7 +79,6 @@ public sealed partial class SettingsForm : ThemedForm
     private readonly ComboBox _musicResponseMode = new();
     private readonly SliderRow _musicNoiseGate = new("噪声门", 0, 50, "%");
     private readonly SliderRow _musicBeatThreshold = new("节拍阈值", 0, 100, "%");
-    private readonly CheckBox _musicEqEnabled = new() { Text = "自适应鼓点检测" };
     private readonly CheckBox _musicSystemMixFallback = new() { Text = "进程独立捕获不可用时，允许系统混音频段分析" };
     private readonly SliderRow _musicEqLow = new("低频参考", 20, 1000, " Hz");
     private readonly SliderRow _musicEqHigh = new("高频参考", 40, 16000, " Hz");
@@ -111,6 +113,14 @@ public sealed partial class SettingsForm : ThemedForm
     private readonly Button _musicBindPlayer = new() { Text = "绑定正在播放的程序" };
     private readonly Button _musicClearPlayer = new() { Text = "取消绑定" };
     private readonly ComboBox _musicBindingColorSource = new();
+    private readonly Label _musicCoverColorHint = new()
+    {
+        Text = "封面主题配色单一，建议与音乐响应的鼓点检测搭配，体验更好",
+        AutoSize = true,
+        MaximumSize = new Size(370, 0),
+        TextAlign = ContentAlignment.MiddleLeft,
+        Visible = false
+    };
     private readonly ComboBox _musicMediaSession = new();
     private readonly Label _musicCurrentColorStatus = new() { AutoSize = true, ForeColor = SystemColors.GrayText };
     private readonly Label _musicMediaMatchStatus = new() { AutoSize = true, ForeColor = SystemColors.GrayText };
@@ -124,12 +134,17 @@ public sealed partial class SettingsForm : ThemedForm
     private static readonly int[] MusicAttackValues = [10, 15, 20, 25, 30, 40];
     private static readonly int[] MusicReleaseValues = [70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200];
     private EffectPresetSettings _effectPresets = new();
+    private EffectMemorySettings _workingEffectMemory = new();
+    private EffectType _lastSelectedEffectType = EffectType.Rainbow;
     private List<MusicPreset> _musicCustomPresets = [];
     private MusicPlayerBinding _musicPlayerBinding = new();
     private bool _loadingSettings;
     private bool _effectChangedByUser;
     private bool _loadingEffectPreset;
     private bool _loadingMusicPreset;
+    private bool _applyingMusicPresetControls;
+    private bool _musicPresetChanged;
+    private bool _musicPresetChangesStaged;
     private bool _customSequenceColorsEnabled;
 
     public SettingsForm(SettingsStore settingsStore)
@@ -174,6 +189,13 @@ public sealed partial class SettingsForm : ThemedForm
         {
             if (!_loadingSettings)
             {
+                var selectedEffect = SelectedEffectType(_lastSelectedEffectType);
+                if (selectedEffect != _lastSelectedEffectType)
+                {
+                    RememberEffect(_workingEffectMemory, BuildCurrentEffectFromGeneralControls(_lastSelectedEffectType));
+                    _lastSelectedEffectType = selectedEffect;
+                    ApplyEffectToGeneralControls(EffectFromMemory(_workingEffectMemory, selectedEffect), selectedPresetName: null, markDirty: false);
+                }
                 _effectChangedByUser = true;
                 MarkDirty();
             }
@@ -261,6 +283,12 @@ public sealed partial class SettingsForm : ThemedForm
             }
             if (navigation.SelectedIndex >= 0)
             {
+                var selectedPage = pageDefinitions[navigation.SelectedIndex].Page;
+                foreach (Control child in selectedPage.Controls)
+                {
+                    child.PerformLayout();
+                }
+                selectedPage.PerformLayout();
                 _pageTitle.Text = pageDefinitions[navigation.SelectedIndex].Title;
                 _uiStateStore.Update(state => state.LastPage = navigation.SelectedIndex);
             }
@@ -443,7 +471,7 @@ public sealed partial class SettingsForm : ThemedForm
         var page = CreatePage();
         _musicPreset.DropDownStyle = ComboBoxStyle.DropDownList;
         _musicResponseMode.DropDownStyle = ComboBoxStyle.DropDownList;
-        _musicResponseMode.Items.AddRange(["按电平变色", "仅亮度脉冲"]);
+        _musicResponseMode.Items.AddRange(["节奏律动", "鼓点响应"]);
         _musicBindingColorSource.DropDownStyle = ComboBoxStyle.DropDownList;
         _musicBindingColorSource.Items.AddRange(["使用音乐预设颜色", "使用歌曲封面主色", "使用歌曲封面配色"]);
         _musicBindingColorSource.SelectedIndex = 0;
@@ -477,6 +505,9 @@ public sealed partial class SettingsForm : ThemedForm
                 ApplyMusicPresetToControls(preset, refreshSelection: false);
             }
 
+            _musicPresetChanged = false;
+            _musicPresetChangesStaged = false;
+            UpdateMusicPresetEditState();
             UpdateMusicPresetButtons();
         };
         _musicSavePreset.Click += (_, _) => SaveSelectedMusicPreset();
@@ -484,24 +515,27 @@ public sealed partial class SettingsForm : ThemedForm
         _musicDeletePreset.Click += (_, _) => DeleteSelectedCustomMusicPreset();
         _musicCustomColors.Click += (_, _) => EditMusicColors();
         _musicSequence.ShowAddButton = false;
-        _musicSequence.ColorsChanged += (_, _) => Text = "ClevoLEDKeyboardControl 设置 - 有未应用的更改";
+        _musicSequence.ColorsChanged += (_, _) => OnMusicPresetControlChanged();
         _musicAdvanced.CheckedChanged += (_, _) => UpdateMusicAdvancedVisibility();
 
         _musicSensitivityRow = Row("灵敏度", _musicSensitivity);
         _musicAttackRow = Row("响应速度", _musicAttack);
         _musicReleaseRow = Row("衰减速度", _musicRelease);
         page.Controls.Add(new UiCard("播放器与当前配色", _audioSourceLabel, _musicBindingStatus,
-            ButtonRow(_musicBindPlayer, _musicClearPlayer), Row("键盘颜色来源", _musicBindingColorSource),
+            ButtonRow(_musicBindPlayer, _musicClearPlayer), RowWithHint("键盘颜色来源", _musicBindingColorSource, _musicCoverColorHint),
             Row("歌曲封面来源", _musicMediaSession), _musicMediaMatchStatus,
             Row("当前实际颜色", _musicPalettePreview), _musicCurrentColorStatus));
+        _musicPresetSaveHintRow = PlainRow(_musicPresetSaveHint);
+        _musicPresetSaveHintRow.Visible = false;
         page.Controls.Add(new UiCard("音乐预设与响应", Row("音乐预设", _musicPreset),
-            ButtonRow(_musicSavePreset, _musicCreatePreset, _musicDeletePreset), Row("当前预设", _musicPresetName),
+            ButtonRow(_musicSavePreset, _musicCreatePreset, _musicDeletePreset), _musicPresetSaveHintRow, Row("当前预设", _musicPresetName),
             Row("音乐响应", _musicResponseMode), PlainRow(_musicCustomColors), Section("节拍颜色"), _musicSequence,
             _musicBaseBrightness, _musicPeakBrightness, PlainRow(_musicFollowSystemVolume)));
         page.Controls.Add(new UiCard("高级音乐参数", PlainRow(_musicAdvanced), _musicSensitivityRow,
-            _musicAttackRow, _musicReleaseRow, _musicNoiseGate, _musicBeatThreshold, PlainRow(_musicEqEnabled),
+            _musicAttackRow, _musicReleaseRow, _musicNoiseGate, _musicBeatThreshold,
             PlainRow(_musicSystemMixFallback), _musicEqLow, _musicEqHigh));
         UpdateMusicAdvancedVisibility();
+        WireMusicPresetTracking();
         return page;
     }
 
@@ -531,6 +565,8 @@ public sealed partial class SettingsForm : ThemedForm
 
     private void RefreshMusicBindingStatus(AutomationStatus? status = null)
     {
+        _musicCoverColorHint.Visible = _musicBindingColorSource.SelectedIndex is 1 or 2;
+        _musicCoverColorHint.ForeColor = ThemeManager.Current.Warning;
         if (!_musicPlayerBinding.Enabled)
         {
             _musicBindingStatus.Text = "未绑定：音乐模式使用系统混音和音乐预设颜色。";
@@ -812,18 +848,19 @@ public sealed partial class SettingsForm : ThemedForm
             _sequence.Colors = settings.Effect.Sequence.Select(item => item.Color).ToList();
             _customSequenceColorsEnabled = settings.Effect.CustomSequenceColorsEnabled;
             _effectPresets = KeyboardSettings.CloneEffectPresets(settings.EffectPresets);
+            _workingEffectMemory = CloneEffectMemory(settings.SavedEffects);
+            _lastSelectedEffectType = settings.Effect.Type;
             RefreshEffectPresetList();
             _musicCustomPresets = settings.Effect.Music.CustomPresets.Select(CloneMusicPreset).ToList();
             RefreshMusicPresetList(settings.Effect.Music.PresetName);
             _musicPresetName.Text = IsBuiltInMusicPreset(settings.Effect.Music.PresetName) ? "" : settings.Effect.Music.PresetName;
-            _musicResponseMode.SelectedIndex = settings.Effect.Music.ResponseMode == MusicResponseMode.BrightnessPulse ? 1 : 0;
+            _musicResponseMode.SelectedIndex = MusicResponseIndex(settings.Effect.Music.EqEnabled);
             _musicSequence.Colors = settings.Effect.Music.Colors;
             _musicSensitivity.SelectedIndex = ClosestIndex(MusicSensitivityValues, settings.Effect.Music.Sensitivity);
             _musicAttack.SelectedIndex = ClosestIndex(MusicAttackValues, settings.Effect.Music.AttackMs);
             _musicRelease.SelectedIndex = ClosestIndex(MusicReleaseValues, settings.Effect.Music.ReleaseMs);
             _musicNoiseGate.Value = (int)Math.Round(settings.Effect.Music.NoiseGate * 100);
             _musicBeatThreshold.Value = (int)Math.Round(settings.Effect.Music.BeatThreshold * 100);
-            _musicEqEnabled.Checked = settings.Effect.Music.EqEnabled;
             _musicSystemMixFallback.Checked = settings.Effect.Music.AllowSystemMixFallback;
             _musicEqLow.Value = settings.Effect.Music.EqLowHz;
             _musicEqHigh.Value = settings.Effect.Music.EqHighHz;
@@ -877,6 +914,9 @@ public sealed partial class SettingsForm : ThemedForm
             {
                 ApplyMusicPresetToControls(preset, refreshSelection: false, markDirty: false);
             }
+            _musicPresetChanged = false;
+            _musicPresetChangesStaged = false;
+            UpdateMusicPresetEditState();
         }
         finally
         {
@@ -889,6 +929,17 @@ public sealed partial class SettingsForm : ThemedForm
 
     private void SaveSettings()
     {
+        if (_musicPresetChanged)
+        {
+            SelectPage(2);
+            var message = IsBuiltInMusicPreset(SelectedMusicPresetName())
+                ? "当前内置音乐预设已被修改。请先使用“新建/另存为”保存为自定义预设。"
+                : "当前音乐预设有尚未保存的修改。请先点击“保存预设修改”。";
+            MessageBox.Show(message, "ClevoLEDKeyboardControl", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            (_musicSavePreset.Enabled ? _musicSavePreset : _musicCreatePreset).Focus();
+            return;
+        }
+
         try
         {
             var settings = _settingsStore.Load();
@@ -909,6 +960,7 @@ public sealed partial class SettingsForm : ThemedForm
             settings.Effect.HardBlink = _hardBlink.Checked;
             settings.Effect.CustomSequenceColorsEnabled = selectedEffect == EffectType.Rainbow;
             settings.Effect.Sequence = BuildSequenceColors(selectedEffect);
+            settings.SavedEffects = CloneEffectMemory(_workingEffectMemory);
             RememberEffect(settings, settings.Effect);
             if (settings.Effect.Type != EffectType.Off)
             {
@@ -917,10 +969,8 @@ public sealed partial class SettingsForm : ThemedForm
             }
 
             settings.Effect.Music.PresetName = SelectedMusicPresetName();
-            settings.Effect.Music.ResponseMode = _musicResponseMode.SelectedIndex == 1
-                ? MusicResponseMode.BrightnessPulse
-                : MusicResponseMode.LevelColor;
-            settings.Effect.Music.LevelColorEnabled = settings.Effect.Music.ResponseMode == MusicResponseMode.LevelColor;
+            settings.Effect.Music.ResponseMode = MusicResponseMode.LevelColor;
+            settings.Effect.Music.LevelColorEnabled = true;
             settings.Effect.Music.Colors = NormalizedMusicColors();
             settings.Effect.Music.LowColor = settings.Effect.Music.Colors[0];
             settings.Effect.Music.HighColor = settings.Effect.Music.Colors[^1];
@@ -929,7 +979,7 @@ public sealed partial class SettingsForm : ThemedForm
             settings.Effect.Music.ReleaseMs = MusicReleaseValues[ClampIndex(_musicRelease.SelectedIndex, MusicReleaseValues.Length)];
             settings.Effect.Music.NoiseGate = _musicNoiseGate.Value / 100d;
             settings.Effect.Music.BeatThreshold = _musicBeatThreshold.Value / 100d;
-            settings.Effect.Music.EqEnabled = _musicEqEnabled.Checked;
+            settings.Effect.Music.EqEnabled = MusicResponseUsesBeatDetection(_musicResponseMode.SelectedIndex);
             settings.Effect.Music.AllowSystemMixFallback = _musicSystemMixFallback.Checked;
             settings.Effect.Music.EqLowHz = _musicEqLow.Value;
             settings.Effect.Music.EqHighHz = _musicEqHigh.Value;
@@ -976,11 +1026,15 @@ public sealed partial class SettingsForm : ThemedForm
             _settingsStore.Save(settings);
             _loadedSettingsSnapshot = settings;
             _effectChangedByUser = false;
+            _workingEffectMemory = CloneEffectMemory(settings.SavedEffects);
+            _lastSelectedEffectType = settings.Effect.Type;
             UpdateStatusHeader();
             UpdateAutomationStatus();
             Text = "ClevoLEDKeyboardControl 设置 - 已应用";
             _settingsChanged = false;
             _themeChanged = false;
+            _musicPresetChangesStaged = false;
+            UpdateMusicPresetEditState();
             _initialUiState = _uiStateStore.Load().Clone();
             _initialUiState.Theme = ThemeManager.CurrentKind;
             _initialUiState.MusicAdvancedExpanded = _musicAdvanced.Checked;
@@ -1041,6 +1095,18 @@ public sealed partial class SettingsForm : ThemedForm
         control.Width = Math.Max(control.Width, 240);
         control.Height = Math.Max(control.Height, 30);
         panel.Controls.Add(control);
+        return panel;
+    }
+
+    private static Panel RowWithHint(string label, Control control, Label hint)
+    {
+        var panel = Row(label, control);
+        hint.Location = new Point(ControlLeft + control.Width + 12, 3);
+        var availableWidth = Math.Max(240, ContentWidth - hint.Left);
+        hint.MaximumSize = new Size(availableWidth, 0);
+        var preferredHeight = hint.GetPreferredSize(new Size(availableWidth, 0)).Height;
+        panel.Height = Math.Max(RowHeight, preferredHeight + 8);
+        panel.Controls.Add(hint);
         return panel;
     }
 
@@ -1178,7 +1244,8 @@ public sealed partial class SettingsForm : ThemedForm
 
         if (_customColorsRow is not null)
         {
-            _customColorsRow.Visible = !hideEffectParams && _customColorsRow.Controls.OfType<Control>().Any(c => c.Visible);
+            _customColorsRow.Visible = !hideEffectParams &&
+                effect is EffectType.Static or EffectType.Rainbow or EffectType.Breathing or EffectType.Sequence or EffectType.Pulse or EffectType.Heartbeat;
         }
 
         if (_sequenceSection is not null)
@@ -1285,6 +1352,13 @@ public sealed partial class SettingsForm : ThemedForm
         var effect = SelectedEffectType(EffectType.Rainbow);
         var presets = _effectPresets.ForType(effect);
         var selected = selectedName ?? FindMatchingEffectPresetName(effect);
+        var showUnsaved = string.IsNullOrWhiteSpace(selected) ||
+            !string.Equals(selected, SoftwareDefaultPresetName, StringComparison.OrdinalIgnoreCase) &&
+            !presets.Any(preset => string.Equals(preset.Name, selected, StringComparison.OrdinalIgnoreCase));
+        if (showUnsaved)
+        {
+            selected = UnsavedEffectPresetName;
+        }
 
         _loadingEffectPreset = true;
         try
@@ -1294,6 +1368,10 @@ public sealed partial class SettingsForm : ThemedForm
             foreach (var preset in presets)
             {
                 _effectPreset.Items.Add(preset.Name);
+            }
+            if (showUnsaved)
+            {
+                _effectPreset.Items.Add(UnsavedEffectPresetName);
             }
 
             var index = -1;
@@ -1307,7 +1385,9 @@ public sealed partial class SettingsForm : ThemedForm
             }
 
             _effectPreset.SelectedIndex = index;
-            _effectPresetName.Text = index > 0 ? _effectPreset.Items[index]?.ToString() ?? "" : "";
+            _effectPresetName.Text = index > 0 && !string.Equals(selected, UnsavedEffectPresetName, StringComparison.OrdinalIgnoreCase)
+                ? _effectPreset.Items[index]?.ToString() ?? ""
+                : "";
         }
         finally
         {
@@ -1320,7 +1400,9 @@ public sealed partial class SettingsForm : ThemedForm
     private void UpdateEffectPresetButtons()
     {
         var presetVisible = SelectedEffectType(EffectType.Rainbow) is EffectType.Static or EffectType.Rainbow or EffectType.Breathing or EffectType.Sequence or EffectType.Pulse or EffectType.Heartbeat;
-        var customSelected = presetVisible && _effectPreset.SelectedIndex > 0;
+        var selected = SelectedEffectPresetName();
+        var customSelected = presetVisible && _effectPresets.ForType(SelectedEffectType(EffectType.Rainbow))
+            .Any(preset => string.Equals(preset.Name, selected, StringComparison.OrdinalIgnoreCase));
         _effectSavePreset.Enabled = customSelected;
         _effectCreatePreset.Enabled = presetVisible;
         _effectDeletePreset.Enabled = customSelected;
@@ -1689,34 +1771,62 @@ public sealed partial class SettingsForm : ThemedForm
     private static void RememberEffect(KeyboardSettings settings, LightingEffectSettings effect)
     {
         settings.SavedEffects ??= new EffectMemorySettings();
+        RememberEffect(settings.SavedEffects, effect);
+    }
+
+    private static void RememberEffect(EffectMemorySettings memory, LightingEffectSettings effect)
+    {
         var copy = KeyboardSettings.CloneEffect(effect);
         copy.Normalize();
 
         switch (copy.Type)
         {
             case EffectType.Static:
-                settings.SavedEffects.Static = copy;
+                memory.Static = copy;
                 break;
             case EffectType.Rainbow:
                 copy.CustomSequenceColorsEnabled = true;
-                settings.SavedEffects.Rainbow = copy;
+                memory.Rainbow = copy;
                 break;
             case EffectType.Breathing:
-                settings.SavedEffects.Breathing = copy;
+                memory.Breathing = copy;
                 break;
             case EffectType.Sequence:
-                settings.SavedEffects.Sequence = copy;
+                memory.Sequence = copy;
                 break;
             case EffectType.Pulse:
-                settings.SavedEffects.Pulse = copy;
+                memory.Pulse = copy;
                 break;
             case EffectType.Heartbeat:
-                settings.SavedEffects.Heartbeat = copy;
+                memory.Heartbeat = copy;
                 break;
         }
 
-        settings.SavedEffects.Normalize();
+        memory.Normalize();
     }
+
+    private static LightingEffectSettings EffectFromMemory(EffectMemorySettings memory, EffectType type) =>
+        KeyboardSettings.CloneEffect(type switch
+        {
+            EffectType.Static => memory.Static,
+            EffectType.Rainbow => memory.Rainbow,
+            EffectType.Breathing => memory.Breathing,
+            EffectType.Sequence => memory.Sequence,
+            EffectType.Pulse => memory.Pulse,
+            EffectType.Heartbeat => memory.Heartbeat,
+            _ => EffectPresetSettings.CreateSoftwareDefault(type)
+        });
+
+    private static EffectMemorySettings CloneEffectMemory(EffectMemorySettings memory) => new()
+    {
+        Static = KeyboardSettings.CloneEffect(memory.Static),
+        Rainbow = KeyboardSettings.CloneEffect(memory.Rainbow),
+        Breathing = KeyboardSettings.CloneEffect(memory.Breathing),
+        Sequence = KeyboardSettings.CloneEffect(memory.Sequence),
+        Pulse = KeyboardSettings.CloneEffect(memory.Pulse),
+        Heartbeat = KeyboardSettings.CloneEffect(memory.Heartbeat),
+        LastUsedLightingEffect = memory.LastUsedLightingEffect
+    };
 
     private static int EffectivePeriodValue(LightingEffectSettings effect)
     {
@@ -1944,6 +2054,9 @@ public sealed partial class SettingsForm : ThemedForm
         if (UpsertMusicPreset(newName, originalName))
         {
             RefreshMusicPresetList(newName);
+            _musicPresetChanged = false;
+            _musicPresetChangesStaged = true;
+            UpdateMusicPresetEditState();
             Text = "ClevoLEDKeyboardControl 设置 - 有未应用的更改";
         }
     }
@@ -1959,6 +2072,9 @@ public sealed partial class SettingsForm : ThemedForm
         if (UpsertMusicPreset(name, originalName: null))
         {
             RefreshMusicPresetList(name);
+            _musicPresetChanged = false;
+            _musicPresetChangesStaged = true;
+            UpdateMusicPresetEditState();
             Text = "ClevoLEDKeyboardControl 设置 - 有未应用的更改";
         }
     }
@@ -2034,25 +2150,35 @@ public sealed partial class SettingsForm : ThemedForm
         _musicCustomPresets.RemoveAll(item => string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase));
         _musicPresetName.Text = "";
         RefreshMusicPresetList(MusicSettings.DefaultPresetName);
+        _musicPresetChanged = false;
+        _musicPresetChangesStaged = true;
+        UpdateMusicPresetEditState();
         Text = "ClevoLEDKeyboardControl 设置 - 有未应用的更改";
     }
 
     private void ApplyMusicPresetToControls(MusicPreset preset, bool refreshSelection = true, bool markDirty = true)
     {
-        _musicPresetName.Text = IsBuiltInMusicPreset(preset.Name) ? "" : preset.Name;
-        _musicResponseMode.SelectedIndex = preset.ResponseMode == MusicResponseMode.BrightnessPulse ? 1 : 0;
-        _musicSequence.Colors = preset.Colors;
-        _musicSensitivity.SelectedIndex = ClosestIndex(MusicSensitivityValues, preset.Sensitivity);
-        _musicAttack.SelectedIndex = ClosestIndex(MusicAttackValues, preset.AttackMs);
-        _musicRelease.SelectedIndex = ClosestIndex(MusicReleaseValues, preset.ReleaseMs);
-        _musicNoiseGate.Value = (int)Math.Round(preset.NoiseGate * 100);
-        _musicBeatThreshold.Value = (int)Math.Round(preset.BeatThreshold * 100);
-        _musicEqEnabled.Checked = preset.EqEnabled;
-        _musicEqLow.Value = preset.EqLowHz;
-        _musicEqHigh.Value = preset.EqHighHz;
-        _musicBaseBrightness.Value = preset.BaseBrightness;
-        _musicPeakBrightness.Value = preset.PeakBrightness;
-        _musicFollowSystemVolume.Checked = preset.FollowSystemVolume;
+        _applyingMusicPresetControls = true;
+        try
+        {
+            _musicPresetName.Text = IsBuiltInMusicPreset(preset.Name) ? "" : preset.Name;
+            _musicResponseMode.SelectedIndex = MusicResponseIndex(preset.EqEnabled);
+            _musicSequence.Colors = preset.Colors;
+            _musicSensitivity.SelectedIndex = ClosestIndex(MusicSensitivityValues, preset.Sensitivity);
+            _musicAttack.SelectedIndex = ClosestIndex(MusicAttackValues, preset.AttackMs);
+            _musicRelease.SelectedIndex = ClosestIndex(MusicReleaseValues, preset.ReleaseMs);
+            _musicNoiseGate.Value = (int)Math.Round(preset.NoiseGate * 100);
+            _musicBeatThreshold.Value = (int)Math.Round(preset.BeatThreshold * 100);
+            _musicEqLow.Value = preset.EqLowHz;
+            _musicEqHigh.Value = preset.EqHighHz;
+            _musicBaseBrightness.Value = preset.BaseBrightness;
+            _musicPeakBrightness.Value = preset.PeakBrightness;
+            _musicFollowSystemVolume.Checked = preset.FollowSystemVolume;
+        }
+        finally
+        {
+            _applyingMusicPresetControls = false;
+        }
         if (refreshSelection)
         {
             RefreshMusicPresetList(preset.Name);
@@ -2064,14 +2190,60 @@ public sealed partial class SettingsForm : ThemedForm
         }
 
         UpdateMusicPresetButtons();
+        UpdateMusicPresetEditState();
     }
 
     private void UpdateMusicPresetButtons()
     {
         var customSelected = !IsBuiltInMusicPreset(SelectedMusicPresetName());
-        _musicSavePreset.Enabled = customSelected;
+        _musicSavePreset.Enabled = customSelected && _musicPresetChanged;
         _musicDeletePreset.Enabled = customSelected;
         _musicCreatePreset.Enabled = true;
+        _musicSavePreset.AccessibleDescription = customSelected && _musicPresetChanged ? "PrimaryAction" : null;
+        ThemeManager.StyleButton(_musicSavePreset, ThemeManager.Current);
+    }
+
+    private void WireMusicPresetTracking()
+    {
+        _musicPresetName.TextChanged += (_, _) => OnMusicPresetControlChanged();
+        _musicResponseMode.SelectedIndexChanged += (_, _) => OnMusicPresetControlChanged();
+        _musicSensitivity.SelectedIndexChanged += (_, _) => OnMusicPresetControlChanged();
+        _musicAttack.SelectedIndexChanged += (_, _) => OnMusicPresetControlChanged();
+        _musicRelease.SelectedIndexChanged += (_, _) => OnMusicPresetControlChanged();
+        _musicNoiseGate.ValueChanged += (_, _) => OnMusicPresetControlChanged();
+        _musicBeatThreshold.ValueChanged += (_, _) => OnMusicPresetControlChanged();
+        _musicEqLow.ValueChanged += (_, _) => OnMusicPresetControlChanged();
+        _musicEqHigh.ValueChanged += (_, _) => OnMusicPresetControlChanged();
+        _musicBaseBrightness.ValueChanged += (_, _) => OnMusicPresetControlChanged();
+        _musicPeakBrightness.ValueChanged += (_, _) => OnMusicPresetControlChanged();
+        _musicFollowSystemVolume.CheckedChanged += (_, _) => OnMusicPresetControlChanged();
+    }
+
+    private void OnMusicPresetControlChanged()
+    {
+        if (_loadingSettings || _loadingMusicPreset || _applyingMusicPresetControls) return;
+        _musicPresetChanged = true;
+        _musicPresetChangesStaged = false;
+        UpdateMusicPresetEditState();
+    }
+
+    private void UpdateMusicPresetEditState()
+    {
+        var builtIn = IsBuiltInMusicPreset(SelectedMusicPresetName());
+        _musicPresetSaveHint.Text = _musicPresetChanged
+            ? builtIn
+                ? "内置预设不能直接修改，请使用“新建/另存为”。"
+                : "预设内容已修改，请先点击“保存预设修改”。"
+            : _musicPresetChangesStaged
+                ? "预设修改已暂存，点击底部“保存并应用”后生效。"
+                : "";
+        _musicPresetSaveHint.ForeColor = _musicPresetChanged ? ThemeManager.Current.Warning : ThemeManager.Current.Success;
+        _musicPresetSaveHint.Visible = !string.IsNullOrWhiteSpace(_musicPresetSaveHint.Text);
+        if (_musicPresetSaveHintRow is not null)
+        {
+            _musicPresetSaveHintRow.Visible = _musicPresetSaveHint.Visible;
+        }
+        UpdateMusicPresetButtons();
     }
 
     private MusicPreset BuildMusicPresetFromControls(string name)
@@ -2080,7 +2252,7 @@ public sealed partial class SettingsForm : ThemedForm
         return new MusicPreset
         {
             Name = name,
-            ResponseMode = _musicResponseMode.SelectedIndex == 1 ? MusicResponseMode.BrightnessPulse : MusicResponseMode.LevelColor,
+            ResponseMode = MusicResponseMode.LevelColor,
             LowColor = colors[0],
             HighColor = colors[^1],
             Colors = colors,
@@ -2092,7 +2264,7 @@ public sealed partial class SettingsForm : ThemedForm
             NoiseGate = _musicNoiseGate.Value / 100d,
             BeatThreshold = _musicBeatThreshold.Value / 100d,
             FollowSystemVolume = _musicFollowSystemVolume.Checked,
-            EqEnabled = _musicEqEnabled.Checked,
+            EqEnabled = MusicResponseUsesBeatDetection(_musicResponseMode.SelectedIndex),
             EqLowHz = _musicEqLow.Value,
             EqHighHz = _musicEqHigh.Value
         }.Normalize();
@@ -2128,7 +2300,6 @@ public sealed partial class SettingsForm : ThemedForm
         if (_musicReleaseRow is not null) _musicReleaseRow.Visible = visible;
         _musicNoiseGate.Visible = visible;
         _musicBeatThreshold.Visible = visible;
-        _musicEqEnabled.Visible = visible;
         _musicEqLow.Visible = visible;
         _musicEqHigh.Visible = visible;
     }
@@ -2158,6 +2329,10 @@ public sealed partial class SettingsForm : ThemedForm
             EqHighHz = preset.EqHighHz
         }.Normalize();
     }
+
+    internal static int MusicResponseIndex(bool beatDetectionEnabled) => beatDetectionEnabled ? 1 : 0;
+
+    internal static bool MusicResponseUsesBeatDetection(int selectedIndex) => selectedIndex == 1;
 
     private void UpdateAutomationStatus()
     {
