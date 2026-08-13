@@ -41,6 +41,8 @@ internal static class Program
         "ClevoLEDKeyboardControl");
     private static readonly string SettingsPath = Path.Combine(ProgramDataDirectory, "settings.json");
     private static readonly string UpgradeBackupDirectory = Path.Combine(ProgramDataDirectory, "Backups");
+    private static readonly string InstallerLogPath = Path.Combine(ProgramDataDirectory, "installer.log");
+    private static readonly string TempInstallerLogPath = Path.Combine(Path.GetTempPath(), "ClevoLEDKeyboardControl-installer.log");
 
     private static readonly string StartMenuShortcutPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu),
@@ -54,11 +56,14 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        Log($"Installer started. Args: {string.Join(' ', args)}");
         try
         {
             if (!IsAdministrator())
             {
-                Show("Please run this installer as Administrator.");
+                var message = "需要管理员权限才能安装 Windows 服务。请右键安装包，选择“以管理员身份运行”。";
+                Log(message);
+                Show(BuildFailureMessage(message));
                 return 1;
             }
 
@@ -131,13 +136,16 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            Show($"Operation failed:\n{ex.Message}");
+            Log($"安装失败：{ex}");
+            Show(BuildFailureMessage(GetUserFacingFailure(ex)));
             return 1;
         }
     }
 
     private static void Install()
     {
+        ValidatePrerequisites();
+        Log("开始安装流程");
         // 覆盖安装必须先在停止旧服务前取得配置快照。之后任何安装步骤即使意外改写或
         // 删除 settings.json，也会在新服务启动前恢复，避免默认配置覆盖用户数据。
         var configurationGuard = new UpgradeConfigurationGuard(SettingsPath, UpgradeBackupDirectory);
@@ -154,9 +162,11 @@ internal static class Program
         CleanPayloadDirectories();
         RemoveLegacyInstalledSetup();
         ExtractPayload();
+        Log($"程序文件已解压到：{InstallDirectory}");
         EnsureProgramDataPermissions();
         RestoreSettingsWithLegacyAclRecovery(configurationGuard, configurationSnapshot);
-        TryInstallDriverDll();
+        var driverInstalled = TryInstallDriverDll();
+        Log(driverInstalled ? "厂商灯控组件已准备" : "未找到 InsydeDCHU.dll，服务将安装但暂时无法控制键盘灯");
 
         if (!File.Exists(ServiceExe))
         {
@@ -166,14 +176,49 @@ internal static class Program
         Run("sc.exe", $"create {ServiceName} binPath= \"{ServiceExe}\" start= auto DisplayName= \"{DisplayName}\"");
         Run("sc.exe", $"description {ServiceName} \"Controls Clevo-compatible keyboard RGB lighting in the background.\"");
         Run("sc.exe", $"start {ServiceName}", allowFailure: true);
+        Log("已请求启动 Windows 服务");
         if (!WaitForServiceIpcReady(TimeSpan.FromSeconds(15)))
         {
+            Log(DescribeServiceFailure());
             throw new InvalidOperationException("服务已安装，但安全通信通道未能及时启动。请检查服务状态后重试安装。");
         }
 
+        Log("服务已运行，安全通信通道已就绪");
         AddTrayStartup();
         RegisterUninstaller();
         CreateUserShortcuts();  // 失败不抛，仅返回 false
+    }
+
+    private static void ValidatePrerequisites()
+    {
+        if (!Environment.Is64BitOperatingSystem)
+            throw new InvalidOperationException("当前安装包仅支持 64 位 Windows。请下载与系统架构匹配的版本。");
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10))
+            throw new InvalidOperationException("当前系统版本过低，需要 Windows 10 或 Windows 11。");
+        Log("安装前检查通过：管理员权限、64 位 Windows、Windows 版本符合要求");
+    }
+
+    private static string DescribeServiceFailure()
+    {
+        var query = Run("sc.exe", $"query {ServiceName}", allowFailure: true);
+        Run("sc.exe", $"qc {ServiceName}", allowFailure: true);
+        return query.Output.Contains("STOPPED", StringComparison.OrdinalIgnoreCase)
+            ? "服务启动后立即停止，可能是服务文件被安全软件拦截或系统环境异常。"
+            : "服务状态未能确认，可能是服务启动被系统安全策略阻止。";
+    }
+
+    private static string GetUserFacingFailure(Exception ex)
+    {
+        if (ex is FileNotFoundException file && file.FileName?.Contains("Service", StringComparison.OrdinalIgnoreCase) == true)
+            return "安装包缺少后台服务文件，可能是下载不完整。请重新下载安装包后重试。";
+        if (ex.Message.Contains("安全通信", StringComparison.OrdinalIgnoreCase))
+            return $"{ex.Message}\n\n建议：打开 services.msc，检查“{DisplayName}”是否正在运行；如果启动后立即停止，请重启电脑后以管理员身份重新运行安装包，并将安装日志发送给开发者。";
+        return ex.Message;
+    }
+
+    private static string BuildFailureMessage(string reason)
+    {
+        return $"安装未完成。\n\n原因：{reason}\n\n请重启电脑后以管理员身份重新运行安装包；若仍失败，请检查“{DisplayName}”服务，并将日志发送给开发者：\n{InstallerLogPath}\n（临时日志：{TempInstallerLogPath}）";
     }
 
     private static UpgradeConfigurationSnapshot? CaptureSettingsWithLegacyAclRecovery(
@@ -926,12 +971,39 @@ internal static class Program
         var error = process.StandardError.ReadToEnd();
         process.WaitForExit();
 
+        var result = new CommandResult(process.ExitCode, output, error);
+        LogCommand(fileName, arguments, result);
         if (process.ExitCode != 0 && !allowFailure)
         {
             throw new InvalidOperationException($"{fileName} {arguments} failed with exit code {process.ExitCode}.\n{output}\n{error}");
         }
 
-        return new CommandResult(process.ExitCode, output, error);
+        return result;
+    }
+
+    private static void LogCommand(string fileName, string arguments, CommandResult result)
+    {
+        Log($"命令：{fileName} {arguments}\n退出码：{result.ExitCode}\n输出：{result.Output}\n错误：{result.Error}");
+    }
+
+    private static void Log(string message)
+    {
+        var line = $"[{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss.fff zzz}] {message}{Environment.NewLine}";
+        try
+        {
+            Directory.CreateDirectory(ProgramDataDirectory);
+            File.AppendAllText(InstallerLogPath, line, Encoding.UTF8);
+        }
+        catch
+        {
+        }
+        try
+        {
+            File.AppendAllText(TempInstallerLogPath, line, Encoding.UTF8);
+        }
+        catch
+        {
+        }
     }
 
     private static bool IsAdministrator()

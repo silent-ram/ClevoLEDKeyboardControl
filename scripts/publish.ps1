@@ -60,14 +60,18 @@ New-Item -ItemType Directory -Force -Path $servicePublish, $trayPublish, $instal
 dotnet publish (Join-Path $root "ColorfulLedKeyboard.Service\ColorfulLedKeyboard.Service.csproj") `
     -c $Configuration `
     -r win-x64 `
-    --self-contained false `
+    --self-contained true `
+    -p:PublishSingleFile=true `
+    -p:EnableCompressionInSingleFile=true `
     -o $servicePublish `
     @versionArgs
 
 dotnet publish (Join-Path $root "ColorfulLedKeyboard.Tray\ColorfulLedKeyboard.Tray.csproj") `
     -c $Configuration `
     -r win-x64 `
-    --self-contained false `
+    --self-contained true `
+    -p:PublishSingleFile=true `
+    -p:EnableCompressionInSingleFile=true `
     -o $trayPublish `
     @versionArgs
 
