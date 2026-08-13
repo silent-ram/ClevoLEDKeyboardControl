@@ -166,6 +166,7 @@
 
 - Windows 10 / Windows 11 x64
 - 支持对应机型的厂商 Control Center / `InsydeDCHU.dll`
+- 正式安装包已自带 .NET 8 运行环境，无需另外安装 .NET 8 Desktop Runtime
 - 从源码构建需要 .NET 8 SDK 或更新版本
 
 服务名称：`ClevoLEDKeyboardControlService`
