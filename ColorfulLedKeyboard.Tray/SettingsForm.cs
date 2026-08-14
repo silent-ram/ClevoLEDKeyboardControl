@@ -80,7 +80,7 @@ public sealed partial class SettingsForm : ThemedForm
     private readonly ComboBox _musicResponseMode = new();
     private readonly SliderRow _musicNoiseGate = new("噪声门", 0, 50, "%");
     private readonly SliderRow _musicBeatThreshold = new("节拍阈值", 0, 100, "%");
-    private readonly CheckBox _musicSystemMixFallback = new() { Text = "进程独立捕获不可用时，允许系统混音频段分析" };
+    private readonly CheckBox _musicSystemMixFallback = new() { Text = "未绑定播放器时，允许系统混音频段分析" };
     private readonly SliderRow _musicEqLow = new("低频参考", 20, 1000, " Hz");
     private readonly SliderRow _musicEqHigh = new("高频参考", 40, 16000, " Hz");
     private readonly SliderRow _musicBaseBrightness = new("基础亮度", 0, 100, "%");

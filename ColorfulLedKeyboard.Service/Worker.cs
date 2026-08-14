@@ -201,13 +201,16 @@ public class Worker : BackgroundService
                     }
                 }
 
-                // 永远调 meter（同 v1.3）：静音 → envelope=0 → 灯自然降到 BaseBrightness 颜色保持。
-                // HFP 屏蔽在 meter 内部处理（Status==Hfp 时 EnsureCapture 跳过、不激活 SCO）。
+                // 绑定播放器时只读对应音频会话；未绑定时才允许系统 Loopback 做频段分析。
+                // 静音时 level=0，灯效会自然降到 BaseBrightness 并保持当前颜色。
                 var selectedPeak = GetSelectedApplicationPeak(
                     settings.SelectedAudioProcessName, settings.SelectedAudioExecutablePath, settings.SelectedAudioProcessIds);
-                var level = music.EqEnabled && music.AllowSystemMixFallback
-                    ? Math.Max(_audioBandLevelMeter.GetAdaptiveBeatLevel(music), selectedPeak * 0.12f)
-                    : selectedPeak;
+                var hasSelectedApplication = !string.IsNullOrWhiteSpace(settings.SelectedAudioProcessName);
+                var systemMixLevel = !hasSelectedApplication && music.EqEnabled && music.AllowSystemMixFallback
+                    ? _audioBandLevelMeter.GetAdaptiveBeatLevel(music)
+                    : 0f;
+                var level = MusicAudioInputSelector.Select(
+                    music, hasSelectedApplication, selectedPeak, systemMixLevel);
                 var systemVolume = _audioLevelMeter.GetMasterVolumeScalar();
                 var transition = Math.Clamp((DateTimeOffset.UtcNow - colorTransitionStarted).TotalMilliseconds / 800d, 0, 1);
                 var musicColors = targetMusicColors.Select((color, index) =>
@@ -537,11 +540,7 @@ public class Worker : BackgroundService
                 status.ActiveMusicApplication = selection.Music.ProcessName;
                 status.ActiveProcessIds = selection.Audio.ProcessIds.ToList();
                 status.TargetDescription = DescribeMusicRule(settings, selection.Music);
-                status.AudioCaptureMode = settings.Effect.Music.EqEnabled
-                    ? settings.Effect.Music.AllowSystemMixFallback
-                        ? "程序会话峰值 + 系统混音频段回退"
-                        : "程序音频会话电平（系统混音已禁用）"
-                    : "程序音频会话电平";
+                status.AudioCaptureMode = "程序音频会话电平（播放器隔离）";
                 if (media is not null)
                 {
                     status.TrackTitle = media.Title;
@@ -682,10 +681,9 @@ public class Worker : BackgroundService
         status.ActiveMusicApplication = binding.ProcessName;
         status.ActiveProcessIds = settings.SelectedAudioProcessIds;
         status.TargetDescription = binding.ColorSource == MusicColorSource.Preset ? "音乐：预设颜色" : "音乐：歌曲封面颜色";
-        status.AudioCaptureMode = audio is null ? "等待播放器音频会话" :
-            settings.Effect.Music.EqEnabled && settings.Effect.Music.AllowSystemMixFallback
-                ? "程序会话峰值 + 系统混音频段回退"
-                : "程序音频会话电平";
+        status.AudioCaptureMode = audio is null
+            ? "等待播放器音频会话"
+            : "程序音频会话电平（播放器隔离）";
         if (audio is null) status.InvalidReason = "已绑定播放器未检测到音频会话";
         if (media is not null)
         {
@@ -919,5 +917,21 @@ public class Worker : BackgroundService
                 _logger.LogWarning(ex, "Failed to write audio source status file");
             }
         });
+    }
+}
+
+internal static class MusicAudioInputSelector
+{
+    public static float Select(
+        MusicSettings settings,
+        bool hasSelectedApplication,
+        float selectedPeak,
+        float systemMixLevel)
+    {
+        selectedPeak = Math.Clamp(selectedPeak, 0f, 1f);
+        if (hasSelectedApplication || !settings.EqEnabled || !settings.AllowSystemMixFallback)
+            return selectedPeak;
+
+        return Math.Max(Math.Clamp(systemMixLevel, 0f, 1f), selectedPeak * 0.12f);
     }
 }
