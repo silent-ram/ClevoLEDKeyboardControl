@@ -12,6 +12,8 @@
 
 - [下载最新正式版安装包](https://github.com/silent-ram/ClevoLEDKeyboardControl/releases/latest/download/ClevoLEDKeyboardControlSetup.exe)
 - [查看全部版本与发布说明](https://github.com/silent-ram/ClevoLEDKeyboardControl/releases)
+- [夸克网盘下载]
+(https://pan.quark.cn/s/822575d75c7b)
 
 安装步骤：
 
