@@ -14,10 +14,13 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly NotificationFlashMonitor _notificationFlashMonitor;
     private readonly MediaSessionMonitor _mediaSessionMonitor = new();
     private readonly AudioSessionMonitor _audioSessionMonitor = new();
+    private readonly UsageTelemetryClient _usageTelemetryClient = new();
     private readonly NotifyIcon _notifyIcon;
     private readonly System.Windows.Forms.Timer _foregroundTimer = new() { Interval = 1000 };
     private readonly System.Windows.Forms.Timer _trayStatusTimer = new() { Interval = 2000 };
     private readonly System.Windows.Forms.Timer _updateTimer = new() { Interval = 6 * 60 * 60 * 1000 };
+    private readonly System.Windows.Forms.Timer _singleInstanceSignalTimer = new() { Interval = 500 };
+    private readonly EventWaitHandle? _openSettingsEvent;
     private string? _lastForegroundProcess;
     private DateTimeOffset _lastForegroundStateSaved = DateTimeOffset.MinValue;
     private KeyboardSettings _settings;
@@ -26,11 +29,13 @@ public sealed class TrayApplicationContext : ApplicationContext
     private AudioSourceStatusInfo? _lastAudioStatus;
     private UpdateCheckResult? _availableUpdate;
 
-    public TrayApplicationContext(SettingsStore settingsStore, bool openSettingsOnStartup = false)
+    public TrayApplicationContext(SettingsStore settingsStore, bool openSettingsOnStartup = false, EventWaitHandle? openSettingsEvent = null)
     {
+        _openSettingsEvent = openSettingsEvent;
         _settingsStore = settingsStore;
         EnsureServiceRunning();
         _settings = _settingsStore.Load();
+        _ = _usageTelemetryClient.SyncAsync(_settings);
         _availableUpdate = _updateChecker.LoadKnownAvailable();
         _notificationFlashMonitor = new NotificationFlashMonitor(_settingsStore);
 
@@ -54,6 +59,11 @@ public sealed class TrayApplicationContext : ApplicationContext
         _trayStatusTimer.Start();
         _updateTimer.Tick += async (_, _) => await CheckForUpdatesAutomaticallyAsync(initialDelay: false);
         _updateTimer.Start();
+        _singleInstanceSignalTimer.Tick += (_, _) =>
+        {
+            if (_openSettingsEvent is not null && _openSettingsEvent.WaitOne(0)) OpenSettings();
+        };
+        _singleInstanceSignalTimer.Start();
         RefreshEventMonitors();
         UpdateForegroundAppState();
         _ = CheckForUpdatesAutomaticallyAsync(initialDelay: true);
@@ -79,11 +89,14 @@ public sealed class TrayApplicationContext : ApplicationContext
             _trayStatusTimer.Dispose();
             _updateTimer.Stop();
             _updateTimer.Dispose();
+            _singleInstanceSignalTimer.Stop();
+            _singleInstanceSignalTimer.Dispose();
             _typingPulseHook.Dispose();
             _notificationFlashMonitor.Dispose();
             _mediaSessionMonitor.Dispose();
             _audioSessionMonitor.Dispose();
             _audioStatusWatcher?.Dispose();
+            _usageTelemetryClient.Dispose();
             ThemeManager.ThemeChanged -= OnThemeChanged;
         }
 
@@ -483,6 +496,8 @@ public sealed class TrayApplicationContext : ApplicationContext
         {
             _mediaSessionMonitor.ForceRefresh();
             RefreshMenu();
+            _settings = _settingsStore.Load();
+            _ = _usageTelemetryClient.SyncAsync(_settings);
         };
         _settingsForm.FormClosed += (_, _) =>
         {

@@ -1,0 +1,12 @@
+name = "clevo-usage-api"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "clevo-usage-db"
+# 部署前在 Cloudflare Worker 设置页复制数据库 ID 填入此处。
+database_id = "REPLACE_WITH_CLEVO_USAGE_DB_ID"
+
+[observability]
+enabled = false

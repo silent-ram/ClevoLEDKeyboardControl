@@ -48,6 +48,8 @@ public sealed class KeyboardSettings
 
     public NotificationFlashSettings NotificationFlash { get; set; } = new();
 
+    public UserImprovementPlanSettings UserImprovementPlan { get; set; } = new();
+
     public KeyboardSettings Normalize(bool migrateLegacyMode = false)
     {
         Brightness = Math.Clamp(Brightness, 0, 100);
@@ -138,6 +140,8 @@ public sealed class KeyboardSettings
         Update.Normalize();
         NotificationFlash ??= new NotificationFlashSettings();
         NotificationFlash.Normalize();
+        UserImprovementPlan ??= new UserImprovementPlanSettings();
+        UserImprovementPlan.Normalize();
         Mode = Effect.Type switch
         {
             EffectType.Static => KeyboardMode.Static,
@@ -301,6 +305,10 @@ public sealed class KeyboardSettings
                 Pulses = NotificationFlash.Pulses,
                 PulseMs = NotificationFlash.PulseMs,
                 CooldownSeconds = NotificationFlash.CooldownSeconds
+            },
+            UserImprovementPlan = new UserImprovementPlanSettings
+            {
+                Enabled = UserImprovementPlan.Enabled
             }
         }.Normalize();
     }
