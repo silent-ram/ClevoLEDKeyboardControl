@@ -128,6 +128,13 @@ public sealed partial class SettingsForm : ThemedForm
     private readonly PalettePreviewControl _musicPalettePreview = new();
     private readonly System.Windows.Forms.Timer _automationStatusTimer = new() { Interval = 1000 };
     private readonly ComboBox _updateInterval = new();
+    private readonly CheckBox _userImprovementPlanEnabled = new() { Text = "参与用户改进计划", AutoSize = true };
+    private readonly Label _userImprovementPlanDescription = new()
+    {
+        Text = "用于了解不同版本的实际使用情况，便于安排维护和更新。",
+        AutoSize = true,
+        MaximumSize = new Size(ContentWidth - 28, 0)
+    };
     private readonly LinkLabel _updateAvailableStatus = new()
     {
         AutoSize = true,
@@ -856,6 +863,7 @@ public sealed partial class SettingsForm : ThemedForm
         _updateAvailableStatusRow = PlainRow(_updateAvailableStatus);
         _updateAvailableStatusRow.Visible = false;
         page.Controls.Add(new UiCard("自动更新", Row("自动检查更新", _updateInterval), _updateAvailableStatusRow));
+        page.Controls.Add(new UiCard("用户改进计划", PlainRow(_userImprovementPlanEnabled), PlainRow(_userImprovementPlanDescription)));
         page.Controls.Add(new UiCard("配置管理", configActions, Row("配置文件", configPath), folderActions));
         return page;
     }
@@ -971,6 +979,7 @@ public sealed partial class SettingsForm : ThemedForm
             _sceneAutomation.Automation = settings.Automation;
             UpdateAutomationStatus();
             _updateInterval.SelectedIndex = UpdateIntervalToIndex(settings.Update.CheckInterval);
+            _userImprovementPlanEnabled.Checked = settings.UserImprovementPlan.Enabled;
 
             var evening = settings.Schedule.Rules.FirstOrDefault(rule => rule.Name == "Evening");
             var night = settings.Schedule.Rules.FirstOrDefault(rule => rule.Name == "Night");
@@ -1094,6 +1103,7 @@ public sealed partial class SettingsForm : ThemedForm
             settings.Automation.ScheduleRules = automation.ScheduleRules;
             settings.Automation.Rules.Clear();
             settings.Update.CheckInterval = IndexToUpdateInterval(_updateInterval.SelectedIndex);
+            settings.UserImprovementPlan.Enabled = _userImprovementPlanEnabled.Checked;
             settings.Brightness = _brightness.Enabled ? _brightness.Value : settings.Brightness;
             _settingsStore.Save(settings);
             _loadedSettingsSnapshot = settings;
