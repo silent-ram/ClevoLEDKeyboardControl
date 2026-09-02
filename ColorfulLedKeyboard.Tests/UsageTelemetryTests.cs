@@ -78,6 +78,40 @@ public sealed class UsageTelemetryTests : IDisposable
     }
 
     [Fact]
+    public async Task ClientSendsAtMostOneHeartbeatPerUtcDay()
+    {
+        var now = new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero);
+        var state = new UsageTelemetryState
+        {
+            InstallId = Guid.NewGuid().ToString("D"),
+            InstallSent = true,
+            LastVersionSent = typeof(UsageTelemetryClient).Assembly.GetName().Version?.ToString(3) ?? "0.0.0",
+            LastHeartbeatDate = "2026-08-31"
+        };
+        state.Save(StatePath);
+
+        var handler = new RecordingHandler();
+        using var client = new UsageTelemetryClient(
+            new HttpClient(handler),
+            StatePath,
+            "https://example.test/v1/telemetry",
+            () => now);
+        var settings = new KeyboardSettings().Normalize();
+
+        await client.SyncAsync(settings);
+        await client.SyncAsync(settings);
+
+        Assert.Single(handler.Requests);
+        Assert.Equal("heartbeat", handler.Requests[0].Event);
+
+        now = now.AddDays(1);
+        await client.SyncAsync(settings);
+
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.All(handler.Requests, request => Assert.Equal("heartbeat", request.Event));
+    }
+
+    [Fact]
     public async Task ClientDoesNotTreatDefaultHelloWorldResponseAsSuccess()
     {
         var handler = new RecordingHandler(HttpStatusCode.OK);
@@ -92,6 +126,33 @@ public sealed class UsageTelemetryTests : IDisposable
         Assert.False(UsageTelemetryState.Load(StatePath).InstallSent);
     }
 
+    [Fact]
+    public async Task ClientRetriesAfterTransientFailureWithBackoff()
+    {
+        var now = new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero);
+        var handler = new RecordingHandler(HttpStatusCode.ServiceUnavailable);
+        using var client = new UsageTelemetryClient(
+            new HttpClient(handler),
+            StatePath,
+            "https://example.test/v1/telemetry",
+            () => now);
+        var settings = new KeyboardSettings().Normalize();
+
+        await client.SyncAsync(settings);
+        Assert.False(UsageTelemetryState.Load(StatePath).InstallSent);
+
+        // 第一次失败后不会立即忙循环；超过 15 秒后允许下一次补偿上报。
+        handler.StatusCode = HttpStatusCode.NoContent;
+        await client.SyncAsync(settings);
+        Assert.Single(handler.Requests);
+
+        now = now.AddSeconds(16);
+        await client.SyncAsync(settings);
+
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.True(UsageTelemetryState.Load(StatePath).InstallSent);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_directory)) Directory.Delete(_directory, recursive: true);
@@ -99,9 +160,9 @@ public sealed class UsageTelemetryTests : IDisposable
 
     private sealed class RecordingHandler : HttpMessageHandler
     {
-        private readonly HttpStatusCode _statusCode;
+        public HttpStatusCode StatusCode { get; set; }
 
-        public RecordingHandler(HttpStatusCode statusCode = HttpStatusCode.NoContent) => _statusCode = statusCode;
+        public RecordingHandler(HttpStatusCode statusCode = HttpStatusCode.NoContent) => StatusCode = statusCode;
 
         public List<TelemetryRequest> Requests { get; } = [];
 
@@ -112,7 +173,7 @@ public sealed class UsageTelemetryTests : IDisposable
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             Assert.NotNull(payload);
             Requests.Add(payload!);
-            return new HttpResponseMessage(_statusCode);
+            return new HttpResponseMessage(StatusCode);
         }
     }
 

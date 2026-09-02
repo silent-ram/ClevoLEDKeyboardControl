@@ -20,6 +20,8 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly System.Windows.Forms.Timer _trayStatusTimer = new() { Interval = 2000 };
     private readonly System.Windows.Forms.Timer _updateTimer = new() { Interval = 6 * 60 * 60 * 1000 };
     private readonly System.Windows.Forms.Timer _singleInstanceSignalTimer = new() { Interval = 500 };
+    // 成功上报后直接等待下一个统计日；只有失败时才按退避策略短暂重试。
+    private readonly System.Windows.Forms.Timer _usageTelemetryTimer = new() { Interval = 60 * 1000 };
     private readonly EventWaitHandle? _openSettingsEvent;
     private string? _lastForegroundProcess;
     private DateTimeOffset _lastForegroundStateSaved = DateTimeOffset.MinValue;
@@ -35,7 +37,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         _settingsStore = settingsStore;
         EnsureServiceRunning();
         _settings = _settingsStore.Load();
-        _ = _usageTelemetryClient.SyncAsync(_settings);
+        _ = SyncUsageTelemetryAndScheduleAsync();
         _availableUpdate = _updateChecker.LoadKnownAvailable();
         _notificationFlashMonitor = new NotificationFlashMonitor(_settingsStore);
 
@@ -64,6 +66,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             if (_openSettingsEvent is not null && _openSettingsEvent.WaitOne(0)) OpenSettings();
         };
         _singleInstanceSignalTimer.Start();
+        _usageTelemetryTimer.Tick += async (_, _) => await SyncUsageTelemetryAndScheduleAsync();
         RefreshEventMonitors();
         UpdateForegroundAppState();
         _ = CheckForUpdatesAutomaticallyAsync(initialDelay: true);
@@ -91,6 +94,8 @@ public sealed class TrayApplicationContext : ApplicationContext
             _updateTimer.Dispose();
             _singleInstanceSignalTimer.Stop();
             _singleInstanceSignalTimer.Dispose();
+            _usageTelemetryTimer.Stop();
+            _usageTelemetryTimer.Dispose();
             _typingPulseHook.Dispose();
             _notificationFlashMonitor.Dispose();
             _mediaSessionMonitor.Dispose();
@@ -497,7 +502,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             _mediaSessionMonitor.ForceRefresh();
             RefreshMenu();
             _settings = _settingsStore.Load();
-            _ = _usageTelemetryClient.SyncAsync(_settings);
+            _ = SyncUsageTelemetryAndScheduleAsync();
         };
         _settingsForm.FormClosed += (_, _) =>
         {
@@ -507,6 +512,20 @@ public sealed class TrayApplicationContext : ApplicationContext
         _settingsForm.Show();
         ActivateSettingsWindow(_settingsForm);
         _ = _settingsForm.CheckForUpdatesNowAsync();
+    }
+
+    private async Task SyncUsageTelemetryAndScheduleAsync()
+    {
+        _usageTelemetryTimer.Stop();
+        await _usageTelemetryClient.SyncAsync(_settings);
+
+        if (_settings.UserImprovementPlan?.Enabled == true)
+        {
+            var delay = _usageTelemetryClient.GetNextCheckDelay();
+            var milliseconds = Math.Clamp((long)delay.TotalMilliseconds, 1000L, int.MaxValue);
+            _usageTelemetryTimer.Interval = (int)milliseconds;
+            _usageTelemetryTimer.Start();
+        }
     }
 
     private void OpenSettingsAfterStartup()

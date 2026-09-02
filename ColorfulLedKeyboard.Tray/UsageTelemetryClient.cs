@@ -18,7 +18,8 @@ internal sealed class UsageTelemetryClient : IDisposable
     private readonly string _endpoint;
     private readonly Func<DateTimeOffset> _utcNow;
     private readonly SemaphoreSlim _sync = new(1, 1);
-    private readonly HashSet<string> _attemptedThisRun = new(StringComparer.Ordinal);
+    private DateTimeOffset _nextAttemptAt = DateTimeOffset.MinValue;
+    private int _consecutiveFailures;
     private bool _disposed;
 
     public UsageTelemetryClient(
@@ -43,9 +44,19 @@ internal sealed class UsageTelemetryClient : IDisposable
         await _sync.WaitAsync().ConfigureAwait(false);
         try
         {
+            var now = _utcNow();
+            if (now < _nextAttemptAt)
+            {
+                return;
+            }
+
             var state = UsageTelemetryState.Load(_statePath);
+            var previousInstallId = state.InstallId;
             state.EnsureInstallId();
-            state.Save(_statePath);
+            if (!string.Equals(previousInstallId, state.InstallId, StringComparison.OrdinalIgnoreCase))
+            {
+                state.Save(_statePath);
+            }
 
             var version = GetCurrentVersion();
             var today = _utcNow().ToString("yyyy-MM-dd");
@@ -59,12 +70,7 @@ internal sealed class UsageTelemetryClient : IDisposable
 
             if (telemetryEvent is null)
             {
-                return;
-            }
-
-            var attemptKey = $"{telemetryEvent}:{version}:{today}";
-            if (!_attemptedThisRun.Add(attemptKey))
-            {
+                ScheduleNextDailyCheck(now);
                 return;
             }
 
@@ -75,17 +81,23 @@ internal sealed class UsageTelemetryClient : IDisposable
                 // Worker 成功响应固定为 204。这样旧的默认 Hello World 页面（200）不会被误记为成功。
                 if (response.StatusCode != HttpStatusCode.NoContent)
                 {
+                    ScheduleRetry(now);
                     return;
                 }
             }
             catch (HttpRequestException)
             {
+                ScheduleRetry(now);
                 return;
             }
             catch (TaskCanceledException)
             {
+                ScheduleRetry(now);
                 return;
             }
+
+            _consecutiveFailures = 0;
+            _nextAttemptAt = DateTimeOffset.MinValue;
 
             switch (telemetryEvent)
             {
@@ -104,6 +116,7 @@ internal sealed class UsageTelemetryClient : IDisposable
             }
 
             state.Save(_statePath);
+            ScheduleNextDailyCheck(now);
         }
         catch
         {
@@ -113,6 +126,37 @@ internal sealed class UsageTelemetryClient : IDisposable
         {
             _sync.Release();
         }
+    }
+
+    private void ScheduleRetry(DateTimeOffset now)
+    {
+        _consecutiveFailures = Math.Min(_consecutiveFailures + 1, 5);
+        var delay = _consecutiveFailures switch
+        {
+            1 => TimeSpan.FromSeconds(15),
+            2 => TimeSpan.FromMinutes(1),
+            3 => TimeSpan.FromMinutes(5),
+            4 => TimeSpan.FromMinutes(30),
+            _ => TimeSpan.FromHours(6),
+        };
+        _nextAttemptAt = now + delay;
+    }
+
+    internal TimeSpan GetNextCheckDelay()
+    {
+        var now = _utcNow();
+        if (_nextAttemptAt <= now)
+        {
+            return TimeSpan.FromSeconds(1);
+        }
+
+        return _nextAttemptAt - now;
+    }
+
+    private void ScheduleNextDailyCheck(DateTimeOffset now)
+    {
+        var nextUtcDate = now.UtcDateTime.Date.AddDays(1);
+        _nextAttemptAt = new DateTimeOffset(nextUtcDate, TimeSpan.Zero);
     }
 
     public void Dispose()
