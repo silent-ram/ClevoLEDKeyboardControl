@@ -268,7 +268,8 @@ public sealed partial class SettingsForm
             {
                 case NavigationListBox:
                     break;
-                case CheckBox checkBox:
+                case CheckBox checkBox when checkBox != _startupEnabled:
+                    // _startupEnabled(开机自启动)是即时生效的系统开关,不参与"保存并应用"。
                     checkBox.CheckedChanged += (_, _) => MarkDirty();
                     break;
                 case RadioButton radio:

@@ -472,6 +472,42 @@ public sealed class TrayApplicationContext : ApplicationContext
         var restart = new ToolStripMenuItem("重启服务");
         restart.Click += (_, _) => RestartService();
 
+        // 与设置页"开机自启动"同一开关:统一控制托盘 Run 键与灯控服务启动类型。
+        var (trayRegistered, serviceAuto) = StartupManager.GetState();
+        var startup = new ToolStripMenuItem("开机自动启动")
+        {
+            Checked = trayRegistered && serviceAuto,
+            ToolTipText = $"托盘自启:{(trayRegistered ? "已注册" : "未注册")} · 灯效服务:{(serviceAuto ? "自动" : "手动")}",
+        };
+        startup.Click += async (_, _) =>
+        {
+            var enabled = !startup.Checked;
+            if (MessageBox.Show(
+                    $"确定要将开机自启动切换为{(enabled ? "开启" : "关闭")}吗?该设置立即生效,可能需要管理员权限。",
+                    "ClevoLEDKeyboardControl",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question) != DialogResult.Yes)
+            {
+                return;
+            }
+            startup.Enabled = false;
+            var (ok, error) = await Task.Run(() =>
+            {
+                var success = StartupManager.TrySetEnabled(enabled, out var message);
+                return (success, message);
+            });
+            startup.Enabled = true;
+            if (!ok)
+            {
+                MessageBox.Show(
+                    $"无法修改开机自启动:{error}",
+                    "ClevoLEDKeyboardControl",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
+            RefreshMenu(refreshEventMonitors: false, reloadSettings: false);
+        };
+
         var folder = new ToolStripMenuItem("打开配置目录");
         folder.Click += (_, _) =>
         {
@@ -480,6 +516,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         };
 
         service.DropDownItems.Add(restart);
+        service.DropDownItems.Add(startup);
         service.DropDownItems.Add(folder);
         return service;
     }

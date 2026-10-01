@@ -129,6 +129,9 @@ public sealed partial class SettingsForm : ThemedForm
     private readonly System.Windows.Forms.Timer _automationStatusTimer = new() { Interval = 1000 };
     private readonly ComboBox _updateInterval = new();
     private readonly CheckBox _userImprovementPlanEnabled = new() { Text = "参与用户改进计划", AutoSize = true };
+    private readonly CheckBox _startupEnabled = new() { Text = "开机自动启动托盘与灯效服务(切换后立即生效)", AutoSize = true };
+    private readonly Label _startupState = new() { AutoSize = true, ForeColor = SystemColors.GrayText };
+    private bool _applyingStartup;
     private readonly Label _userImprovementPlanDescription = new()
     {
         Text = "用于了解不同版本的实际使用情况，便于安排维护和更新。",
@@ -198,6 +201,13 @@ public sealed partial class SettingsForm : ThemedForm
         _musicAdvanced.Checked = _initialUiState.MusicAdvancedExpanded;
         _loadingSettings = false;
         UpdateMusicAdvancedVisibility();
+        _startupEnabled.CheckedChanged += (_, _) =>
+        {
+            if (_applyingStartup) return;
+            ApplyStartupSetting(_startupEnabled.Checked);
+        };
+        // 托盘菜单等其他入口切换自启动时保持本窗口显示同步;事件可能来自后台线程。
+        StartupManager.StartupChanged += OnStartupChanged;
         _automationStatusTimer.Tick += (_, _) => UpdateAutomationStatus();
         _automationStatusTimer.Start();
         ThemeManager.ThemeChanged += OnThemeChanged;
@@ -206,6 +216,7 @@ public sealed partial class SettingsForm : ThemedForm
         {
             PersistWindowState();
             ThemeManager.ThemeChanged -= OnThemeChanged;
+            StartupManager.StartupChanged -= OnStartupChanged;
             _automationStatusTimer.Dispose();
         };
         TextChanged += (_, _) =>
@@ -864,8 +875,46 @@ public sealed partial class SettingsForm : ThemedForm
         _updateAvailableStatusRow.Visible = false;
         page.Controls.Add(new UiCard("自动更新", Row("自动检查更新", _updateInterval), _updateAvailableStatusRow));
         page.Controls.Add(new UiCard("用户改进计划", PlainRow(_userImprovementPlanEnabled), PlainRow(_userImprovementPlanDescription)));
+        page.Controls.Add(new UiCard("开机自启动", PlainRow(_startupEnabled), PlainRow(_startupState)));
         page.Controls.Add(new UiCard("配置管理", configActions, Row("配置文件", configPath), folderActions));
+        RefreshStartupControls();
         return page;
+    }
+
+    private void OnStartupChanged(object? sender, EventArgs e)
+    {
+        if (IsDisposed || Disposing) return;
+        if (InvokeRequired)
+        {
+            BeginInvoke(RefreshStartupControls);
+            return;
+        }
+        RefreshStartupControls();
+    }
+
+    private void RefreshStartupControls()
+    {
+        var (trayRegistered, serviceAuto) = StartupManager.GetState();
+        _applyingStartup = true;
+        _startupEnabled.Checked = trayRegistered && serviceAuto;
+        _applyingStartup = false;
+        _startupState.Text = $"托盘自启:{(trayRegistered ? "已注册" : "未注册")} · 灯效服务:{(serviceAuto ? "自动" : "手动")}"
+            + (trayRegistered == serviceAuto ? "" : "(状态不一致,切换开关即可修复)");
+    }
+
+    private void ApplyStartupSetting(bool enabled)
+    {
+        _startupState.Text = "正在应用…";
+        var ok = StartupManager.TrySetEnabled(enabled, out var error);
+        if (!ok)
+        {
+            MessageBox.Show(
+                $"无法修改开机自启动:{error}",
+                "ClevoLEDKeyboardControl",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
+        RefreshStartupControls();
     }
 
     internal async Task CheckForUpdatesNowAsync()
