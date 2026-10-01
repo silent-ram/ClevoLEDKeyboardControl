@@ -11,9 +11,19 @@ namespace ColorfulLedKeyboard.Tray;
 /// </summary>
 internal sealed class UsageTelemetryClient : IDisposable
 {
-    internal const string Endpoint = "https://clevo-usage-api.yycc1936.workers.dev/v1/telemetry";
-    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(3);
+    // 上报端点:仅腾讯云函数(广州,直写 COS),国内外用户统一入口。
+    // Cloudflare Worker 已退役(workers.dev 国内不可达)。
+    // 若将来增加端点,按数组顺序排列即可——客户端会按系统时区自动排序,
+    // 并在失败时依次 fallback;服务端按 installId 幂等去重,重复上报不虚增统计。
+    internal static readonly string[] DefaultEndpoints =
+    [
+        "https://1417250850-29682anb03.ap-guangzhou.tencentscf.com/v1/telemetry",
+    ];
+
+    // 10 秒:函数 URL 偶发冷启动 + 单实例排队可能耗 2~3 秒,3 秒会把偶发慢请求误判为失败。
+    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(10);
     private readonly HttpClient _httpClient;
+    private readonly string[] _endpoints;
     private readonly string _statePath;
     private readonly string _endpoint;
     private readonly Func<DateTimeOffset> _utcNow;
@@ -27,11 +37,47 @@ internal sealed class UsageTelemetryClient : IDisposable
         string? statePath = null,
         string? endpoint = null,
         Func<DateTimeOffset>? utcNow = null)
+        : this(httpClient, statePath, endpoint is null ? DefaultEndpoints : [endpoint], utcNow)
+    {
+    }
+
+    internal UsageTelemetryClient(
+        HttpClient? httpClient,
+        string? statePath,
+        string[] endpoints,
+        Func<DateTimeOffset>? utcNow = null,
+        TimeZoneInfo? timeZone = null)
     {
         _httpClient = httpClient ?? new HttpClient { Timeout = RequestTimeout };
         _statePath = statePath ?? AppPaths.UsageTelemetryStatePath;
-        _endpoint = endpoint ?? Endpoint;
+        _endpoints = OrderEndpointsForLocalZone(endpoints is { Length: > 0 } ? endpoints : DefaultEndpoints, timeZone ?? TimeZoneInfo.Local);
+        _endpoint = _endpoints[0];
         _utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
+    }
+
+    // workers.dev（Cloudflare 直连）在中国大陆基本不可达；自建/云函数中转端点则相反，
+    // 海外直连它们反而绕路。按系统时区预排序：中国时区用户中转在前，其余用户 CF 直连在前。
+    // 排序只是优化——fallback 保证任何顺序下都能找到可达端点。
+    internal static string[] OrderEndpointsForLocalZone(string[] endpoints, TimeZoneInfo timeZone)
+    {
+        static bool IsCloudflareDirect(string endpoint) =>
+            endpoint.Contains("workers.dev", StringComparison.OrdinalIgnoreCase);
+
+        static bool IsChinaLocalZone(TimeZoneInfo zone) =>
+            zone.Id is "China Standard Time" or "Asia/Shanghai" or "Asia/Urumqi" ||
+            (zone.BaseUtcOffset == TimeSpan.FromHours(8) && zone.DisplayName?.Contains("China") == true);
+
+        var preferRelay = IsChinaLocalZone(timeZone);
+        return endpoints
+            .Select((endpoint, index) => (Endpoint: endpoint, Index: index))
+            .OrderBy(item =>
+            {
+                var isCloudflare = IsCloudflareDirect(item.Endpoint);
+                // 期望的端点类型得 0 分排在前面，不匹配的得 1 分；分数相同保持原数组顺序。
+                return (isCloudflare != preferRelay ? 0 : 1, item.Index);
+            })
+            .Select(item => item.Endpoint)
+            .ToArray();
     }
 
     public async Task SyncAsync(KeyboardSettings settings)
@@ -75,22 +121,27 @@ internal sealed class UsageTelemetryClient : IDisposable
             }
 
             var request = new UsageTelemetryRequest(state.InstallId, telemetryEvent, version);
-            try
+            var delivered = false;
+            foreach (var endpoint in _endpoints)
             {
-                using var response = await _httpClient.PostAsJsonAsync(_endpoint, request).ConfigureAwait(false);
-                // Worker 成功响应固定为 204。这样旧的默认 Hello World 页面（200）不会被误记为成功。
-                if (response.StatusCode != HttpStatusCode.NoContent)
+                try
                 {
-                    ScheduleRetry(now);
-                    return;
+                    using var response = await _httpClient.PostAsJsonAsync(endpoint, request).ConfigureAwait(false);
+                    // Worker 成功响应固定为 204：旧的默认 Hello World 页面（200）或中转函数异常页
+                    // （200）都不能算成功，否则国内用户会被误记为上报成功。
+                    if (response.StatusCode != HttpStatusCode.NoContent) continue;
+                    delivered = true;
+                    break;
+                }
+                catch (HttpRequestException)
+                {
+                }
+                catch (TaskCanceledException)
+                {
                 }
             }
-            catch (HttpRequestException)
-            {
-                ScheduleRetry(now);
-                return;
-            }
-            catch (TaskCanceledException)
+
+            if (!delivered)
             {
                 ScheduleRetry(now);
                 return;

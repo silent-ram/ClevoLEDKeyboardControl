@@ -153,6 +153,76 @@ public sealed class UsageTelemetryTests : IDisposable
         Assert.True(UsageTelemetryState.Load(StatePath).InstallSent);
     }
 
+    [Fact]
+    public void EndpointOrderPrefersRelayForChinaTimeZoneAndDirectForOthers()
+    {
+        var cloudflare = "https://clevo-usage-api.yycc1936.workers.dev/v1/telemetry";
+        var relayTencent = "https://example.gz.tencentscf.com/v1/telemetry";
+        var relayAliyun = "https://example.cn-hangzhou.fcapp.run/v1/telemetry";
+        var china = TimeZoneInfo.FindSystemTimeZoneById("China Standard Time");
+
+        // 中国时区：中转在前，CF 直连殿后
+        var forChina = UsageTelemetryClient.OrderEndpointsForLocalZone([cloudflare, relayTencent, relayAliyun], china);
+        Assert.Equal([relayTencent, relayAliyun, cloudflare], forChina);
+
+        // 其他时区：CF 直连在前
+        var forOverseas = UsageTelemetryClient.OrderEndpointsForLocalZone([cloudflare, relayTencent], TimeZoneInfo.Utc);
+        Assert.Equal([cloudflare, relayTencent], forOverseas);
+
+        // 同类端点保持原有相对顺序
+        var sameType = UsageTelemetryClient.OrderEndpointsForLocalZone([relayTencent, relayAliyun], china);
+        Assert.Equal([relayTencent, relayAliyun], sameType);
+    }
+
+    [Fact]
+    public async Task ClientFallsBackToNextEndpointWhenPrimaryFails()
+    {
+        var primary = "https://primary.test/v1/telemetry";
+        var secondary = "https://secondary.test/v1/telemetry";
+        var handler = new RecordingHandler
+        {
+            StatusCodeSelector = url => url.StartsWith("https://primary.test", StringComparison.Ordinal)
+                ? HttpStatusCode.InternalServerError
+                : HttpStatusCode.NoContent
+        };
+        using var client = new UsageTelemetryClient(
+            new HttpClient(handler),
+            StatePath,
+            [primary, secondary],
+            () => new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero));
+        var settings = new KeyboardSettings().Normalize();
+
+        await client.SyncAsync(settings);
+
+        Assert.Equal(2, handler.Endpoints.Count);
+        Assert.Equal(primary, handler.Endpoints[0]);
+        Assert.Equal(secondary, handler.Endpoints[1]);
+        Assert.True(UsageTelemetryState.Load(StatePath).InstallSent);
+    }
+
+    [Fact]
+    public async Task ClientStopsAfterFirstSuccessfulEndpoint()
+    {
+        // 主端点成功时不得向备用端点重复发送；服务端虽按 installId 幂等，客户端也应省流量。
+        var primary = "https://primary.test/v1/telemetry";
+        var secondary = "https://secondary.test/v1/telemetry";
+        var handler = new RecordingHandler
+        {
+            StatusCodeSelector = _ => HttpStatusCode.NoContent
+        };
+        using var client = new UsageTelemetryClient(
+            new HttpClient(handler),
+            StatePath,
+            [primary, secondary],
+            () => new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero));
+        var settings = new KeyboardSettings().Normalize();
+
+        await client.SyncAsync(settings);
+
+        Assert.Single(handler.Requests);
+        Assert.True(UsageTelemetryState.Load(StatePath).InstallSent);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_directory)) Directory.Delete(_directory, recursive: true);
@@ -162,18 +232,25 @@ public sealed class UsageTelemetryTests : IDisposable
     {
         public HttpStatusCode StatusCode { get; set; }
 
+        public Func<string, HttpStatusCode>? StatusCodeSelector { get; set; }
+
         public RecordingHandler(HttpStatusCode statusCode = HttpStatusCode.NoContent) => StatusCode = statusCode;
 
         public List<TelemetryRequest> Requests { get; } = [];
 
+        public List<string> Endpoints { get; } = [];
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            var endpoint = request.RequestUri?.ToString() ?? "";
             var payload = JsonSerializer.Deserialize<TelemetryRequest>(
                 await request.Content!.ReadAsStringAsync(cancellationToken),
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             Assert.NotNull(payload);
+            Endpoints.Add(endpoint);
             Requests.Add(payload!);
-            return new HttpResponseMessage(StatusCode);
+            var status = StatusCodeSelector is not null ? StatusCodeSelector(endpoint) : StatusCode;
+            return new HttpResponseMessage(status);
         }
     }
 
