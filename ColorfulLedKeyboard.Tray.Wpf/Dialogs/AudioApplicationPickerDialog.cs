@@ -24,6 +24,7 @@ public sealed class AudioApplicationPickerDialog : Window
         FontFamily = (FontFamily)Application.Current.Resources["Font.Body"];
         FontSize = 12;
         Foreground = (Brush)Application.Current.Resources["Brush.Text"];
+        SourceInitialized += (_, _) => WpfThemeManager.ApplyTitleBarMode(this);
 
         _items = AudioApplicationsState.Load()?.Applications.ToList()
             ?? AutomationStatus.Load()?.AudioApplications.ToList()
@@ -72,9 +73,8 @@ public sealed class AudioApplicationPickerDialog : Window
         gridView.Columns.Add(MakeColumn("状态", "StatusText", 100));
         _list.View = gridView;
         _list.ItemsSource = _items.Select(item => new RowVm(item)).ToList();
-        _list.Background = (Brush)Application.Current.Resources["Brush.Field"];
-        _list.Foreground = (Brush)Application.Current.Resources["Brush.Text"];
-        _list.BorderBrush = (Brush)Application.Current.Resources["Brush.Border"];
+        ThemedListView.Apply(_list);
+        System.Windows.Controls.ScrollViewer.SetHorizontalScrollBarVisibility(_list, ScrollBarVisibility.Disabled);
         _list.MouseDoubleClick += (_, _) => Accept();
 
         var bind = new Button

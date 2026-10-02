@@ -405,15 +405,15 @@ public sealed class RunningAppsDialog : Window
         FontFamily = (FontFamily)Application.Current.Resources["Font.Body"];
         FontSize = 12;
         Foreground = (Brush)Application.Current.Resources["Brush.Text"];
+        SourceInitialized += (_, _) => WpfThemeManager.ApplyTitleBarMode(this);
 
         var gridView = new GridView();
         gridView.Columns.Add(Column("进程名", "ProcessName", 180));
         gridView.Columns.Add(Column("窗口标题", "Title", 300));
         gridView.Columns.Add(Column("图标色", "IconColor", 110));
         _list.View = gridView;
-        _list.Background = (Brush)Application.Current.Resources["Brush.Field"];
-        _list.Foreground = (Brush)Application.Current.Resources["Brush.Text"];
-        _list.BorderBrush = (Brush)Application.Current.Resources["Brush.Border"];
+        ThemedListView.Apply(_list);
+        System.Windows.Controls.ScrollViewer.SetHorizontalScrollBarVisibility(_list, ScrollBarVisibility.Disabled);
         _list.MouseDoubleClick += (_, _) => Confirm();
 
         var buttons = new StackPanel

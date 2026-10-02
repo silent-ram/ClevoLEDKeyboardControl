@@ -21,21 +21,6 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
-        _openSettingsEvent = new EventWaitHandle(false, EventResetMode.AutoReset, OpenSettingsEventName);
-        _singleInstanceMutex = new Mutex(initiallyOwned: true, SingleInstanceMutexName, out var createdNew);
-        if (!createdNew)
-        {
-            _openSettingsEvent.Set();
-            Shutdown();
-            return;
-        }
-        Exit += (_, _) =>
-        {
-            _trayContext?.Dispose();
-            _openSettingsEvent?.Dispose();
-            _singleInstanceMutex?.Dispose();
-        };
-
         var args = e.Args;
         _startupArgs = args;
         var openSettings = args.Any(arg =>
@@ -46,6 +31,30 @@ public partial class App : Application
         if (screenshotIndex >= 0 && screenshotIndex + 1 < args.Length) screenshotDir = args[screenshotIndex + 1];
         var themeArg = ExtractValue(args, "--theme");
         var accentArg = ExtractValue(args, "--accent");
+        var isScreenshot = screenshotDir is not null;
+
+        // 截图验收模式跳过单实例互斥：真实托盘可能在跑（持锁），验收实例只活几秒且即用即弃
+        if (!isScreenshot)
+        {
+            _openSettingsEvent = new EventWaitHandle(false, EventResetMode.AutoReset, OpenSettingsEventName);
+            _singleInstanceMutex = new Mutex(initiallyOwned: true, SingleInstanceMutexName, out var createdNew);
+            if (!createdNew)
+            {
+                _openSettingsEvent.Set();
+                Shutdown();
+                return;
+            }
+            Exit += (_, _) =>
+            {
+                _trayContext?.Dispose();
+                _openSettingsEvent?.Dispose();
+                _singleInstanceMutex?.Dispose();
+            };
+        }
+        else
+        {
+            _openSettingsEvent = new EventWaitHandle(false, EventResetMode.AutoReset, OpenSettingsEventName);
+        }
 
         var uiState = UiStateStore.Shared.Load();
         var kind = Enum.TryParse<UiThemeKind>(themeArg, ignoreCase: true, out var parsed) ? parsed : uiState.Theme;
@@ -94,6 +103,18 @@ public partial class App : Application
 
             // 运行时主题切换验收：精确走 SetTheme → ThemeChanged → RebuildPagesForTheme 路径，
             // 切换后仍能截图即证明不闪退且颜色刷新。
+            // 绑定选择器弹窗验收：验证列表深色化（悬停/选中/表头）
+            if (_startupArgs.Contains("--picker"))
+            {
+                var picker = new Dialogs.AudioApplicationPickerDialog(includeVisibleProcesses: true) { Owner = window };
+                picker.Show();
+                DoEvents();
+                Thread.Sleep(400);
+                DoEvents();
+                Capture(picker, Path.Combine(directory, "picker.png"));
+                picker.Close();
+            }
+
             if (ExtractValue(_startupArgs, "--switch-theme") is { } switchArg &&
                 Enum.TryParse<UiThemeKind>(switchArg, ignoreCase: true, out var targetKind))
             {
