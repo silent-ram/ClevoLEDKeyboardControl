@@ -15,6 +15,7 @@ public partial class App : Application
     private Mutex? _singleInstanceMutex;
     private EventWaitHandle? _openSettingsEvent;
     private WpfTrayContext? _trayContext;
+    private string[] _startupArgs = [];
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -36,6 +37,7 @@ public partial class App : Application
         };
 
         var args = e.Args;
+        _startupArgs = args;
         var openSettings = args.Any(arg =>
             string.Equals(arg, "--settings", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(arg, "/settings", StringComparison.OrdinalIgnoreCase));
@@ -77,6 +79,7 @@ public partial class App : Application
                 return;
             }
 
+            if (_startupArgs.Contains("--force-lighting")) window.ForceLightingModeForCapture();
             for (var index = 0; index < window.PageCount; index++)
             {
                 window.SelectPage(index);

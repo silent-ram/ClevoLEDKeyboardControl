@@ -28,8 +28,11 @@ public partial class MainWindow : Window
     ];
 
     private readonly UiStateStore _uiStateStore = UiStateStore.Shared;
+    private readonly SettingsStore _settingsStore = new();
     private readonly UiState _initialUiState;
     private readonly List<Control> _pages = [];
+    private const string BaseTitle = "ClevoLEDKeyboardControl 设置";
+    private EffectPage? _effectPage;
     private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private AudioSourceStatusInfo? _lastAudioStatus;
     private bool _ready;
@@ -48,9 +51,13 @@ public partial class MainWindow : Window
         Navigation.SelectedIndex = Math.Clamp(_initialUiState.LastPage, 0, _pages.Count - 1);
         Navigation.SelectionChanged += (_, _) => ApplySelectedPage(Navigation.SelectedIndex);
 
+        ApplyButton.Click += (_, _) => SaveSettings();
+        RevertButton.Click += (_, _) => RevertChanges();
+
         _statusTimer.Tick += (_, _) => UpdateStatusHeader();
         _statusTimer.Start();
         UpdateStatusHeader();
+        UpdateSaveBar();
 
         SourceInitialized += (_, _) => WpfThemeManager.ApplyTitleBarMode(this);
         Loaded += (_, _) => { _ready = true; UpdateStatusHeader(); };
@@ -60,6 +67,9 @@ public partial class MainWindow : Window
     }
 
     public int PageCount => _pages.Count;
+
+    /// <summary>截图验收专用。</summary>
+    public void ForceLightingModeForCapture() => _effectPage?.ForceLightingModeForCapture();
 
     public void SelectPage(int index)
     {
@@ -75,7 +85,12 @@ public partial class MainWindow : Window
     }
 
     /// <summary>托盘侧设置变更后回推；Phase 0 仅刷新状态头。</summary>
-    public void ReloadFromStore() => Dispatcher.BeginInvoke(UpdateStatusHeader);
+    public void ReloadFromStore() => Dispatcher.BeginInvoke(() =>
+    {
+        _effectPage?.LoadFromStore(new SettingsStore().Load());
+        UpdateStatusHeader();
+        UpdateSaveBar();
+    });
 
     public void ActivateWindow()
     {
@@ -95,7 +110,13 @@ public partial class MainWindow : Window
         var overview = new OverviewPage();
         overview.PageRequested += (_, index) => SelectPage(index);
         _pages.Add(overview);
-        _pages.Add(new PlaceholderPage("灯效设置"));
+
+        var effectPage = new EffectPage();
+        effectPage.Changed += (_, _) => UpdateSaveBar();
+        effectPage.PageRequested += (_, index) => SelectPage(index);
+        _effectPage = effectPage;
+        _pages.Add(effectPage);
+        effectPage.LoadFromStore(new SettingsStore().Load());
         _pages.Add(new PlaceholderPage("音乐模式"));
         _pages.Add(new PlaceholderPage("场景自动化"));
         _pages.Add(new PlaceholderPage("事件反馈"));
@@ -114,6 +135,44 @@ public partial class MainWindow : Window
         _lastPage = index;
         if (_ready) _uiStateStore.Update(state => state.LastPage = index);
         if (_pages[index] is OverviewPage overview) UpdateOverview(overview);
+    }
+
+    // ---- 保存栏（WinForms SaveSettings/RevertChanges/UpdateSaveBar 的效果页部分）----
+
+    private void SaveSettings()
+    {
+        try
+        {
+            var settings = _settingsStore.Load();
+        _effectPage?.ApplyTo(settings);
+            _settingsStore.Save(settings);
+            _effectPage?.OnSaved(settings);
+            UpdateStatusHeader();
+            UpdateSaveBar();
+            SettingsSaved?.Invoke();
+        }
+        catch (Exception ex) when (ex is FormatException or IOException or UnauthorizedAccessException)
+        {
+            System.Windows.MessageBox.Show($"无法保存设置：{ex.Message}", "ClevoLEDKeyboardControl",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void RevertChanges()
+    {
+        _effectPage?.LoadFromStore(new SettingsStore().Load());
+        UpdateStatusHeader();
+        UpdateSaveBar();
+    }
+
+    private void UpdateSaveBar()
+    {
+        var dirty = _effectPage is { IsDirty: true };
+        DirtyLabel.Text = dirty ? "● 有尚未保存的修改" : "✓ 设置已保存";
+        DirtyLabel.Foreground = (Brush)Application.Current.Resources[dirty ? "Brush.Warning" : "Brush.Success"];
+        RevertButton.IsEnabled = dirty;
+        ApplyButton.IsEnabled = dirty;
+        Title = dirty ? BaseTitle + " - 有未应用的更改" : BaseTitle;
     }
 
     // ---- 状态头与总览（移植自 WinForms UpdateStatusHeader/UpdateOverviewRuntime）----
