@@ -186,17 +186,17 @@ public sealed class ColorSelectionDialog : Window
         swatch.SetBinding(Border.BackgroundProperty, new Binding("CurrentBrush"));
         swatch.SetValue(Grid.RowProperty, 0);
         swatch.AddHandler(Border.MouseDownEvent,
-            new MouseButtonEventHandler((sender, _) => SelectChoice((ColorChoiceVm)((FrameworkElement)sender).DataContext)));
+            new MouseButtonEventHandler((sender, _) => OnCellClicked((ColorChoiceVm)((FrameworkElement)sender).DataContext)));
         gridFactory.AppendChild(swatch);
 
+        // 勾选框纯显示（不可点）：勾选状态只在容器的点击处理函数里变更——
+        // 与 WinForms ColorGrid 相同的"单点变更"模型，不存在事件时序导致的多勾。
         var check = new FrameworkElementFactory(typeof(CheckBox));
         check.SetBinding(CheckBox.IsCheckedProperty, new Binding("Checked"));
         check.SetValue(HorizontalAlignmentProperty, HorizontalAlignment.Right);
         check.SetValue(VerticalAlignmentProperty, VerticalAlignment.Top);
-        check.AddHandler(CheckBox.CheckedEvent,
-            new RoutedEventHandler((sender, _) => OnChoiceCheckedChanged((ColorChoiceVm)((FrameworkElement)sender).DataContext)));
-        check.AddHandler(CheckBox.UncheckedEvent,
-            new RoutedEventHandler((sender, _) => OnChoiceCheckedChanged((ColorChoiceVm)((FrameworkElement)sender).DataContext)));
+        check.SetValue(UIElement.IsHitTestVisibleProperty, false);
+        check.SetValue(FrameworkElement.FocusableProperty, false);
         gridFactory.AppendChild(check);
 
         template.VisualTree = gridFactory;
@@ -368,25 +368,27 @@ public sealed class ColorSelectionDialog : Window
         }
     }
 
-    private void SelectChoice(ColorChoiceVm choice)
+    /// <summary>
+    /// 唯一的勾选/选中变更入口（对应 WinForms ColorGrid.OnMouseDown）：
+    /// 单选 = 清其余勾选 + 勾中此格；多选 = 翻转此格。
+    /// 勾选框纯显示不可点，不存在第二条会改勾选状态的路径。
+    /// </summary>
+    private void OnCellClicked(ColorChoiceVm choice)
     {
-        _selected = choice;
-        // 单选互斥：改 VM 即可，INPC 让其余勾选框自动取消显示（绝不用 Items.Refresh）
         if (_singleSelection)
         {
             foreach (var item in _choices.Where(item => item != choice)) item.Checked = false;
+            choice.Checked = true;
+            _selected = choice;
+            SetEditorColor(choice.Current);
+            return;
         }
-        SetEditorColor(choice.Current);
-    }
 
-    private void OnChoiceCheckedChanged(ColorChoiceVm choice)
-    {
-        // 注意：这里绝不能 Items.Refresh()——容器生成阶段绑定推值就会触发本事件，
-        // Refresh 会重生成容器再触发事件，无限循环挂死 UI 线程。
-        // 互斥通过改 VM 属性完成，双向绑定自动更新其余复选框的显示。
-        if (_singleSelection && choice.Checked)
+        choice.Checked = !choice.Checked;
+        if (choice.Checked)
         {
-            foreach (var item in _choices.Where(item => item != choice)) item.Checked = false;
+            _selected = choice;
+            SetEditorColor(choice.Current);
         }
     }
 
