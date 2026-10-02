@@ -905,7 +905,8 @@ public sealed class MusicPage : UserControl
         var combo = new System.Windows.Controls.ComboBox
         {
             Style = (Style)Application.Current.Resources["UiComboBox"],
-            MinWidth = 240
+            Width = 280,
+            HorizontalAlignment = HorizontalAlignment.Left
         };
         foreach (var item in items) combo.Items.Add(item);
         return combo;

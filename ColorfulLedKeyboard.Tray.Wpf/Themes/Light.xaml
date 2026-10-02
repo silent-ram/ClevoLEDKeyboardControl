@@ -368,7 +368,8 @@
                             <Border Background="{DynamicResource Brush.Surface}"
                                     BorderBrush="{DynamicResource Brush.Border}" BorderThickness="1"
                                     CornerRadius="8" Padding="4" Margin="0,4,0,0"
-                                    MinWidth="{TemplateBinding ActualWidth}" MaxHeight="260">
+                                    MinWidth="{TemplateBinding ActualWidth}"
+                                    MaxWidth="{TemplateBinding ActualWidth}" MaxHeight="260">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                                     <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained" />
                                 </ScrollViewer>
