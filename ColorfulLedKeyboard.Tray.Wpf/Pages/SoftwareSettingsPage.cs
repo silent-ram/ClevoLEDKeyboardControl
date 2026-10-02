@@ -14,7 +14,8 @@ public sealed class SoftwareSettingsPage : UserControl
 
     private readonly System.Windows.Controls.RadioButton _darkThemeRadio = MakeRadio("深色仪器风");
     private readonly System.Windows.Controls.RadioButton _lightThemeRadio = MakeRadio("浅色工作台");
-    private readonly List<(Button Swatch, int AccentArgb, string Name)> _accentSwatches = [];
+    private readonly List<(Border Chip, int AccentArgb, string Name)> _accentSwatches = [];
+    private List<int> _hiddenPresets = [];
     private Button? _customSwatch;
 
     /// <summary>内置强调色预设（默认色板之外）。</summary>
@@ -31,9 +32,18 @@ public sealed class SoftwareSettingsPage : UserControl
 
     private static int ArgbConst(byte r, byte g, byte b) =>
         unchecked((int)(0xFF000000u | ((uint)r << 16) | ((uint)g << 8) | b));
+
+    /// <summary>强调色 ARGB → 界面画刷；默认槽位随主题取对应调色板色。</summary>
+    private SolidColorBrush ColorFor(int argb)
+    {
+        var color = argb == AccentDefault
+            ? WpfThemeManager.DefaultAccent
+            : Color.FromArgb(0xFF, (byte)((argb >> 16) & 0xFF), (byte)((argb >> 8) & 0xFF), (byte)(argb & 0xFF));
+        return new SolidColorBrush(color);
+    }
     private readonly ContentControl _accentRowHost = new();
     private List<int> _customAccents = [];
-    private Button? _currentSwatch;
+    private Border? _currentSwatch;
     private readonly TextBlock _accentSummary = MakeMutedLabel("");
     private int _accentMode = AccentDefault;
     private readonly UiStateStore _uiStateStore = UiStateStore.Shared;
@@ -167,6 +177,7 @@ public sealed class SoftwareSettingsPage : UserControl
             var uiState = UiStateStore.Shared.Load();
             _accentMode = uiState.AccentArgb == UiState.AccentFollowKeyboard ? AccentDefault : uiState.AccentArgb;
             _customAccents = uiState.CustomAccents.ToList();
+            _hiddenPresets = uiState.HiddenAccentPresets.ToList();
             // 旧版（无自定义列表时代）选过的自定义色自动迁入列表，保证色板上有对应色块
             if (_accentMode != AccentDefault && _accentMode != UiState.AccentFollowKeyboard &&
                 PresetAccents.All(p => p.Argb != _accentMode) && !_customAccents.Contains(_accentMode))
@@ -233,13 +244,12 @@ public sealed class SoftwareSettingsPage : UserControl
                 _currentSwatch.Background = new SolidColorBrush(
                     WpfThemeManager.AccentOverride ?? defaultAccent);
             }
-            foreach (var (swatch, accentArgb, _) in _accentSwatches)
+            foreach (var (chip, accentArgb, _) in _accentSwatches)
             {
-                var baseColor = accentArgb == AccentDefault ? defaultAccent : Color.FromArgb(255, (byte)((accentArgb >> 16) & 0xFF), (byte)((accentArgb >> 8) & 0xFF), (byte)(accentArgb & 0xFF));
-                swatch.Background = new SolidColorBrush(baseColor);
+                chip.Background = ColorFor(accentArgb);
                 var selected = accentArgb == _accentMode;
-                swatch.BorderBrush = FindBrush(selected ? "Brush.Primary" : "Brush.Border");
-                swatch.BorderThickness = new Thickness(selected ? 2 : 1);
+                chip.BorderBrush = FindBrush(selected ? "Brush.Primary" : "Brush.Border");
+                chip.BorderThickness = new Thickness(selected ? 2 : 1);
             }
             var presetName = PresetAccents.FirstOrDefault(p => p.Argb == _accentMode).Name;
             _accentSummary.Text = $"当前强调色：{_accentMode switch
@@ -273,13 +283,15 @@ public sealed class SoftwareSettingsPage : UserControl
             Foreground = FindBrush("Brush.Text")
         });
         // 第一个格子恒显当前生效的强调色（实时预览，不可点击）
-        _currentSwatch = new Button
+        _currentSwatch = new Border
         {
             Width = 34,
             Height = 26,
-            Style = (Style)Application.Current.Resources["UiButton"],
+            CornerRadius = new CornerRadius(5),
+            Background = new SolidColorBrush(WpfThemeManager.AccentOverride ?? WpfThemeManager.DefaultAccent),
+            BorderBrush = FindBrush("Brush.Primary"),
+            BorderThickness = new Thickness(2),
             Margin = new Thickness(0, 0, 10, 0),
-            Focusable = false,
             IsHitTestVisible = false,
             ToolTip = "当前强调色"
         };
@@ -287,6 +299,7 @@ public sealed class SoftwareSettingsPage : UserControl
         AddAccentSwatch(accentRow, AccentDefault, "默认");
         foreach (var (name, argb) in PresetAccents)
         {
+            if (_hiddenPresets.Contains(argb)) continue;
             AddAccentSwatch(accentRow, argb, name);
         }
         foreach (var custom in _customAccents)
@@ -309,57 +322,70 @@ public sealed class SoftwareSettingsPage : UserControl
         return accentRow;
     }
 
-    /// <summary>自定义色块：悬停时右上角出现 ✕ 可删除。</summary>
+    /// <summary>自定义色块：与预设芯片同款，✕ 删除走 RemoveCustomAccent。</summary>
     private void AddCustomSwatch(StackPanel row, int accentArgb)
     {
-        var container = new Grid { Width = 34, Height = 26, Margin = new Thickness(0, 0, 10, 0) };
-        var color = Color.FromArgb(0xFF, (byte)((accentArgb >> 16) & 0xFF), (byte)((accentArgb >> 8) & 0xFF), (byte)(accentArgb & 0xFF));
-        var swatch = new Button
-        {
-            Style = (Style)Application.Current.Resources["UiButton"],
-            Background = new SolidColorBrush(color),
-            BorderThickness = new Thickness(_accentMode == accentArgb ? 2 : 1),
-            BorderBrush = FindBrush(_accentMode == accentArgb ? "Brush.Primary" : "Brush.Border"),
-            Focusable = false,
-            Cursor = System.Windows.Input.Cursors.Hand
-        };
-        swatch.Click += (_, _) => SelectAccent(accentArgb);
-        container.Children.Add(swatch);
-
-        var close = new TextBlock
-        {
-            Text = "✕",
-            FontSize = 10,
-            FontWeight = FontWeights.Bold,
-            Foreground = FindBrush("Brush.Error"),
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, -4, 0, 0),
-            Cursor = System.Windows.Input.Cursors.Hand,
-            Visibility = Visibility.Hidden,
-            Background = FindBrush("Brush.Surface")
-        };
-        close.MouseLeftButtonDown += (_, _) => RemoveCustomAccent(accentArgb);
-        container.Children.Add(close);
-        container.MouseEnter += (_, _) => close.Visibility = Visibility.Visible;
-        container.MouseLeave += (_, _) => close.Visibility = Visibility.Hidden;
+        var (container, _) = BuildColorChip(accentArgb, $"#{accentArgb & 0xFFFFFF:X6}", deletable: true,
+            delete: () => RemoveCustomAccent(accentArgb));
         row.Children.Add(container);
     }
 
     private void AddAccentSwatch(StackPanel row, int accentArgb, string name)
     {
-        var swatch = new Button
+        bool deletable = accentArgb != AccentDefault;
+        var (container, chip) = BuildColorChip(accentArgb, name, deletable,
+            delete: () => HidePresetAccent(accentArgb));
+        row.Children.Add(container);
+        _accentSwatches.Add((chip, accentArgb, name));
+    }
+
+    /// <summary>色块芯片：纯色 Border（无按钮 chrome，悬停保持原色），
+    /// 可删除的色块悬停时右上角浮现 ✕。</summary>
+    private (FrameworkElement Container, Border Chip) BuildColorChip(int accentArgb, string name, bool deletable, System.Action delete)
+    {
+        var container = new Grid { Width = 34, Height = 26, Margin = new Thickness(0, 0, 10, 0) };
+        var chip = new Border
         {
-            Width = 34,
-            Height = 26,
-            Style = (Style)Application.Current.Resources["UiButton"],
-            Margin = new Thickness(0, 0, 10, 0),
-            Focusable = false,
-            Tag = name
+            CornerRadius = new CornerRadius(5),
+            Background = ColorFor(accentArgb),
+            BorderBrush = FindBrush(_accentMode == accentArgb ? "Brush.Primary" : "Brush.Border"),
+            BorderThickness = new Thickness(_accentMode == accentArgb ? 2 : 1),
+            ToolTip = name,
+            Cursor = System.Windows.Input.Cursors.Hand
         };
-        swatch.Click += (_, _) => SelectAccent(accentArgb);
-        _accentSwatches.Add((swatch, accentArgb, name));
-        row.Children.Add(swatch);
+        chip.MouseLeftButtonDown += (_, _) => SelectAccent(accentArgb);
+        container.Children.Add(chip);
+
+        if (deletable)
+        {
+            var close = new TextBlock
+            {
+                Text = "✕",
+                FontSize = 9,
+                FontWeight = FontWeights.Bold,
+                Foreground = FindBrush("Brush.Error"),
+                Background = FindBrush("Brush.Surface"),
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(0, -5, -3, 0),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                Visibility = Visibility.Hidden
+            };
+            close.MouseLeftButtonDown += (_, _) => delete();
+            container.Children.Add(close);
+            container.MouseEnter += (_, _) => close.Visibility = Visibility.Visible;
+            container.MouseLeave += (_, _) => close.Visibility = Visibility.Hidden;
+            container.ToolTip = $"{name}（悬停右上角 ✕ 删除）";
+        }
+        return (container, chip);
+    }
+
+    private void HidePresetAccent(int argb)
+    {
+        _hiddenPresets.Add(argb);
+        _uiStateStore.Update(state => state.HiddenAccentPresets = [.. _hiddenPresets]);
+        if (_accentMode == argb) SelectAccent(AccentDefault);
+        RebuildAccentRow();
     }
 
     /// <summary>自定义强调色：复用全局取色器，单选模式。</summary>

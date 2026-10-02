@@ -36,12 +36,16 @@ public sealed class UiState
     /// <summary>外观卡用户添加的自定义强调色（ARGB）。</summary>
     public List<int> CustomAccents { get; set; } = [];
 
+    /// <summary>用户删除（隐藏）的内置预设强调色（ARGB）。</summary>
+    public List<int> HiddenAccentPresets { get; set; } = [];
+
     public UiState Clone() => new()
     {
         Version = Version,
         Theme = Theme,
         AccentArgb = AccentArgb,
         CustomAccents = [.. CustomAccents],
+        HiddenAccentPresets = [.. HiddenAccentPresets],
         WindowX = WindowX,
         WindowY = WindowY,
         WindowWidth = WindowWidth,
