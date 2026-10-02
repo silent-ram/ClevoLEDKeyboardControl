@@ -380,16 +380,15 @@ public sealed class ColorSelectionDialog : Window
             foreach (var item in _choices.Where(item => item != choice)) item.Checked = false;
             choice.Checked = true;
             _selected = choice;
-            SetEditorColor(choice.Current);
-            return;
         }
-
-        choice.Checked = !choice.Checked;
-        if (choice.Checked)
+        else
         {
-            _selected = choice;
-            SetEditorColor(choice.Current);
+            choice.Checked = !choice.Checked;
+            if (choice.Checked) _selected = choice;
         }
+        // 用户点击触发（不在容器生成期），全量重绘安全且确定性
+        _grid.Items.Refresh();
+        SetEditorColor(_selected!.Current);
     }
 
     private static (double Hue, double Saturation, double Value) ToHsv(RgbColor color)
@@ -498,6 +497,7 @@ public sealed class ColorSelectionDialog : Window
     {
         if (_selected is null) return;
         _selected.Current = color;
+        _grid.Items.Refresh();
     }
 
     private void Accept()
