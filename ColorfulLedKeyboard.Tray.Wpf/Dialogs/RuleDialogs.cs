@@ -68,6 +68,7 @@ public sealed class AutomationRuleDialog : Window
         FontFamily = (FontFamily)Application.Current.Resources["Font.Body"];
         FontSize = 12;
         Foreground = (Brush)Application.Current.Resources["Brush.Text"];
+        SourceInitialized += (_, _) => WpfThemeManager.ApplyTitleBarMode(this);
 
         var stack = new StackPanel { Margin = new Thickness(14) };
         stack.Children.Add(Row("名称", _name));
@@ -280,7 +281,7 @@ public sealed class AutomationRuleDialog : Window
         else if (target == SceneTargetKind.LightingPreset)
         {
             var type = EffectTypes[Math.Max(0, _effectType.SelectedIndex)];
-            _preset.Items.Add("软件默认配置");
+            _preset.Items.Add(Pages.EffectPage.SoftwareDefaultPresetName);
             foreach (var item in _effects.ForType(type)) _preset.Items.Add(item.Name);
         }
 
@@ -289,7 +290,7 @@ public sealed class AutomationRuleDialog : Window
         for (var i = 0; i < _preset.Items.Count; i++)
         {
             var name = _preset.Items[i]?.ToString() ?? "";
-            var id = name == "软件默认配置"
+            var id = name == Pages.EffectPage.SoftwareDefaultPresetName
                 ? EffectPresetSettings.BuiltInId(EffectTypes[Math.Max(0, _effectType.SelectedIndex)])
                 : _kind == RuleKind.Music || target == SceneTargetKind.MusicPreset
                     ? _musicPresets.FirstOrDefault(item => item.Name == name)?.Id ?? ""
@@ -414,6 +415,7 @@ public sealed class RunningAppsDialog : Window
         FontSize = 12;
         Foreground = (Brush)Application.Current.Resources["Brush.Text"];
         SourceInitialized += (_, _) => WpfThemeManager.ApplyTitleBarMode(this);
+        SourceInitialized += (_, _) => WpfThemeManager.ApplyTitleBarMode(this);
 
         var gridView = new GridView();
         gridView.Columns.Add(Column("进程名", "ProcessName", 180));
@@ -505,6 +507,7 @@ public sealed class SceneSimulatorDialog : Window
         FontFamily = (FontFamily)Application.Current.Resources["Font.Body"];
         FontSize = 12;
         Foreground = (Brush)Application.Current.Resources["Brush.Text"];
+        SourceInitialized += (_, _) => WpfThemeManager.ApplyTitleBarMode(this);
 
         var timeText = MakeBox();
         timeText.Text = DateTime.Now.ToString("yyyy-MM-dd HH:mm");

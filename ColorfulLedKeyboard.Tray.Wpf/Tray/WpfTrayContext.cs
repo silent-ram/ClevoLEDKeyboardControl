@@ -367,7 +367,7 @@ public sealed class WpfTrayContext : IDisposable
     private void AddEffectPresetMenu(MenuItem parent, EffectType effectType, string label)
     {
         var mode = MakeItem(label, isChecked: _settings.OperatingMode == OperatingMode.Lighting && _settings.Effect.Type == effectType);
-        mode.Items.Add(MakeItem("软件默认配置", onClick: () => ApplyEffect(settings =>
+        mode.Items.Add(MakeItem(Pages.EffectPage.SoftwareDefaultPresetName, onClick: () => ApplyEffect(settings =>
         {
             settings.Enabled = true;
             settings.OperatingMode = OperatingMode.Lighting;

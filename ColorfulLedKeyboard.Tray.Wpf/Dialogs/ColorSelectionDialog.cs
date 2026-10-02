@@ -240,6 +240,7 @@ public sealed class ColorSelectionDialog : Window
         hexColumn.Children.Add(new TextBlock { Text = "HEX", Foreground = FindBrush("Brush.MutedText") });
         _hex.Margin = new Thickness(0, 2, 0, 0);
         hexColumn.Children.Add(_hex);
+        _hex.TextChanged += (_, _) => ApplyHexInput();
         previewRow.Children.Add(hexColumn);
         Grid.SetRow(previewRow, 1);
         grid.Children.Add(previewRow);
