@@ -20,19 +20,21 @@ public sealed class UiStateTests : IDisposable
     }
 
     [Theory]
-    [InlineData(0, "Windows 11 简洁风", 8)]
-    [InlineData(1, "白色科技风", 5)]
-    [InlineData(2, "柔和暖色风", 12)]
-    public void ThemeDefinitionsAreComplete(int themeValue, string name, int radius)
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void ThemeDefinitionsAreUnified(int themeValue)
     {
         var kind = (UiThemeKind)themeValue;
         var theme = UiTheme.For(kind);
 
+        // 全新视觉方案后只有一套"深色仪器风"设计；kind 仅作旧配置兼容保留。
         Assert.Equal(kind, theme.Kind);
-        Assert.Equal(name, theme.DisplayName);
-        Assert.Equal(radius, theme.CornerRadius);
+        Assert.Equal("深色仪器风", theme.DisplayName);
+        Assert.Equal(10, theme.CornerRadius);
         Assert.NotEqual(theme.Window, theme.Text);
         Assert.NotEqual(theme.Primary, theme.Surface);
+        Assert.Equal(UiTheme.For(UiThemeKind.Windows11).Window, theme.Window);
     }
 
     [Theory]
@@ -46,6 +48,7 @@ public sealed class UiStateTests : IDisposable
         Assert.True(Contrast(theme.Text, theme.Surface) >= 4.5);
         Assert.True(Contrast(theme.MutedText, theme.Surface) >= 4.5);
         Assert.True(Contrast(theme.Text, theme.Window) >= 4.5);
+        Assert.True(Contrast(theme.PrimaryText, theme.Primary) >= 4.5);
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Drawing.Drawing2D;
 using System.Reflection;
 
 namespace ColorfulLedKeyboard.Tray;
@@ -15,7 +16,7 @@ public sealed class AboutForm : ThemedForm
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(480, 280);
+        ClientSize = new Size(500, 300);
 
         BuildUi();
     }
@@ -25,52 +26,52 @@ public sealed class AboutForm : ThemedForm
         var title = new Label
         {
             Text = "ClevoLEDKeyboardControl",
-            Font = new Font(SystemFonts.MessageBoxFont ?? Control.DefaultFont, FontStyle.Bold),
-            Location = new Point(24, 22),
-            Size = new Size(360, 28)
+            Font = UiFonts.Title(14F),
+            Location = new Point(26, 24),
+            Size = new Size(440, 32)
         };
 
         var version = new Label
         {
-            Text = $"v{ReadVersion()}",
-            Location = new Point(24, 50),
-            Size = new Size(360, 22)
+            Text = $"版本 v{ReadVersion()}",
+            Font = UiFonts.Body(9F),
+            ForeColor = SystemColors.GrayText,
+            Location = new Point(26, 62),
+            Size = new Size(440, 22)
         };
 
         var description = new Label
         {
             Text = "面向 Clevo 兼容机型的键盘背光灯效控制程序。",
-            Location = new Point(24, 80),
-            Size = new Size(420, 24)
+            Font = UiFonts.Body(9F),
+            Location = new Point(26, 92),
+            Size = new Size(440, 24)
         };
 
         var maintainer = new Label
         {
-            Text = "Maintained by silent-ram",
-            Location = new Point(24, 110),
-            Size = new Size(420, 22)
-        };
-
-        var thirdParty = new Label
-        {
-            Text = "Uses InsydeDCHU.dll (Clevo OEM)",
-            Location = new Point(24, 134),
-            Size = new Size(420, 22)
+            Text = "Maintained by silent-ram · Uses InsydeDCHU.dll (Clevo OEM)",
+            Font = UiFonts.Body(9F),
+            ForeColor = SystemColors.GrayText,
+            Location = new Point(26, 120),
+            Size = new Size(440, 22)
         };
 
         var github = new LinkLabel
         {
             Text = "GitHub 仓库",
-            Location = new Point(24, 168),
-            Size = new Size(160, 22)
+            Font = UiFonts.Body(9F),
+            AutoSize = true,
+            Location = new Point(26, 168)
         };
         github.LinkClicked += (_, _) => OpenUrl(RepositoryUrl);
 
         var issues = new LinkLabel
         {
             Text = "反馈 / 报告问题",
-            Location = new Point(24, 196),
-            Size = new Size(200, 22)
+            Font = UiFonts.Body(9F),
+            AutoSize = true,
+            Location = new Point(140, 168)
         };
         issues.LinkClicked += (_, _) => OpenUrl(IssuesUrl);
 
@@ -78,18 +79,28 @@ public sealed class AboutForm : ThemedForm
         {
             Text = "关闭",
             DialogResult = DialogResult.OK,
-            Location = new Point(368, 234),
-            Size = new Size(88, 30)
+            Location = new Point(388, 246),
+            Size = new Size(88, UiMetrics.ButtonHeight)
         };
 
         Controls.Add(title);
         Controls.Add(version);
         Controls.Add(description);
         Controls.Add(maintainer);
-        Controls.Add(thirdParty);
         Controls.Add(github);
         Controls.Add(issues);
         Controls.Add(close);
+
+        // 签名元素：标题下的一条 RGB 光谱短条，与主窗口页头呼应。
+        Paint += (_, e) =>
+        {
+            using var path = UiShapes.RoundedRectangle(new Rectangle(26, 56, 148, 3), 1);
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            var previousClip = e.Graphics.Clip;
+            e.Graphics.SetClip(new Rectangle(26, 56, 148, 4));
+            UiSpectrum.Draw(e.Graphics, new Rectangle(26, 55, 148, 5));
+            e.Graphics.Clip = previousClip;
+        };
 
         AcceptButton = close;
         CancelButton = close;

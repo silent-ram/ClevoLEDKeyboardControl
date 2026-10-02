@@ -350,6 +350,11 @@ public sealed partial class SettingsForm : ThemedForm
             BackColor = ThemeManager.Current.Surface
         };
         ThemeManager.SetSurface(buttons, ThemeSurfaceRole.Surface);
+        buttons.Paint += (_, e) =>
+        {
+            using var edge = new Pen(ThemeManager.Current.Border);
+            e.Graphics.DrawLine(edge, 0, 0, buttons.ClientSize.Width, 0);
+        };
         buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         buttons.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
@@ -384,22 +389,22 @@ public sealed partial class SettingsForm : ThemedForm
             BackColor = ThemeManager.Current.Surface
         };
         ThemeManager.SetSurface(panel, ThemeSurfaceRole.Surface);
+        // 签名元素：页头底缘的 RGB 光谱细条，像键盘灯条的一角。
+        panel.Paint += (_, e) =>
+        {
+            var width = panel.ClientSize.Width;
+            UiSpectrum.Draw(e.Graphics, new Rectangle(0, panel.ClientSize.Height - 2, width, 2));
+            using var edge = new Pen(ThemeManager.Current.Border);
+            e.Graphics.DrawLine(edge, 0, panel.ClientSize.Height - 3, width, panel.ClientSize.Height - 3);
+        };
 
-        _pageTitle.Font = new Font("Segoe UI Semibold", 14F);
+        _pageTitle.Font = UiFonts.Title(14F);
         _pageTitle.Location = new Point(18, 17);
         _pageTitle.Size = new Size(300, 32);
         _headerStatus.AutoSize = true;
         _headerStatus.Location = new Point(350, 24);
-        _themeQuickButton.Text = $"主题：{ThemeQuickName(ThemeManager.CurrentKind)}  ▾";
-        _themeQuickButton.Width = 215;
-        _themeQuickButton.Height = ButtonHeight;
-        _themeQuickButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        _themeQuickButton.Location = new Point(Math.Max(600, panel.Width - 210), 14);
-        panel.Resize += (_, _) => _themeQuickButton.Left = Math.Max(520, panel.ClientSize.Width - _themeQuickButton.Width - 18);
-        _themeQuickButton.Click += (_, _) => ShowThemeMenu(_themeQuickButton);
         panel.Controls.Add(_pageTitle);
         panel.Controls.Add(_headerStatus);
-        panel.Controls.Add(_themeQuickButton);
         return panel;
     }
 
@@ -716,7 +721,7 @@ public sealed partial class SettingsForm : ThemedForm
             Width = ContentWidth,
             Height = 34,
             ForeColor = ThemeManager.Current.Primary,
-            Font = new Font("Segoe UI Semibold", 9.5F)
+            Font = UiFonts.Bold(9.5F)
         };
         page.Controls.Add(new UiCard("运行状态", _automationStatus, priority, PlainRow(simulator)));
         page.Controls.Add(new UiCard("场景规则", PlainRow(_automationEnabled), _sceneAutomation));
@@ -833,10 +838,12 @@ public sealed partial class SettingsForm : ThemedForm
         _updateInterval.DropDownStyle = ComboBoxStyle.DropDownList;
         _updateInterval.Items.AddRange(["从不", "每天", "每周", "每月"]);
 
-        var configPath = new TextBox
+        // 只读 TextBox 在视觉样式下会无视 BackColor（白底刺眼），展示场景直接用 Label。
+        var configPath = new Label
         {
             Text = AppPaths.SettingsPath,
-            ReadOnly = true,
+            AutoEllipsis = true,
+            ForeColor = SystemColors.GrayText,
             Width = 430
         };
 
@@ -870,7 +877,6 @@ public sealed partial class SettingsForm : ThemedForm
         configActions.Controls.AddRange([export, import, restore]);
         var folderActions = new FlowLayoutPanel { Width = ContentWidth, Height = 46, FlowDirection = FlowDirection.LeftToRight };
         folderActions.Controls.AddRange([openFolder, reset]);
-        page.Controls.Add(BuildThemeSelector());
         _updateAvailableStatusRow = PlainRow(_updateAvailableStatus);
         _updateAvailableStatusRow.Visible = false;
         page.Controls.Add(new UiCard("自动更新", Row("自动检查更新", _updateInterval), _updateAvailableStatusRow));
@@ -1163,7 +1169,6 @@ public sealed partial class SettingsForm : ThemedForm
             UpdateAutomationStatus();
             Text = "ClevoLEDKeyboardControl 设置 - 已应用";
             _settingsChanged = false;
-            _themeChanged = false;
             _musicPresetChangesStaged = false;
             UpdateMusicPresetEditState();
             _initialUiState = _uiStateStore.Load().Clone();
@@ -3424,7 +3429,7 @@ internal sealed class AutomationRuleListBox : ListBox
         ItemHeight = 58;
         BorderStyle = BorderStyle.None;
         IntegralHeight = false;
-        Font = new Font("Segoe UI", 9F);
+        Font = UiFonts.Body(9F);
     }
 
     protected override void OnDrawItem(DrawItemEventArgs e)
@@ -3454,7 +3459,7 @@ internal sealed class AutomationRuleListBox : ListBox
             AutomationRuleVisualState.Disabled => "已停用",
             _ => "已启用"
         };
-        using var titleFont = new Font("Segoe UI Semibold", 9F);
+        using var titleFont = UiFonts.Bold(9F);
         TextRenderer.DrawText(e.Graphics, item.Title, titleFont,
             new Rectangle(bounds.X + 26, bounds.Y + 5, bounds.Width - 120, 23), theme.Text,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);

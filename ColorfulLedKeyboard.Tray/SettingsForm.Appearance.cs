@@ -8,7 +8,6 @@ public sealed partial class SettingsForm
 {
     private readonly Label _pageTitle = new();
     private readonly Label _headerStatus = new();
-    private readonly Button _themeQuickButton = new();
     private readonly Label _dirtyLabel = new();
     private readonly Button _revertButton = new();
     private readonly Button _applyButton = new();
@@ -22,7 +21,6 @@ public sealed partial class SettingsForm
     private UiStateStore _uiStateStore = null!;
     private UiState _initialUiState = new();
     private KeyboardSettings _loadedSettingsSnapshot = new();
-    private bool _themeChanged;
     private bool _settingsChanged;
     private bool _allowClose;
     private bool _lastServiceReady;
@@ -75,7 +73,7 @@ public sealed partial class SettingsForm
             Text = "ClevoLEDKeyboardControl",
             Width = UiMetrics.ContentWidth,
             Height = 36,
-            Font = new Font("Segoe UI Semibold", 15F)
+            Font = UiFonts.Title(15F)
         };
         var description = new Label
         {
@@ -93,75 +91,10 @@ public sealed partial class SettingsForm
         return page;
     }
 
-    private UiCard BuildThemeSelector()
-    {
-        var hint = new Label
-        {
-            Text = "选择后立即预览，并保存到当前 Windows 用户。",
-            Width = UiMetrics.ContentWidth,
-            Height = 28,
-            ForeColor = ThemeManager.Current.MutedText
-        };
-        var row = new FlowLayoutPanel
-        {
-            Width = UiMetrics.ContentWidth,
-            Height = 92,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false
-        };
-        foreach (var kind in Enum.GetValues<UiThemeKind>())
-        {
-            var theme = UiTheme.For(kind);
-            var button = new ThemePreviewButton(kind)
-            {
-                Width = 245,
-                Height = 78,
-                Margin = new Padding(0, 0, 12, 0),
-                AccessibleName = $"选择{theme.DisplayName}"
-            };
-            button.Click += (_, _) => SelectTheme(kind);
-            row.Controls.Add(button);
-        }
-        return new UiCard("界面主题", hint, row);
-    }
-
-    private void ShowThemeMenu(Control anchor)
-    {
-        var menu = new ContextMenuStrip();
-        foreach (var kind in Enum.GetValues<UiThemeKind>())
-        {
-            var item = new ToolStripMenuItem(UiTheme.For(kind).DisplayName)
-            {
-                Checked = ThemeManager.CurrentKind == kind
-            };
-            item.Click += (_, _) => SelectTheme(kind);
-            menu.Items.Add(item);
-        }
-        ThemeManager.Apply(menu);
-        menu.Show(anchor, new Point(0, anchor.Height + 2));
-    }
-
-    private void SelectTheme(UiThemeKind kind)
-    {
-        if (ThemeManager.CurrentKind == kind) return;
-        _uiStateStore.Update(state => state.Theme = kind);
-        ThemeManager.SetTheme(kind);
-        _themeChanged = kind != _initialUiState.Theme;
-        UpdateSaveBar();
-    }
-
-    private static string ThemeQuickName(UiThemeKind kind) => kind switch
-    {
-        UiThemeKind.Technology => "白色科技风",
-        UiThemeKind.Warm => "柔和暖色风",
-        _ => "Windows 11"
-    };
-
     private void OnThemeChanged(object? sender, EventArgs e)
     {
         if (IsDisposed) return;
         ThemeManager.Apply(this);
-        _themeQuickButton.Text = $"主题：{ThemeQuickName(ThemeManager.CurrentKind)}  ▾";
         UpdateModeAvailability();
         UpdateStatusHeader();
         UpdateMusicPresetEditState();
@@ -205,9 +138,7 @@ public sealed partial class SettingsForm
         _loadingSettings = true;
         try
         {
-            ThemeManager.SetTheme(_initialUiState.Theme);
             _uiStateStore.Save(_initialUiState.Clone());
-            _themeChanged = false;
             _settingsChanged = false;
         }
         finally
@@ -232,13 +163,11 @@ public sealed partial class SettingsForm
             e.Cancel = true;
             return;
         }
-        ThemeManager.SetTheme(_initialUiState.Theme);
         _uiStateStore.Save(_initialUiState.Clone());
-        _themeChanged = false;
         _allowClose = true;
     }
 
-    private bool HasUnsavedChanges => _themeChanged || _settingsChanged;
+    private bool HasUnsavedChanges => _settingsChanged;
 
     private void MarkDirty()
     {
@@ -361,7 +290,7 @@ public sealed partial class SettingsForm
         AutoSize = false,
         Width = 230,
         Height = 28,
-        Font = new Font("Segoe UI Semibold", 10.5F)
+        Font = UiFonts.Title(10.5F)
     };
 
     private static UiCard OverviewCard(string title, Label value, string hint)
@@ -393,37 +322,3 @@ public sealed partial class SettingsForm
     }
 }
 
-internal sealed class ThemePreviewButton : Button
-{
-    public ThemePreviewButton(UiThemeKind kind)
-    {
-        ThemeKind = kind;
-        FlatStyle = FlatStyle.Flat;
-        UseVisualStyleBackColor = false;
-        Cursor = Cursors.Hand;
-    }
-
-    public UiThemeKind ThemeKind { get; }
-
-    protected override void OnPaint(PaintEventArgs e)
-    {
-        var theme = UiTheme.For(ThemeKind);
-        BackColor = theme.Window;
-        ForeColor = theme.Text;
-        FlatAppearance.BorderColor = ThemeManager.CurrentKind == ThemeKind ? theme.Primary : theme.Border;
-        FlatAppearance.BorderSize = ThemeManager.CurrentKind == ThemeKind ? 2 : 1;
-        base.OnPaint(e);
-        using var accent = new SolidBrush(theme.Primary);
-        e.Graphics.FillRectangle(accent, 12, 14, 7, Height - 28);
-        var check = ThemeManager.CurrentKind == ThemeKind ? "  ✓" : "";
-        using var titleFont = new Font("Segoe UI Semibold", 9.5F);
-        TextRenderer.DrawText(e.Graphics, theme.DisplayName + check, titleFont,
-            new Rectangle(30, 11, Width - 38, 26), theme.Text, TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
-        TextRenderer.DrawText(e.Graphics, ThemeKind switch
-        {
-            UiThemeKind.Technology => "冷白 · 蓝紫强调 · 利落",
-            UiThemeKind.Warm => "米灰 · 蓝绿色 · 柔和",
-            _ => "浅灰 · 系统蓝 · 简洁"
-        }, Font, new Rectangle(30, 39, Width - 38, 24), theme.MutedText, TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
-    }
-}
