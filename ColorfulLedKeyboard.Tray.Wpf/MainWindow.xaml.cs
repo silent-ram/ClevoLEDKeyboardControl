@@ -72,8 +72,16 @@ public partial class MainWindow : Window
         {
             _statusTimer.Stop();
             WpfThemeManager.ThemeChanged -= OnThemeChanged;
+            _softwareSettingsPage?.UnsubscribeEvents();
         };
-        Closing += (_, _) => PersistWindowState();
+        Closing += (_, e) =>
+        {
+            PersistWindowState();
+            if (!HasAnyDirty) return;
+            var choice = System.Windows.MessageBox.Show("存在尚未保存的修改，是否放弃这些修改？",
+                "ClevoLEDKeyboardControl", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (choice != MessageBoxResult.Yes) e.Cancel = true;
+        };
     }
 
     public int PageCount => _pages.Count;
@@ -182,6 +190,7 @@ public partial class MainWindow : Window
 
         var softwarePage = new SoftwareSettingsPage();
         softwarePage.SettingsChangedExternally += (_, _) => ReloadFromStore();
+        softwarePage.Changed += (_, _) => UpdateSaveBar();
         softwarePage.NavigationBadgeChanged += (_, _) => UpdateNavigationBadge();
         _softwareSettingsPage = softwarePage;
         _pages.Add(softwarePage);
@@ -228,6 +237,7 @@ public partial class MainWindow : Window
             _musicPage?.OnSaved(settings);
             _automationPage.ResetDirty();
             _eventFeedbackPage.ResetDirty();
+            _softwareSettingsPage?.ResetDirty();
             UpdateStatusHeader();
             UpdateSaveBar();
             // "跟随键盘主色"模式下，灯色改了界面强调色要跟着走（WinForms 1181 行语义）。
@@ -248,6 +258,8 @@ public partial class MainWindow : Window
 
     private void RevertChanges()
     {
+        _uiStateStore.Update(state => state.MusicAdvancedExpanded = _initialUiState.MusicAdvancedExpanded);
+        _musicPage?.SetAdvancedExpanded(_initialUiState.MusicAdvancedExpanded);
         _effectPage?.LoadFromStore(new SettingsStore().Load());
         _musicPage?.LoadFromStore(new SettingsStore().Load());
         _automationPage?.LoadFromStore(new SettingsStore().Load());
@@ -257,11 +269,16 @@ public partial class MainWindow : Window
         UpdateSaveBar();
     }
 
+    private bool HasAnyDirty => _effectPage is { IsDirty: true } || _musicPage is { IsDirty: true } ||
+        _automationPage is { IsDirty: true } || _eventFeedbackPage is { IsDirty: true } ||
+        _softwareSettingsPage is { IsDirty: true };
+
     private void UpdateSaveBar()
     {
-        var dirty = _effectPage is { IsDirty: true } || _musicPage is { IsDirty: true } ||
-            _automationPage is { IsDirty: true } || _eventFeedbackPage is { IsDirty: true };
-        DirtyLabel.Text = dirty ? "● 有尚未保存的修改" : "✓ 设置已保存";
+        var dirty = HasAnyDirty;
+        DirtyLabel.Text = _musicPage is { IsMusicPresetChanged: true }
+            ? "● 音乐预设尚未保存，请先点击音乐页内的“保存预设修改”"
+            : dirty ? "● 有尚未保存的修改" : "✓ 设置已保存";
         DirtyLabel.Foreground = (Brush)Application.Current.Resources[dirty ? "Brush.Warning" : "Brush.Success"];
         RevertButton.IsEnabled = dirty;
         ApplyButton.IsEnabled = dirty;
@@ -426,7 +443,19 @@ public partial class MainWindow : Window
 
     private void PersistWindowState()
     {
-        if (WindowState != WindowState.Normal) return;
+        if (WindowState != WindowState.Normal)
+        {
+            // 最大化/最小化关窗：保留最近一次正常几何（WinForms 用 RestoreBounds 兜底）。
+            if (WindowState == WindowState.Maximized)
+            {
+                _uiStateStore.Update(state =>
+                {
+                    state.LastPage = _lastPage;
+                    state.MusicAdvancedExpanded = _musicPage?.IsAdvancedExpanded ?? false;
+                });
+            }
+            return;
+        }
         _uiStateStore.Update(state =>
         {
             state.WindowX = (int)Left;
@@ -438,7 +467,31 @@ public partial class MainWindow : Window
         });
     }
 
-    private void OnThemeChanged(object? sender, EventArgs e) => WpfThemeManager.ApplyTitleBarMode(this);
+    private void OnThemeChanged(object? sender, EventArgs e)
+    {
+        WpfThemeManager.ApplyTitleBarMode(this);
+        // 页面在构造期捕获了画刷实例，热切换会留旧色。无未保存修改时整体重建页面即可
+        // 全量刷新；有未保存修改时保留旧色（数据与功能不受影响，下次开窗即新主题）。
+        if (!HasAnyDirty) RebuildPagesForTheme();
+    }
+
+    private void RebuildPagesForTheme()
+    {
+        _softwareSettingsPage?.UnsubscribeEvents();
+        _pages.Clear();
+        _effectPage = null;
+        _musicPage = null;
+        _automationPage = null;
+        _eventFeedbackPage = null;
+        _diagnosticsPage = null;
+        _softwareSettingsPage = null;
+        var selected = Math.Clamp(_lastPage, 0, NavItems.Length - 1);
+        BuildPages();
+        Navigation.ItemsSource = NavItems.Select(item => new NavItem(item.Title, item.Glyph)).ToList();
+        Navigation.SelectedIndex = selected;
+        ApplySelectedPage(selected);
+        UpdateSaveBar();
+    }
 
     /// <summary>导航项数据。</summary>
     public sealed record NavItem(string Title, string IconGlyph, string? Badge = null);

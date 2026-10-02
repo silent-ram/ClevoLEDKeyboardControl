@@ -117,6 +117,9 @@ public sealed class MusicPage : UserControl
             _musicPresetChangesStaged = false;
             UpdateMusicPresetEditState();
             UpdateMusicPresetButtons();
+            // WinForms 的通用 WireDirtyTracking 对所有 ComboBox 追加 MarkDirty：
+            // 切换预设属于用户改动，需要保存（写入 PresetName），保存栏要点亮。
+            MarkGeneralChanged();
         };
         _savePreset.Click += (_, _) => SaveSelectedMusicPreset();
         _createPreset.Click += (_, _) => CreateMusicPreset();
@@ -242,10 +245,8 @@ public sealed class MusicPage : UserControl
             _bindingColorSource.SelectedIndex = (int)_musicPlayerBinding.ColorSource;
             RefreshMediaSessions(_musicPlayerBinding.MediaSessionId);
             RefreshBindingStatus();
-            if (FindSelectedMusicPreset() is { } preset)
-            {
-                ApplyMusicPresetToControls(preset, refreshSelection: false, markDirty: false);
-            }
+            // 注意：不用预设模板重放控件值——settings.Effect.Music 可能被托盘合法改过
+            // （亮度/音乐响应），模板重放会显示错误值并在保存时静默回滚（WinForms 无此步）。
             _musicPresetChanged = false;
             _musicPresetChangesStaged = false;
             _generalChanged = false;

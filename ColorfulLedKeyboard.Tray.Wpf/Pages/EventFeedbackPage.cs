@@ -34,6 +34,8 @@ public sealed class EventFeedbackPage : UserControl
         foreach (var slider in new[] { _typingPulsePeakBrightness, _typingPulseHold, _typingPulseFade, _notificationFlashPulses, _notificationFlashCooldown })
             slider.ValueChanged += (_, _) => MarkChanged();
         _notificationFlashColor.ColorChanged += (_, _) => MarkChanged();
+        // 非紧凑模式的"选择..."/色块点击打开取色对话框（WinForms ColorPickerRow 内聚行为）。
+        _notificationFlashColor.PickColorRequested += (_, _) => PickNotificationColor();
 
         var typingRows = new[]
         {
@@ -98,6 +100,18 @@ public sealed class EventFeedbackPage : UserControl
         settings.NotificationFlash.Color = _notificationFlashColor.ColorHex;
         settings.NotificationFlash.Pulses = _notificationFlashPulses.Value;
         settings.NotificationFlash.CooldownSeconds = _notificationFlashCooldown.Value;
+    }
+
+    private void PickNotificationColor()
+    {
+        var dialog = new Dialogs.ColorSelectionDialog(
+            UiColorPickerRow.TryParse(_notificationFlashColor.ColorHex, out var current)
+                ? new List<string> { current.Hex }
+                : new List<string> { "#FF0000" }, singleSelection: true)
+        { Owner = Window.GetWindow(this) };
+        if (dialog.ShowDialog() != true) return;
+        var color = dialog.SelectedColors.FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(color)) _notificationFlashColor.ColorHex = color;
     }
 
     private void MarkChanged()

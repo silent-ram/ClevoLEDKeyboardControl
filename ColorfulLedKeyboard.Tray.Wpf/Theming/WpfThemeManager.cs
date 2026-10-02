@@ -63,9 +63,6 @@ public static class WpfThemeManager
         ThemeChanged?.Invoke(null, EventArgs.Empty);
     }
 
-    /// <summary>"跟随键盘主色"模式下灯色变化后刷新派生刷。</summary>
-    public static void RefreshAccent() => ThemeChanged?.Invoke(null, EventArgs.Empty);
-
     private static void Apply(UiThemeKind kind, Color? accent)
     {
         var resources = Application.Current.Resources;
@@ -88,7 +85,10 @@ public static class WpfThemeManager
     private static void ApplyAccentBrushes()
     {
         var resources = Application.Current.Resources;
-        var baseColor = ReadColor(resources, "Brush.Primary");
+        // 基色必须读主题字典（MergedDictionaries[0]）：app 级键会被本方法覆写，
+        // 从 app 级读会把旧主题/旧自定义色钉死，切主题与"默认"色板都会失效。
+        var merged = resources.MergedDictionaries.Count > 0 ? resources.MergedDictionaries[0] : null;
+        Color? baseColor = merged?["Brush.Primary"] is SolidColorBrush brush ? brush.Color : null;
         if (baseColor is null) return;
 
         var accent = _accentOverride ?? baseColor.Value;
@@ -149,8 +149,8 @@ public static class WpfThemeManager
             {
                 UiState.AccentDefault => null,
                 UiState.AccentFollowKeyboard => ReadKeyboardAccent(),
-                _ => Color.FromArgb(
-                    (byte)((accentArgb >> 24) & 0xFF),
+                // 界面强调色恒为不透明：alpha 字节强制 FF（持久化方 ArgbOf 已保证，此处兜底）。
+                _ => Color.FromArgb(0xFF,
                     (byte)((accentArgb >> 16) & 0xFF),
                     (byte)((accentArgb >> 8) & 0xFF),
                     (byte)(accentArgb & 0xFF))

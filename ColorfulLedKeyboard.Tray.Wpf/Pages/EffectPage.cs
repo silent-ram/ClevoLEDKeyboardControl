@@ -206,7 +206,6 @@ public sealed class EffectPage : UserControl
             UpdateBrightnessAvailability();
             UpdateCustomColorsButton();
             UpdateEffectConfigurationVisibility();
-            RefreshEffectPresetList();
             ApplySelectedEffectPreset(markDirty: false);
         }
         finally

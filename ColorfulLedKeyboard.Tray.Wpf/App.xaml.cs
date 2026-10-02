@@ -47,9 +47,14 @@ public partial class App : Application
         var themeArg = ExtractValue(args, "--theme");
         var accentArg = ExtractValue(args, "--accent");
 
-        var kind = Enum.TryParse<UiThemeKind>(themeArg, ignoreCase: true, out var parsed) ? parsed : UiStateStore.Shared.Load().Theme;
+        var uiState = UiStateStore.Shared.Load();
+        var kind = Enum.TryParse<UiThemeKind>(themeArg, ignoreCase: true, out var parsed) ? parsed : uiState.Theme;
         WpfThemeManager.Initialize(kind);
-        if (int.TryParse(accentArg, out var accentArgb)) WpfThemeManager.AccentOverride = WpfThemeManager.ResolveAccent(accentArgb);
+        // 截图验收参数优先；正常启动应用 UiState 持久化的强调色（对照 WinForms Program.cs）。
+        if (accentArg is not null && int.TryParse(accentArg, out var accentArgb))
+            WpfThemeManager.AccentOverride = WpfThemeManager.ResolveAccent(accentArgb);
+        else
+            WpfThemeManager.AccentOverride = WpfThemeManager.ResolveAccent(uiState.AccentArgb);
 
         _trayContext = new WpfTrayContext(openSettingsOnStartup: openSettings && screenshotDir is null);
 

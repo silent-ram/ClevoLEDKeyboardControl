@@ -46,8 +46,19 @@ public sealed class SoftwareSettingsPage : UserControl
     private readonly Button _openFolder = MakeButton("打开配置目录", 150);
     private readonly Button _reset = MakeButton("恢复默认设置", 150);
 
+    /// <summary>导入/恢复备份/恢复默认等外部配置变更，宿主应整体重载。</summary>
     public event EventHandler? SettingsChangedExternally;
+    /// <summary>用户编辑了"保存并应用"语义的字段，宿主应刷新保存栏。</summary>
+    public event EventHandler? Changed;
     public event EventHandler? NavigationBadgeChanged;
+
+    public bool IsDirty { get; private set; }
+
+    /// <summary>保存成功后由宿主调用，复位脏状态。</summary>
+    public void ResetDirty() => IsDirty = false;
+
+    /// <summary>窗口关闭时由宿主调用，退订静态事件。</summary>
+    public void UnsubscribeEvents() => StartupManager.StartupChanged -= OnStartupChanged;
 
     public SoftwareSettingsPage()
     {
@@ -56,6 +67,8 @@ public sealed class SoftwareSettingsPage : UserControl
         _followKeyboard.Click += (_, _) => SelectAccent(AccentFollowKeyboard);
 
         _updateInterval.SelectionChanged += (_, _) => MarkDirty();
+        _userImprovementPlanEnabled.Checked += (_, _) => MarkDirty();
+        _userImprovementPlanEnabled.Unchecked += (_, _) => MarkDirty();
         _updateAvailable.MouseLeftButtonDown += (_, _) =>
         {
             if (!string.IsNullOrWhiteSpace(_updateReleaseUrl)) UpdateChecker.OpenUrl(_updateReleaseUrl);
@@ -129,8 +142,11 @@ public sealed class SoftwareSettingsPage : UserControl
 
     // ---- 载入 / 保存 ----
 
+    private bool _loadingSettings;
+
     public void LoadFromStore(KeyboardSettings settings)
     {
+        _loadingSettings = true;
         _updatingAppearance = true;
         try
         {
@@ -140,10 +156,12 @@ public sealed class SoftwareSettingsPage : UserControl
             UpdateAccentSwatches();
             _updateInterval.SelectedIndex = UpdateIntervalToIndex(settings.Update.CheckInterval);
             _userImprovementPlanEnabled.IsChecked = settings.UserImprovementPlan.Enabled;
+            IsDirty = false;
         }
         finally
         {
             _updatingAppearance = false;
+            _loadingSettings = false;
         }
         RefreshStartupControls();
     }
@@ -159,8 +177,10 @@ public sealed class SoftwareSettingsPage : UserControl
 
     private void MarkDirty()
     {
+        if (_loadingSettings) return;
         // 更新频率/参与计划走"保存并应用"（由宿主 SaveSettings 持久化），这里只通知宿主刷新保存栏。
-        SettingsChangedExternally?.Invoke(this, EventArgs.Empty);
+        IsDirty = true;
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     // ---- 外观（即时生效，独立持久化）----
@@ -301,7 +321,9 @@ public sealed class SoftwareSettingsPage : UserControl
         {
             _applyingStartup = false;
         }
-        _startupState.Text = $"托盘自启:{(trayRegistered ? "已注册" : "未注册")} · 灯效服务:{(serviceAuto ? "自动" : "手动")}";
+        var consistent = trayRegistered == serviceAuto;
+        _startupState.Text = $"托盘自启:{(trayRegistered ? "已注册" : "未注册")} · 灯效服务:{(serviceAuto ? "自动" : "手动")}" +
+            (consistent ? "" : "(状态不一致,切换开关即可修复)");
     }
 
     // ---- 配置管理 ----
