@@ -472,7 +472,18 @@ public partial class MainWindow : Window
         WpfThemeManager.ApplyTitleBarMode(this);
         // 页面在构造期捕获了画刷实例，热切换会留旧色。无未保存修改时整体重建页面即可
         // 全量刷新；有未保存修改时保留旧色（数据与功能不受影响，下次开窗即新主题）。
-        if (!HasAnyDirty) RebuildPagesForTheme();
+        if (!HasAnyDirty)
+        {
+            try
+            {
+                RebuildPagesForTheme();
+            }
+            catch (Exception ex)
+            {
+                // 重建失败降级为"本次保持旧色残留"，绝不能让主题切换崩掉托盘。
+                System.Diagnostics.Trace.WriteLine($"RebuildPagesForTheme failed: {ex}");
+            }
+        }
     }
 
     private void RebuildPagesForTheme()

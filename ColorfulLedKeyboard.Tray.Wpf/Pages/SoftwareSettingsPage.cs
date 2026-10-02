@@ -32,7 +32,9 @@ public sealed class SoftwareSettingsPage : UserControl
     private int _checkingUpdates;
 
     private readonly System.Windows.Controls.CheckBox _userImprovementPlanEnabled = MakeCheck("参与用户改进计划");
-    private static readonly TextBlock UserPlanDescription = MakeMutedLabel(
+    // 注意必须是实例字段：静态 UI 元素在 RebuildPagesForTheme 重建页面时会被
+    // 第二次加入逻辑树，WPF 抛"元素已是另一个元素的逻辑子元素"直接闪退。
+    private readonly TextBlock _userPlanDescription = MakeMutedLabel(
         "用于了解不同版本的实际使用情况，便于安排维护和更新。统计数据匿名且不含个人信息。");
 
     private readonly System.Windows.Controls.CheckBox _startupEnabled = MakeCheck("开机自启动托盘与灯控服务(切换后立即生效)");
@@ -98,7 +100,7 @@ public sealed class SoftwareSettingsPage : UserControl
         var stack = new StackPanel { Margin = new Thickness(18, 18, 18, 28), MaxWidth = 832, HorizontalAlignment = HorizontalAlignment.Left };
         stack.Children.Add(BuildAppearanceCard());
         stack.Children.Add(MakeCard("自动更新", Row("自动检查更新", _updateInterval), _updateAvailable));
-        stack.Children.Add(MakeCard("用户改进计划", PlainRow(_userImprovementPlanEnabled), PlainRow(UserPlanDescription)));
+        stack.Children.Add(MakeCard("用户改进计划", PlainRow(_userImprovementPlanEnabled), PlainRow(_userPlanDescription)));
         stack.Children.Add(MakeCard("开机自启动", PlainRow(_startupEnabled), PlainRow(_startupState)));
         stack.Children.Add(MakeCard("配置管理",
             ButtonRow(_export, _import, _restoreBackup),

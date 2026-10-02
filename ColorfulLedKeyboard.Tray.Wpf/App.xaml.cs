@@ -91,6 +91,18 @@ public partial class App : Application
                 DoEvents();
                 Capture(window, Path.Combine(directory, $"page{index}.png"));
             }
+
+            // 运行时主题切换验收：精确走 SetTheme → ThemeChanged → RebuildPagesForTheme 路径，
+            // 切换后仍能截图即证明不闪退且颜色刷新。
+            if (ExtractValue(_startupArgs, "--switch-theme") is { } switchArg &&
+                Enum.TryParse<UiThemeKind>(switchArg, ignoreCase: true, out var targetKind))
+            {
+                WpfThemeManager.SetTheme(targetKind);
+                DoEvents();
+                window.SelectPage(6);
+                DoEvents();
+                Capture(window, Path.Combine(directory, $"page6-switched-{targetKind}.png"));
+            }
             Shutdown();
         });
     }
