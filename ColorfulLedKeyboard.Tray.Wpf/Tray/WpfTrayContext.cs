@@ -39,6 +39,7 @@ public sealed class WpfTrayContext : IDisposable
     private AudioSourceStatusInfo? _lastAudioStatus;
     private MainWindow? _settingsWindow;
     private ContextMenu? _currentMenu;
+    private Window? _menuHostWindow;
     private string? _lastForegroundProcess;
     private DateTimeOffset _lastForegroundStateSaved = DateTimeOffset.MinValue;
     private bool _disposed;
@@ -92,10 +93,52 @@ public sealed class WpfTrayContext : IDisposable
     private void OnNotifyIconClick(object? sender, WinForms.MouseEventArgs e)
     {
         if (e.Button != WinForms.MouseButtons.Right) return;
+        if (_currentMenu is { IsOpen: true }) return;
+
+        // WPF ContextMenu 用 IsOpen 手动弹出时没有前台焦点：点外面不会关闭、
+        // 子菜单悬停不展开。标准修法是给它一个隐藏的 0x0 宿主窗口持有焦点，
+        // 宿主失活（点击外部）即联动关闭菜单——WinForms 的 SetForegroundWindow 等价物。
+        _menuHostWindow?.Close();
+
         var menu = _currentMenu;
         if (menu is null) return;
+        var cursor = WinForms.Cursor.Position;
+        var host = new Window
+        {
+            Width = 0,
+            Height = 0,
+            WindowStyle = WindowStyle.None,
+            ShowInTaskbar = false,
+            ShowActivated = true,
+            AllowsTransparency = true,
+            Background = System.Windows.Media.Brushes.Transparent,
+            WindowStartupLocation = WindowStartupLocation.Manual,
+            Left = cursor.X,
+            Top = cursor.Y,
+            Title = "ClevoLEDKeyboardControl.MenuHost",
+            Content = new FrameworkElement { Width = 0, Height = 0 }
+        };
+        _menuHostWindow = host;
+        host.Show();
         menu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
+        host.ContextMenu = menu;
         menu.IsOpen = true;
+
+        void CloseAll(object? s, EventArgs ev)
+        {
+            menu.Closed -= CloseAll;
+            host.Deactivated -= OnHostDeactivated;
+            host.Close();
+            if (ReferenceEquals(_menuHostWindow, host)) _menuHostWindow = null;
+        }
+        void OnHostDeactivated(object? s, EventArgs ev)
+        {
+            // 点击了菜单以外的任何地方：宿主失活，联动关闭菜单
+            menu.IsOpen = false;
+            CloseAll(s, ev);
+        }
+        menu.Closed += CloseAll;
+        host.Deactivated += OnHostDeactivated;
     }
 
     // ---- 菜单构建（移植自 TrayApplicationContext.BuildMenu）----
