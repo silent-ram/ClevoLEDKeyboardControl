@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
+using System.Windows.Interop;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
@@ -39,7 +40,6 @@ public sealed class WpfTrayContext : IDisposable
     private AudioSourceStatusInfo? _lastAudioStatus;
     private MainWindow? _settingsWindow;
     private ContextMenu? _currentMenu;
-    private Window? _menuHostWindow;
     private string? _lastForegroundProcess;
     private DateTimeOffset _lastForegroundStateSaved = DateTimeOffset.MinValue;
     private bool _disposed;
@@ -94,52 +94,27 @@ public sealed class WpfTrayContext : IDisposable
     {
         if (e.Button != WinForms.MouseButtons.Right) return;
         if (_currentMenu is { IsOpen: true }) return;
-
-        // WPF ContextMenu 用 IsOpen 手动弹出时没有前台焦点：点外面不会关闭、
-        // 子菜单悬停不展开。标准修法是给它一个隐藏的 0x0 宿主窗口持有焦点，
-        // 宿主失活（点击外部）即联动关闭菜单——WinForms 的 SetForegroundWindow 等价物。
-        _menuHostWindow?.Close();
-
         var menu = _currentMenu;
         if (menu is null) return;
-        var cursor = WinForms.Cursor.Position;
-        var host = new Window
-        {
-            Width = 0,
-            Height = 0,
-            WindowStyle = WindowStyle.None,
-            ShowInTaskbar = false,
-            ShowActivated = true,
-            AllowsTransparency = true,
-            Background = System.Windows.Media.Brushes.Transparent,
-            WindowStartupLocation = WindowStartupLocation.Manual,
-            Left = cursor.X,
-            Top = cursor.Y,
-            Title = "ClevoLEDKeyboardControl.MenuHost",
-            Content = new FrameworkElement { Width = 0, Height = 0 }
-        };
-        _menuHostWindow = host;
-        host.Show();
-        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
-        host.ContextMenu = menu;
-        menu.IsOpen = true;
 
-        void CloseAll(object? s, EventArgs ev)
+        // WPF ContextMenu 从托盘手动弹出时没有前台焦点：点外面不关闭、子菜单悬停不展开。
+        // 0x0 宿主窗口方案会被 Windows 前台锁拒绝（后台进程 Show 不激活），不可靠。
+        // 正确姿势（WinForms 托盘菜单几十年来的标准解法）：打开后把前台焦点交给
+        // 菜单自己的弹出窗口；IsOpen 异步生成 HWND，空转发力后再 SetForegroundWindow。
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
+        menu.IsOpen = true;
+        System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(() =>
         {
-            menu.Closed -= CloseAll;
-            host.Deactivated -= OnHostDeactivated;
-            host.Close();
-            if (ReferenceEquals(_menuHostWindow, host)) _menuHostWindow = null;
-        }
-        void OnHostDeactivated(object? s, EventArgs ev)
-        {
-            // 点击了菜单以外的任何地方：宿主失活，联动关闭菜单
-            menu.IsOpen = false;
-            CloseAll(s, ev);
-        }
-        menu.Closed += CloseAll;
-        host.Deactivated += OnHostDeactivated;
+            if (PresentationSource.FromVisual(menu) is HwndSource source)
+            {
+                SetForegroundWindow(source.Handle);
+            }
+        }));
     }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(System.IntPtr hWnd);
 
     // ---- 菜单构建（移植自 TrayApplicationContext.BuildMenu）----
 
