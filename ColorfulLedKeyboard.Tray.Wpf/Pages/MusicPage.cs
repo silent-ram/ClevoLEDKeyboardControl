@@ -157,7 +157,7 @@ public sealed class MusicPage : UserControl
         _eqLowHost = RowHost(_eqLow);
         _eqHighHost = RowHost(_eqHigh);
 
-        var stack = new StackPanel { Margin = new Thickness(18, 18, 18, 28), MaxWidth = 832, HorizontalAlignment = HorizontalAlignment.Left };
+        var stack = new StackPanel { Margin = new Thickness(18, 18, 18, 28), MaxWidth = 832, HorizontalAlignment = HorizontalAlignment.Center };
         stack.Children.Add(MakeCard("播放器与当前配色", _audioSourceLabel, _musicBindingStatus,
             ButtonRow(_bindPlayer, _clearPlayer),
             RowWithHint("键盘颜色来源", _bindingColorSource, _coverColorHint),

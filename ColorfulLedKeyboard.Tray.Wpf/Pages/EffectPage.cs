@@ -73,7 +73,7 @@ public sealed class EffectPage : UserControl
 
     public EffectPage()
     {
-        var stack = new StackPanel { Margin = new Thickness(18, 18, 18, 28), MaxWidth = 832, HorizontalAlignment = HorizontalAlignment.Left };
+        var stack = new StackPanel { Margin = new Thickness(18, 18, 18, 28), MaxWidth = 832, HorizontalAlignment = HorizontalAlignment.Center };
 
         _modeLighting.Checked += (_, _) => OnModeChanged();
         _modeMusic.Checked += (_, _) => OnModeChanged();

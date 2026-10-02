@@ -3,13 +3,13 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <ScrollViewer Style="{DynamicResource DarkScrollViewer}"
                   HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <StackPanel Margin="18,18,18,28" MaxWidth="832" HorizontalAlignment="Left">
+        <StackPanel Margin="18,18,18,28" MaxWidth="832" HorizontalAlignment="Center">
             <Border Style="{DynamicResource UiCard}">
                 <StackPanel>
                     <TextBlock Text="关于" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource Brush.Text}" />
                     <TextBlock Text="ClevoLEDKeyboardControl" FontSize="20" FontWeight="Bold"
                                Foreground="{DynamicResource Brush.Text}" Margin="0,10,0,0" />
-                    <Rectangle Height="3" Width="148" HorizontalAlignment="Left" Margin="0,8,0,0"
+                    <Rectangle Height="3" Width="148" HorizontalAlignment="Center" Margin="0,8,0,0"
                                Fill="{DynamicResource Brush.Spectrum}" RadiusX="1.5" RadiusY="1.5" />
                     <TextBlock x:Name="VersionText" FontSize="12" Foreground="{DynamicResource Brush.MutedText}" Margin="0,8,0,0" />
                     <TextBlock Text="面向 Clevo 兼容机型的键盘背光灯效控制程序。" FontSize="12"

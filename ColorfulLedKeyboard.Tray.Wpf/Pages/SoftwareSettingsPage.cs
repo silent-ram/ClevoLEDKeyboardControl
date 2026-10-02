@@ -100,7 +100,7 @@ public sealed class SoftwareSettingsPage : UserControl
             SettingsChangedExternally?.Invoke(this, EventArgs.Empty);
         };
 
-        var stack = new StackPanel { Margin = new Thickness(18, 18, 18, 28), MaxWidth = 832, HorizontalAlignment = HorizontalAlignment.Left };
+        var stack = new StackPanel { Margin = new Thickness(18, 18, 18, 28), MaxWidth = 832, HorizontalAlignment = HorizontalAlignment.Center };
         stack.Children.Add(BuildAppearanceCard());
         stack.Children.Add(MakeCard("自动更新", Row("自动检查更新", _updateInterval), _updateAvailable));
         stack.Children.Add(MakeCard("用户改进计划", PlainRow(_userImprovementPlanEnabled), PlainRow(_userPlanDescription)));
