@@ -98,11 +98,13 @@ public partial class MainWindow : Window
     /// <summary>托盘侧音频状态回推；存缓存后由状态定时器带入总览页。</summary>
     public void UpdateAudioSourceLabel(AudioSourceStatusInfo? info)
     {
-        _lastAudioStatus = info;
+        // 监视器偶发读到 null（写入瞬间/IPC 超时），不能让它回退掉上一次的有效值——
+        // 否则标签会永远停在"检测中…"（状态文件只在设备变化时重写，恢复遥遥无期）。
+        if (info is not null) _lastAudioStatus = info;
+        var effective = _lastAudioStatus;
         Dispatcher.BeginInvoke(() =>
         {
-            _musicPage?.UpdateAudioSourceLabel(info);
-            UpdateStatusHeader();
+            _musicPage?.UpdateAudioSourceLabel(effective);
         });
     }
 
