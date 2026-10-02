@@ -386,7 +386,7 @@ async function handleSummary(res) {
           })
       );
     }
-    const [devices, trend] = await Promise.all([listAll("telemetry-"), ...trendPromises]);
+    const [devices, ...trend] = await Promise.all([listAll("telemetry-"), ...trendPromises]);
 
     // 解析 key:telemetry-{version}-{installId}.json;installId 是固定 5 段的 UUID,
     // 从尾部取 5 段还原 installId,余下部分为版本号(旧格式无版本段记为 unknown)。
