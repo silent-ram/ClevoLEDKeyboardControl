@@ -52,7 +52,7 @@ public sealed class AutomationPage : UserControl
             FontWeight = FontWeights.Bold,
             Margin = new Thickness(0, 4, 0, 0)
         };
-        var simulatorRow = new Grid { MinHeight = 40, Width = UiMetrics.ContentWidth };
+        var simulatorRow = new Grid { MinHeight = 40, MaxWidth = UiMetrics.ContentWidth };
         _simulator.HorizontalAlignment = HorizontalAlignment.Left;
         simulatorRow.Children.Add(_simulator);
 
@@ -166,7 +166,7 @@ public sealed class AutomationPage : UserControl
 
     private static UIElement Row(string label, FrameworkElement control)
     {
-        var grid = new Grid { MinHeight = 40, Width = UiMetrics.ContentWidth };
+        var grid = new Grid { MinHeight = 40, MaxWidth = UiMetrics.ContentWidth };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(130) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)Application.Current.Resources["Brush.Text"] });
@@ -178,7 +178,7 @@ public sealed class AutomationPage : UserControl
 
     private static UIElement PlainRow(FrameworkElement control)
     {
-        var grid = new Grid { MinHeight = 40, Width = UiMetrics.ContentWidth };
+        var grid = new Grid { MinHeight = 40, MaxWidth = UiMetrics.ContentWidth };
         control.VerticalAlignment = VerticalAlignment.Center;
         control.HorizontalAlignment = HorizontalAlignment.Left;
         grid.Children.Add(control);

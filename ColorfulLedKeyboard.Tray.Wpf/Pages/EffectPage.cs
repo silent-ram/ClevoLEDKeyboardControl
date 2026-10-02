@@ -975,7 +975,7 @@ public sealed class EffectPage : UserControl
     private static UIElement Row(string label, FrameworkElement control)
     {
         control.MinWidth = Math.Max(control.MinWidth, 240);
-        var grid = new Grid { MinHeight = 40, Width = UiMetrics.ContentWidth };
+        var grid = new Grid { MinHeight = 40, MaxWidth = UiMetrics.ContentWidth };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(LabelWidth) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.Children.Add(new TextBlock
@@ -995,7 +995,7 @@ public sealed class EffectPage : UserControl
     // SliderRow/ColorPickerRow 自带标签列，宿主行不再重复加标签
     private static UIElement RowHost(FrameworkElement control)
     {
-        var grid = new Grid { MinHeight = 40, Width = UiMetrics.ContentWidth };
+        var grid = new Grid { MinHeight = 40, MaxWidth = UiMetrics.ContentWidth };
         control.VerticalAlignment = VerticalAlignment.Center;
         grid.Children.Add(control);
         return grid;
@@ -1003,7 +1003,7 @@ public sealed class EffectPage : UserControl
 
     private static UIElement PlainRow(FrameworkElement control)
     {
-        var grid = new Grid { MinHeight = 40, Width = UiMetrics.ContentWidth };
+        var grid = new Grid { MinHeight = 40, MaxWidth = UiMetrics.ContentWidth };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(LabelWidth) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         control.VerticalAlignment = VerticalAlignment.Center;
@@ -1034,7 +1034,7 @@ public sealed class EffectPage : UserControl
     {
         control.Margin = new Thickness(ControlLeft, 0, 0, 0);
         control.HorizontalAlignment = HorizontalAlignment.Left;
-        control.Width = 590;
+        control.MaxWidth = 590;
         return control;
     }
 

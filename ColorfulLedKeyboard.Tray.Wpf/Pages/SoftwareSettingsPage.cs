@@ -599,7 +599,7 @@ public sealed class SoftwareSettingsPage : UserControl
 
     private static UIElement Row(string label, FrameworkElement control)
     {
-        var grid = new Grid { MinHeight = 40, Width = UiMetrics.ContentWidth };
+        var grid = new Grid { MinHeight = 40, MaxWidth = UiMetrics.ContentWidth };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(130) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, Foreground = FindBrush("Brush.Text") });
@@ -611,7 +611,7 @@ public sealed class SoftwareSettingsPage : UserControl
 
     private static UIElement PlainRow(FrameworkElement control)
     {
-        var grid = new Grid { MinHeight = 40, Width = UiMetrics.ContentWidth };
+        var grid = new Grid { MinHeight = 40, MaxWidth = UiMetrics.ContentWidth };
         control.VerticalAlignment = VerticalAlignment.Center;
         control.HorizontalAlignment = HorizontalAlignment.Left;
         grid.Children.Add(control);

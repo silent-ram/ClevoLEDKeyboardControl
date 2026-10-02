@@ -828,7 +828,7 @@ public sealed class MusicPage : UserControl
 
     private static UIElement Row(string label, FrameworkElement control)
     {
-        var grid = new Grid { MinHeight = 40, Width = UiMetrics.ContentWidth };
+        var grid = new Grid { MinHeight = 40, MaxWidth = UiMetrics.ContentWidth };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(130) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.Children.Add(new TextBlock
@@ -846,7 +846,7 @@ public sealed class MusicPage : UserControl
 
     private static UIElement RowHost(FrameworkElement control)
     {
-        var grid = new Grid { MinHeight = 40, Width = UiMetrics.ContentWidth };
+        var grid = new Grid { MinHeight = 40, MaxWidth = UiMetrics.ContentWidth };
         control.VerticalAlignment = VerticalAlignment.Center;
         grid.Children.Add(control);
         return grid;
@@ -865,7 +865,7 @@ public sealed class MusicPage : UserControl
 
     private static UIElement PlainRow(FrameworkElement control)
     {
-        var grid = new Grid { MinHeight = 40, Width = UiMetrics.ContentWidth };
+        var grid = new Grid { MinHeight = 40, MaxWidth = UiMetrics.ContentWidth };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(ControlLeft) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         control.VerticalAlignment = VerticalAlignment.Center;

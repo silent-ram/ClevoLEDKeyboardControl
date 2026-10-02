@@ -231,7 +231,7 @@ public sealed class DiagnosticsPage : UserControl
 
     private static UIElement Row(string label, FrameworkElement control)
     {
-        var grid = new Grid { MinHeight = 40, Width = UiMetrics.ContentWidth };
+        var grid = new Grid { MinHeight = 40, MaxWidth = UiMetrics.ContentWidth };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(130) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)Application.Current.Resources["Brush.Text"] });

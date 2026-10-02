@@ -9,11 +9,11 @@
     <SolidColorBrush x:Key="Brush.Border" Color="#2B313D" />
     <SolidColorBrush x:Key="Brush.Text" Color="#E8EBF2" />
     <SolidColorBrush x:Key="Brush.MutedText" Color="#99A1B0" />
-    <SolidColorBrush x:Key="Brush.Primary" Color="#E9A94A" />
-    <SolidColorBrush x:Key="Brush.Secondary" Color="#C98731" />
-    <SolidColorBrush x:Key="Brush.PrimarySoft" Color="#332B1B" />
+    <SolidColorBrush x:Key="Brush.Primary" Color="#38C8F0" />
+    <SolidColorBrush x:Key="Brush.Secondary" Color="#2D9FC2" />
+    <SolidColorBrush x:Key="Brush.PrimarySoft" Color="#1B2E38" />
     <SolidColorBrush x:Key="Brush.Hover" Color="#262B36" />
-    <SolidColorBrush x:Key="Brush.PrimaryText" Color="#221A08" />
+    <SolidColorBrush x:Key="Brush.PrimaryText" Color="#08202B" />
     <SolidColorBrush x:Key="Brush.Success" Color="#6FBE83" />
     <SolidColorBrush x:Key="Brush.Warning" Color="#E08845" />
     <SolidColorBrush x:Key="Brush.FieldInvalid" Color="#46262B" />

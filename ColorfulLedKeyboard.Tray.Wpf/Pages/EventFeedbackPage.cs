@@ -146,7 +146,7 @@ public sealed class EventFeedbackPage : UserControl
 
     private static UIElement RowHost(FrameworkElement control)
     {
-        var grid = new Grid { MinHeight = 40, Width = UiMetrics.ContentWidth };
+        var grid = new Grid { MinHeight = 40, MaxWidth = UiMetrics.ContentWidth };
         control.VerticalAlignment = VerticalAlignment.Center;
         grid.Children.Add(control);
         return grid;
@@ -154,7 +154,7 @@ public sealed class EventFeedbackPage : UserControl
 
     private static UIElement PlainRow(FrameworkElement control)
     {
-        var grid = new Grid { MinHeight = 40, Width = UiMetrics.ContentWidth };
+        var grid = new Grid { MinHeight = 40, MaxWidth = UiMetrics.ContentWidth };
         control.VerticalAlignment = VerticalAlignment.Center;
         control.HorizontalAlignment = HorizontalAlignment.Left;
         grid.Children.Add(control);

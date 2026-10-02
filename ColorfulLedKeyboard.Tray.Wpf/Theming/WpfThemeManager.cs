@@ -30,8 +30,8 @@ public static class WpfThemeManager
 
     /// <summary>当前深浅档位下调色板的默认强调色（与 Dark/Light.xaml 保持一致）。</summary>
     public static Color DefaultAccent => IsDark
-        ? Color.FromRgb(0xE9, 0xA9, 0x4A)
-        : Color.FromRgb(0x9A, 0x6A, 0x1E);
+        ? Color.FromRgb(0x38, 0xC8, 0xF0)
+        : Color.FromRgb(0x1E, 0x8F, 0xC4);
 
     public static bool IsDark => _currentKind == UiThemeKind.Windows11;
 
