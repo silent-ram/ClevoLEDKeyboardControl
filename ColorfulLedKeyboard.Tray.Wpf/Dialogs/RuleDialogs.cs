@@ -337,7 +337,7 @@ public sealed class AutomationRuleDialog : Window
         EffectType.Static => "固定颜色",
         EffectType.Rainbow => "RGB 循环",
         EffectType.Breathing => "单色呼吸",
-        EffectType.Sequence => "颜色序列",
+        EffectType.Sequence => "循环呼吸",
         EffectType.Pulse => "脉冲",
         EffectType.Heartbeat => "心跳",
         _ => type.ToString()
