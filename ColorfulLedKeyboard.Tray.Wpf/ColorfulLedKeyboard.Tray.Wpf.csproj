@@ -43,6 +43,9 @@
     <Compile Include="..\ColorfulLedKeyboard.Tray\StartupManager.cs" Link="Shared\StartupManager.cs" />
     <Compile Include="..\ColorfulLedKeyboard.Tray\ProcessIconColor.cs" Link="Shared\ProcessIconColor.cs" />
     <Compile Include="..\ColorfulLedKeyboard.Tray\AudioSourceStatusWatcher.cs" Link="Shared\AudioSourceStatusWatcher.cs" />
+    <!-- AudioSessionMonitor：音乐灯效的数据源。构造函数启动 WASAPI 会话电平采样并
+         写 AudioApplicationsState（服务据此驱动音乐模式），绝不能省——Phase 0 误删导致灯不动 -->
+    <Compile Include="..\ColorfulLedKeyboard.Tray\AudioSessionMonitor.cs" Link="Shared\AudioSessionMonitor.cs" />
   </ItemGroup>
 
 </Project>

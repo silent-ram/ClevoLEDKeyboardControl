@@ -22,6 +22,7 @@ public sealed class WpfTrayContext : IDisposable
     private readonly UpdateChecker _updateChecker = new();
     private readonly TypingPulseHook _typingPulseHook = new();
     private readonly MediaSessionMonitor _mediaSessionMonitor = new();
+    private readonly AudioSessionMonitor _audioSessionMonitor = new();
     private readonly NotificationFlashMonitor _notificationFlashMonitor;
     private readonly UsageTelemetryClient _usageTelemetryClient = new();
     private readonly WinForms.NotifyIcon _notifyIcon = new();
@@ -940,6 +941,7 @@ public sealed class WpfTrayContext : IDisposable
         _typingPulseHook.Dispose();
         _notificationFlashMonitor.Dispose();
         _mediaSessionMonitor.Dispose();
+        _audioSessionMonitor.Dispose();
         _audioStatusWatcher?.Dispose();
         _usageTelemetryClient.Dispose();
         _notifyIcon.Visible = false;
