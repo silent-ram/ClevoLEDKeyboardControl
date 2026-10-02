@@ -199,8 +199,8 @@ public sealed class MusicPage : UserControl
         UpdateMusicAdvancedVisibility();
     }
 
-    /// <summary>保存栏总脏状态：绑定变更或预设变更。</summary>
-    public bool IsDirty => _generalChanged || _musicPresetChanged;
+    /// <summary>保存栏总脏状态：绑定变更、预设变更或已暂存的预设修改（暂存 ≠ 落盘）。</summary>
+    public bool IsDirty => _generalChanged || _musicPresetChanged || _musicPresetChangesStaged;
 
     /// <summary>SaveSettings 的硬拦截条件（WinForms 语义一致）。</summary>
     public bool IsMusicPresetChanged => _musicPresetChanged;

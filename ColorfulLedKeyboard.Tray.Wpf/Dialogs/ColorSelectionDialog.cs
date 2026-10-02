@@ -63,7 +63,8 @@ public sealed class ColorSelectionDialog : Window
         ResizeMode = ResizeMode.NoResize;
         ShowInTaskbar = false;
         Width = 780;
-        Height = 540;
+        SizeToContent = SizeToContent.Height;
+        MinHeight = 420;
         Background = (Brush)Application.Current.Resources["Brush.Window"];
         FontFamily = (FontFamily)Application.Current.Resources["Font.Body"];
         FontSize = 12;
@@ -187,18 +188,15 @@ public sealed class ColorSelectionDialog : Window
         var grid = new Grid { Margin = new Thickness(24, 10, 0, 0) };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         _plane.Width = 200;
         _plane.Height = 190;
-        Grid.SetColumnSpan(_plane, 2);
         grid.Children.Add(_plane);
         _hueBar.Margin = new Thickness(10, 0, 0, 0);
-        Grid.SetColumn(_hueBar, 2);
+        Grid.SetColumn(_hueBar, 1);
         grid.Children.Add(_hueBar);
 
         _plane.ColorPicked += (_, _) =>
@@ -224,44 +222,54 @@ public sealed class ColorSelectionDialog : Window
         hexColumn.Children.Add(_hex);
         previewRow.Children.Add(hexColumn);
         Grid.SetRow(previewRow, 1);
-        Grid.SetColumnSpan(previewRow, 3);
         grid.Children.Add(previewRow);
 
+        // R/G/B 与 H/S/V 两列并排（对齐 WinForms 布局），不再挤成一竖列
         var numericGrid = new Grid { Margin = new Thickness(0, 12, 0, 0) };
-        AddNumericRow(numericGrid, 0, "R", _red, ApplyRgbInput);
-        AddNumericRow(numericGrid, 1, "G", _green, ApplyRgbInput);
-        AddNumericRow(numericGrid, 2, "B", _blue, ApplyRgbInput);
-        AddNumericRow(numericGrid, 3, "H", _hue, ApplyHsvInput);
-        AddNumericRow(numericGrid, 4, "S", _saturation, ApplyHsvInput);
-        AddNumericRow(numericGrid, 5, "V", _value, ApplyHsvInput);
+        numericGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        numericGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(28) });
+        numericGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var rgbStack = new StackPanel();
+        AddNumericRow(rgbStack, "R", _red, ApplyRgbInput);
+        AddNumericRow(rgbStack, "G", _green, ApplyRgbInput);
+        AddNumericRow(rgbStack, "B", _blue, ApplyRgbInput);
+        var hsvStack = new StackPanel();
+        AddNumericRow(hsvStack, "H", _hue, ApplyHsvInput);
+        AddNumericRow(hsvStack, "S", _saturation, ApplyHsvInput);
+        AddNumericRow(hsvStack, "V", _value, ApplyHsvInput);
+        Grid.SetColumn(rgbStack, 0);
+        Grid.SetColumn(hsvStack, 2);
+        numericGrid.Children.Add(rgbStack);
+        numericGrid.Children.Add(hsvStack);
         Grid.SetRow(numericGrid, 2);
+        Grid.SetColumnSpan(numericGrid, 2);
         grid.Children.Add(numericGrid);
 
-        var restoreRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 0) };
         var restore = new Button { Content = "恢复默认", Style = ButtonStyle(), MinWidth = 96 };
         restore.Click += (_, _) => RestoreSelectedDefault();
-        restoreRow.Children.Add(restore);
-        Grid.SetRow(restoreRow, 3);
-        grid.Children.Add(restoreRow);
+        restore.Margin = new Thickness(0, 12, 0, 0);
+        restore.HorizontalAlignment = HorizontalAlignment.Left;
+        Grid.SetRow(restore, 1);
+        Grid.SetColumn(restore, 1);
+        grid.Children.Add(restore);
 
         return grid;
     }
 
-    private static void AddNumericRow(Grid grid, int row, string label, System.Windows.Controls.TextBox box, System.Action onInput)
+    private static void AddNumericRow(StackPanel panel, string label, System.Windows.Controls.TextBox box, System.Action onInput)
     {
-        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        grid.Children.Add(new TextBlock
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 2) };
+        row.Children.Add(new TextBlock
         {
             Text = label,
-            Width = 22,
+            Width = 20,
             VerticalAlignment = VerticalAlignment.Center,
             Foreground = (Brush)Application.Current.Resources["Brush.Text"]
         });
-        box.Margin = new Thickness(8, 2, 0, 2);
-        Grid.SetColumn(box, 1);
-        Grid.SetRow(box, row);
+        box.Margin = new Thickness(8, 0, 0, 0);
+        row.Children.Add(box);
+        panel.Children.Add(row);
         box.TextChanged += (_, _) => onInput();
-        grid.Children.Add(box);
     }
 
     private static Brush FindBrush(string key) => (Brush)Application.Current.Resources[key];
