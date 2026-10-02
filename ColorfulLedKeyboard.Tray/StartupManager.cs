@@ -16,7 +16,7 @@ internal static class StartupManager
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string RunValueName = "ClevoLEDKeyboardControl";
 
-    public static string TrayExePath => Environment.ProcessPath ?? Application.ExecutablePath;
+    public static string TrayExePath => Environment.ProcessPath ?? System.Windows.Forms.Application.ExecutablePath;
 
     public static bool IsTrayRegistered()
     {

@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ColorfulLedKeyboard.Install
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ColorfulLedKeyboard.Tests", "ColorfulLedKeyboard.Tests\ColorfulLedKeyboard.Tests.csproj", "{118640C8-0AF2-4B95-B148-615D8ED41473}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ColorfulLedKeyboard.Tray.Wpf", "ColorfulLedKeyboard.Tray.Wpf\ColorfulLedKeyboard.Tray.Wpf.csproj", "{6FA71C05-54EF-4BB3-A276-4EE09012396D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -42,5 +44,9 @@ Global
 		{118640C8-0AF2-4B95-B148-615D8ED41473}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{118640C8-0AF2-4B95-B148-615D8ED41473}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{118640C8-0AF2-4B95-B148-615D8ED41473}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6FA71C05-54EF-4BB3-A276-4EE09012396D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6FA71C05-54EF-4BB3-A276-4EE09012396D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6FA71C05-54EF-4BB3-A276-4EE09012396D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6FA71C05-54EF-4BB3-A276-4EE09012396D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

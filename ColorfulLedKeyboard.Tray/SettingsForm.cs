@@ -1,21 +1,9 @@
 using ColorfulLedKeyboard.Core;
 using System.Diagnostics;
 using System.Text.Json;
-using static ColorfulLedKeyboard.Tray.UiMetrics;
+using static ColorfulLedKeyboard.Core.UiMetrics;
 
 namespace ColorfulLedKeyboard.Tray;
-
-internal static class UiMetrics
-{
-    public const int ContentWidth = 800;
-    public const int LabelWidth = 150;
-    public const int ControlLeft = 165;
-    public const int RowHeight = 48;
-    public const int ButtonHeight = 34;
-
-    public static int ScaleForDpi(int logicalPixels, int dpi) =>
-        Math.Max(1, (int)Math.Round(logicalPixels * Math.Max(96, dpi) / 96d));
-}
 
 public sealed partial class SettingsForm : ThemedForm
 {
@@ -2482,9 +2470,9 @@ public sealed partial class SettingsForm : ThemedForm
         }.Normalize();
     }
 
-    internal static int MusicResponseIndex(bool beatDetectionEnabled) => beatDetectionEnabled ? 1 : 0;
+    internal static int MusicResponseIndex(bool beatDetectionEnabled) => MusicResponseMapping.Index(beatDetectionEnabled);
 
-    internal static bool MusicResponseUsesBeatDetection(int selectedIndex) => selectedIndex == 1;
+    internal static bool MusicResponseUsesBeatDetection(int selectedIndex) => MusicResponseMapping.UsesBeatDetection(selectedIndex);
 
     private void UpdateAutomationStatus()
     {

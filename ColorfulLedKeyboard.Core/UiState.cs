@@ -1,19 +1,25 @@
+using System.Drawing;
 using System.Text.Json;
 
-namespace ColorfulLedKeyboard.Tray;
+namespace ColorfulLedKeyboard.Core;
 
-internal enum UiThemeKind
+// UI 状态的持久化类型。从 WinForms 托盘项目迁入 Core，供 WinForms 与 WPF 两个前端共享，
+// 避免 ui-state.json 的读写逻辑出现两份漂移。
+
+/// <summary>界面主题枚举。仅为兼容旧配置文件保留三个值：
+/// Windows11 映射"深色仪器风"，Technology/Warm 映射"浅色工作台"。</summary>
+public enum UiThemeKind
 {
     Windows11,
     Technology,
     Warm
 }
 
-internal sealed class UiState
+/// <summary>窗口几何、主题、强调色等界面偏好。AccentArgb 约定：
+/// 0 = 调色板默认强调色；-1 = 跟随键盘主色；其余为 ARGB。</summary>
+public sealed class UiState
 {
     public const int CurrentVersion = 1;
-
-    // AccentArgb 约定：0 = 调色板默认强调色；-1 = 跟随键盘主色；其余为 ARGB。
     public const int AccentDefault = 0;
     public const int AccentFollowKeyboard = -1;
 
@@ -41,7 +47,7 @@ internal sealed class UiState
     };
 }
 
-internal sealed class UiStateStore
+public sealed class UiStateStore
 {
     private const string FileName = "ui-state.json";
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
@@ -52,7 +58,7 @@ internal sealed class UiStateStore
     {
         _path = path ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            ColorfulLedKeyboard.Core.AppPaths.ProgramDataFolderName,
+            AppPaths.ProgramDataFolderName,
             FileName);
     }
 
@@ -118,7 +124,7 @@ internal sealed class UiStateStore
         var width = Math.Clamp(bounds.Width, 1040, 3840);
         var height = Math.Clamp(bounds.Height, 720, 2160);
         if (workAreas.Count == 0) return new Rectangle(bounds.X, bounds.Y, width, height);
-        var normalized = new Rectangle(bounds.X, bounds.Y, width, height);
+        var normalized = new Rectangle(bounds.X, bounds.Y, bounds.Width, bounds.Height);
         var target = workAreas.FirstOrDefault(area => area.IntersectsWith(normalized));
         if (target == Rectangle.Empty) target = workAreas.First();
         width = Math.Min(width, target.Width);

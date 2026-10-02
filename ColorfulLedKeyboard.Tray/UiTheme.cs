@@ -1,3 +1,4 @@
+using ColorfulLedKeyboard.Core;
 using System.Drawing.Drawing2D;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;

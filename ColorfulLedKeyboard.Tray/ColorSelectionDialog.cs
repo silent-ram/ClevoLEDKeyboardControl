@@ -1,5 +1,5 @@
 using ColorfulLedKeyboard.Core;
-using static ColorfulLedKeyboard.Tray.UiMetrics;
+using static ColorfulLedKeyboard.Core.UiMetrics;
 
 namespace ColorfulLedKeyboard.Tray;
 

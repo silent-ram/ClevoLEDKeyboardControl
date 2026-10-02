@@ -1,0 +1,122 @@
+<Window x:Class="ColorfulLedKeyboard.Tray.Wpf.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:pages="clr-namespace:ColorfulLedKeyboard.Tray.Wpf.Pages"
+        Title="ClevoLEDKeyboardControl 设置"
+        MinWidth="1040" MinHeight="720"
+        Background="{DynamicResource Brush.Window}"
+        FontFamily="{DynamicResource Font.Body}"
+        FontSize="12"
+        UseLayoutRounding="True">
+    <Window.Resources>
+        <!-- 侧边导航项：药丸 + 悬停 + 选中光谱条 + 徽标 -->
+        <Style x:Key="NavItemContainer" TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.MutedText}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Pill" Background="Transparent" CornerRadius="8"
+                                Margin="4,2" Padding="10,9">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="4" />
+                                    <ColumnDefinition Width="8" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="10" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Rectangle x:Name="AccentBar" Grid.Column="0" Width="3" RadiusX="1.5" RadiusY="1.5"
+                                           Fill="{DynamicResource Brush.Spectrum}" Visibility="Collapsed" />
+                                <TextBlock x:Name="Icon" Grid.Column="2" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                           FontSize="13" VerticalAlignment="Center"
+                                           Text="{Binding IconGlyph}" />
+                                <TextBlock Grid.Column="4" Text="{Binding Title}" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" />
+                                <TextBlock x:Name="Badge" Grid.Column="5" Text="{Binding Badge}" FontSize="10"
+                                           FontWeight="Bold" Foreground="{DynamicResource Brush.Error}"
+                                           VerticalAlignment="Center" Margin="8,0,0,0" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Pill" Property="Background" Value="{DynamicResource Brush.PrimarySoft}" />
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                                <Setter TargetName="AccentBar" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsMouseOver" Value="True" />
+                                    <Condition Property="IsSelected" Value="False" />
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="Pill" Property="Background" Value="{DynamicResource Brush.Hover}" />
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="218" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- 侧边栏 -->
+            <Border Grid.Column="0" Background="{DynamicResource Brush.Sidebar}" Padding="10,14,8,12">
+                <ListBox x:Name="Navigation"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         ItemContainerStyle="{StaticResource NavItemContainer}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
+            </Border>
+
+            <!-- 右侧：状态页头 + 页面 -->
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="72" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Border Grid.Row="0" Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Border}"
+                        BorderThickness="0,0,0,1">
+                    <Grid>
+                        <TextBlock x:Name="PageTitle" Text="当前状态" FontSize="19" FontWeight="Bold"
+                                   Foreground="{DynamicResource Brush.Text}"
+                                   HorizontalAlignment="Left" VerticalAlignment="Center" Margin="18,0,0,6" />
+                        <TextBlock x:Name="HeaderStatus" Text="● 服务与灯控正常"
+                                   Foreground="{DynamicResource Brush.Success}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,6" />
+                        <!-- 签名元素：页头底缘 RGB 光谱条 -->
+                        <Rectangle Height="2" VerticalAlignment="Bottom" Fill="{DynamicResource Brush.Spectrum}" />
+                    </Grid>
+                </Border>
+                <ContentControl x:Name="PageHost" Grid.Row="1" Focusable="False" />
+            </Grid>
+        </Grid>
+
+        <!-- 底部保存栏 -->
+        <Border Grid.Row="1" Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Border}"
+                BorderThickness="0,1,0,0" Padding="18,9">
+            <Grid>
+                <TextBlock x:Name="DirtyLabel" Text="✓ 设置已保存" VerticalAlignment="Center"
+                           Foreground="{DynamicResource Brush.Success}" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button x:Name="RevertButton" Content="恢复修改" Style="{StaticResource UiButton}"
+                            Width="104" Margin="0,0,10,0" IsEnabled="False" />
+                    <Button x:Name="ApplyButton" Content="保存并应用" Style="{StaticResource UiButtonPrimary}"
+                            Width="120" IsEnabled="False" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

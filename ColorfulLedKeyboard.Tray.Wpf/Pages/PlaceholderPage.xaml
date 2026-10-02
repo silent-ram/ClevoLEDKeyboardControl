@@ -1,0 +1,12 @@
+<UserControl x:Class="ColorfulLedKeyboard.Tray.Wpf.Pages.PlaceholderPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Background="{DynamicResource Brush.Window}">
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+            <TextBlock x:Name="TitleText" FontSize="16" FontWeight="Bold"
+                       Foreground="{DynamicResource Brush.Text}" HorizontalAlignment="Center" />
+            <TextBlock x:Name="HintText" FontSize="12" Foreground="{DynamicResource Brush.MutedText}"
+                       Margin="0,10,0,0" HorizontalAlignment="Center" />
+        </StackPanel>
+    </Grid>
+</UserControl>

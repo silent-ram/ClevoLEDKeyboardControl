@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <!-- NotifyIcon 互操作与图标提取需要 WinForms 面；迁移期保持零新增 NuGet 依赖 -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationIcon>..\assets\app.ico</ApplicationIcon>
+    <!-- 切换期程序集名带 .Wpf 后缀，避免与 WinForms 托盘同名冲突；Phase 4 切换默认产物时改回 ColorfulLedKeyboard.Tray -->
+    <AssemblyName>ColorfulLedKeyboard.Tray.Wpf</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ColorfulLedKeyboard.Core\ColorfulLedKeyboard.Core.csproj" />
+  </ItemGroup>
+
+  <!-- UseWpf + UseWindowsForms 同时开启时 SDK 会隐式引入两套 UI 命名空间，统一显式引用 -->
+  <ItemGroup>
+    <Using Remove="System.Drawing" />
+    <Using Remove="System.Windows" />
+    <Using Remove="System.Windows.Controls" />
+    <Using Remove="System.Windows.Forms" />
+    <Using Include="System.IO" />
+    <Using Include="System.Linq" />
+  </ItemGroup>
+
+  <!-- 与 WinForms 托盘共享的无界面组件：单一源文件，两个前端各自编译进程序集 -->
+  <ItemGroup>
+    <Compile Include="..\ColorfulLedKeyboard.Tray\MediaSessionMonitor.cs" Link="Shared\MediaSessionMonitor.cs" />
+    <Compile Include="..\ColorfulLedKeyboard.Tray\TypingPulseHook.cs" Link="Shared\TypingPulseHook.cs" />
+    <Compile Include="..\ColorfulLedKeyboard.Tray\NotificationFlashMonitor.cs" Link="Shared\NotificationFlashMonitor.cs" />
+    <Compile Include="..\ColorfulLedKeyboard.Tray\ForegroundWindowProcessName.cs" Link="Shared\ForegroundWindowProcessName.cs" />
+    <Compile Include="..\ColorfulLedKeyboard.Tray\UpdateChecker.cs" Link="Shared\UpdateChecker.cs" />
+    <Compile Include="..\ColorfulLedKeyboard.Tray\UsageTelemetryClient.cs" Link="Shared\UsageTelemetryClient.cs" />
+    <Compile Include="..\ColorfulLedKeyboard.Tray\StartupManager.cs" Link="Shared\StartupManager.cs" />
+    <Compile Include="..\ColorfulLedKeyboard.Tray\ProcessIconColor.cs" Link="Shared\ProcessIconColor.cs" />
+    <Compile Include="..\ColorfulLedKeyboard.Tray\AudioSourceStatusWatcher.cs" Link="Shared\AudioSourceStatusWatcher.cs" />
+  </ItemGroup>
+
+</Project>

@@ -8,6 +8,8 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="ColorfulLedKeyboard.Tests" />
+    <InternalsVisibleTo Include="ColorfulLedKeyboard.Tray" />
+    <InternalsVisibleTo Include="ColorfulLedKeyboard.Tray.Wpf" />
   </ItemGroup>
 
 </Project>

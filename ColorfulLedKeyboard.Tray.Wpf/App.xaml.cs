@@ -1,0 +1,112 @@
+using System.IO;
+using System.Windows;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
+using ColorfulLedKeyboard.Core;
+
+namespace ColorfulLedKeyboard.Tray.Wpf;
+
+public partial class App : Application
+{
+    // 迁移期与 WinForms 托盘并存：互斥名独立，避免互相顶掉；Phase 4 切换时与 WinForms 版对齐。
+    private const string SingleInstanceMutexName = "Local\\ClevoLEDKeyboardControl.Tray.Wpf";
+    private const string OpenSettingsEventName = "Local\\ClevoLEDKeyboardControl.OpenSettings";
+    private Mutex? _singleInstanceMutex;
+    private EventWaitHandle? _openSettingsEvent;
+    private WpfTrayContext? _trayContext;
+
+    protected override void OnStartup(StartupEventArgs e)
+    {
+        base.OnStartup(e);
+
+        _openSettingsEvent = new EventWaitHandle(false, EventResetMode.AutoReset, OpenSettingsEventName);
+        _singleInstanceMutex = new Mutex(initiallyOwned: true, SingleInstanceMutexName, out var createdNew);
+        if (!createdNew)
+        {
+            _openSettingsEvent.Set();
+            Shutdown();
+            return;
+        }
+        Exit += (_, _) =>
+        {
+            _trayContext?.Dispose();
+            _openSettingsEvent?.Dispose();
+            _singleInstanceMutex?.Dispose();
+        };
+
+        var args = e.Args;
+        var openSettings = args.Any(arg =>
+            string.Equals(arg, "--settings", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(arg, "/settings", StringComparison.OrdinalIgnoreCase));
+        string? screenshotDir = null;
+        var screenshotIndex = Array.IndexOf(args, "--screenshot-dir");
+        if (screenshotIndex >= 0 && screenshotIndex + 1 < args.Length) screenshotDir = args[screenshotIndex + 1];
+        var themeArg = ExtractValue(args, "--theme");
+        var accentArg = ExtractValue(args, "--accent");
+
+        var kind = Enum.TryParse<UiThemeKind>(themeArg, ignoreCase: true, out var parsed) ? parsed : UiStateStore.Shared.Load().Theme;
+        WpfThemeManager.Initialize(kind);
+        if (int.TryParse(accentArg, out var accentArgb)) WpfThemeManager.AccentOverride = WpfThemeManager.ResolveAccent(accentArgb);
+
+        _trayContext = new WpfTrayContext(openSettingsOnStartup: openSettings && screenshotDir is null);
+
+        if (screenshotDir is not null)
+        {
+            RunScreenshotMode(screenshotDir);
+        }
+    }
+
+    private static string? ExtractValue(string[] args, string name)
+    {
+        var index = Array.IndexOf(args, name);
+        return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
+    }
+
+    /// <summary>迁移验收工具：--screenshot-dir 触发，逐页 RenderTargetBitmap 存 PNG 后退出。</summary>
+    private void RunScreenshotMode(string directory)
+    {
+        Directory.CreateDirectory(directory);
+        Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
+        {
+            _trayContext!.OpenSettings();
+            var window = Current.Windows.OfType<MainWindow>().FirstOrDefault();
+            if (window is null)
+            {
+                Shutdown();
+                return;
+            }
+
+            for (var index = 0; index < window.PageCount; index++)
+            {
+                window.SelectPage(index);
+                DoEvents();
+                Capture(window, Path.Combine(directory, $"page{index}.png"));
+            }
+            Shutdown();
+        });
+    }
+
+    private static void DoEvents()
+    {
+        var frame = new DispatcherFrame();
+        Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background,
+            new DispatcherOperationCallback(state => { ((DispatcherFrame)state).Continue = false; return null; }), frame);
+        Dispatcher.PushFrame(frame);
+    }
+
+    private static void Capture(Window window, string path)
+    {
+        window.UpdateLayout();
+        var dpi = VisualTreeHelper.GetDpi(window);
+        var width = (int)Math.Ceiling(window.ActualWidth * dpi.DpiScaleX);
+        var height = (int)Math.Ceiling(window.ActualHeight * dpi.DpiScaleY);
+        if (width <= 0 || height <= 0) return;
+        var bitmap = new RenderTargetBitmap(width, height, 96 * dpi.DpiScaleX, 96 * dpi.DpiScaleY, PixelFormats.Pbgra32);
+        bitmap.Render(window);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using var stream = File.Create(path);
+        encoder.Save(stream);
+    }
+}
