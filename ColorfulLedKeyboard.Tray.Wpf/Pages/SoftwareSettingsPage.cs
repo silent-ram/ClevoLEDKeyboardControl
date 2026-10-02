@@ -137,6 +137,7 @@ public sealed class SoftwareSettingsPage : UserControl
 
         Content = new ScrollViewer
         {
+            Style = (Style)Application.Current.Resources["DarkScrollViewer"],
             Content = stack,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled

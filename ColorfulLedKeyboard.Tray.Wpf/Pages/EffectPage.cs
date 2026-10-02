@@ -147,6 +147,7 @@ public sealed class EffectPage : UserControl
 
         var scroll = new ScrollViewer
         {
+            Style = (Style)Application.Current.Resources["DarkScrollViewer"],
             Content = stack,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
@@ -1033,7 +1034,7 @@ public sealed class EffectPage : UserControl
     private static UIElement Indent(FrameworkElement control)
     {
         control.Margin = new Thickness(ControlLeft, 0, 0, 0);
-        control.HorizontalAlignment = HorizontalAlignment.Left;
+        control.HorizontalAlignment = HorizontalAlignment.Stretch;
         control.MaxWidth = 590;
         return control;
     }

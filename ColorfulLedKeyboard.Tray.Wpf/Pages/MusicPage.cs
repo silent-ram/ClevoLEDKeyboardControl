@@ -186,6 +186,7 @@ public sealed class MusicPage : UserControl
 
         var scroll = new ScrollViewer
         {
+            Style = (Style)Application.Current.Resources["DarkScrollViewer"],
             Content = stack,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
