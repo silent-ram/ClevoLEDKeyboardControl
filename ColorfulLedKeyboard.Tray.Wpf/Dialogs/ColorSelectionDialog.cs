@@ -38,7 +38,11 @@ public sealed class ColorSelectionDialog : Window
     private readonly SvPlane _plane = new();
     private readonly HueBar _hueBar = new();
     private readonly Border _preview = new() { BorderBrush = Brushes.DimGray, BorderThickness = new Thickness(1), Width = 72, Height = 44 };
-    private readonly System.Windows.Controls.TextBox _hex = new() { Width = 84 };
+    private readonly System.Windows.Controls.TextBox _hex = new()
+    {
+        Width = 84,
+        Style = (Style)Application.Current.Resources["UiTextBox"]
+    };
     private readonly System.Windows.Controls.TextBox _red = SmallBox();
     private readonly System.Windows.Controls.TextBox _green = SmallBox();
     private readonly System.Windows.Controls.TextBox _blue = SmallBox();

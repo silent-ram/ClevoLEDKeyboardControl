@@ -128,8 +128,21 @@ public sealed class MusicPage : UserControl
         _sequence.ColorsChanged += (_, _) => OnMusicPresetControlChanged();
         _advanced.Checked += (_, _) => UpdateMusicAdvancedVisibility();
         _advanced.Unchecked += (_, _) => UpdateMusicAdvancedVisibility();
-        _baseBrightness.ValueChanged += (_, _) => OnMusicPresetControlChanged();
-        _peakBrightness.ValueChanged += (_, _) => OnMusicPresetControlChanged();
+        // 基础/峰值联动：峰值不得低于基础（否则保存时会被 Normalize 静默抬回，
+        // 用户看到的值和生效的值不一致）。互相推拉，UiSliderRow 的 Value setter
+        // 自带事件抑制，不会无限递归。
+        _baseBrightness.ValueChanged += (_, _) =>
+        {
+            if (_loadingSettings || _applyingMusicPresetControls) return;
+            if (_baseBrightness.Value > _peakBrightness.Value) _peakBrightness.Value = _baseBrightness.Value;
+            OnMusicPresetControlChanged();
+        };
+        _peakBrightness.ValueChanged += (_, _) =>
+        {
+            if (_loadingSettings || _applyingMusicPresetControls) return;
+            if (_peakBrightness.Value < _baseBrightness.Value) _baseBrightness.Value = _peakBrightness.Value;
+            OnMusicPresetControlChanged();
+        };
         _followSystemVolume.Checked += (_, _) => OnMusicPresetControlChanged();
         _followSystemVolume.Unchecked += (_, _) => OnMusicPresetControlChanged();
         // 以下均为音乐预设内容字段（WinForms WireMusicPresetTracking 的 12 项对齐）
