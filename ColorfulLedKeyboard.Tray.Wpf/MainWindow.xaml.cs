@@ -89,6 +89,9 @@ public partial class MainWindow : Window
     /// <summary>截图验收专用。</summary>
     public void ForceLightingModeForCapture() => _effectPage?.ForceLightingModeForCapture();
 
+    /// <summary>截图验收专用：切换场景自动化编辑器页签。</summary>
+    public void SelectAutomationEditorTab(int index) => _automationPage?.SelectEditorTab(index);
+
     public void SelectPage(int index)
     {
         if (index < 0 || index >= _pages.Count) return;

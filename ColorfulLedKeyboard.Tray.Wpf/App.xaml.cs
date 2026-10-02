@@ -116,6 +116,15 @@ public partial class App : Application
             }
 
             // 取色器弹窗验收：验证构造不再挂死 + 深色渲染
+            if (ExtractValue(_startupArgs, "--automation-tab") is { } tabArg && int.TryParse(tabArg, out var tabIndex))
+            {
+                window.SelectPage(3);
+                DoEvents();
+                window.SelectAutomationEditorTab(tabIndex);
+                DoEvents();
+                Capture(window, Path.Combine(directory, $"automation-tab{tabIndex}.png"));
+            }
+
             if (_startupArgs.Contains("--singlecolor"))
             {
                 var singleDialog = new Dialogs.ColorSelectionDialog(

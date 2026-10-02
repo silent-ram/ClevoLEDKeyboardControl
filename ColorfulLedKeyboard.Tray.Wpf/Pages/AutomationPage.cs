@@ -80,6 +80,9 @@ public sealed class AutomationPage : UserControl
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>截图验收专用：切换编辑器页签。</summary>
+    public void SelectEditorTab(int index) => _editor.SelectTab(index);
+
     public void LoadFromStore(KeyboardSettings settings)
     {
         _loadingSettings = true;

@@ -46,6 +46,7 @@ public sealed class SceneAutomationEditor : UserControl
     private readonly TextBlock[] _tabHeaders = new TextBlock[3];
     private readonly Border[] _tabBorders = new Border[3];
     private readonly ContentControl _tabContent = new();
+    private readonly UIElement[] _tabPages = new UIElement[3];
     private int _selectedTab;
 
     public event EventHandler? Changed;
@@ -111,6 +112,12 @@ public sealed class SceneAutomationEditor : UserControl
         root.Children.Add(tabHost);
         Content = root;
 
+        // 三个页签面板只构建一次并长期持有——反复构建会把同一批 _lists 重新挂树，
+        // 第二次切换即抛"元素已是另一个元素的逻辑子元素"（真机点灯效程序页签闪退）。
+        for (var i = 0; i < _tabPages.Length; i++)
+        {
+            _tabPages[i] = BuildTabPage(i);
+        }
         SelectTab(0);
     }
 
@@ -134,15 +141,16 @@ public sealed class SceneAutomationEditor : UserControl
 
     public void RefreshRuntimeState() => RefreshLists(_lists[0].SelectedIndex, _lists[1].SelectedIndex, _lists[2].SelectedIndex);
 
-    private void SelectTab(int index)
+    public void SelectTab(int index)
     {
+        if (index < 0 || index >= _tabPages.Length || ReferenceEquals(_tabContent.Content, _tabPages[index])) return;
         _selectedTab = index;
         for (var i = 0; i < _tabBorders.Length; i++)
         {
             _tabBorders[i].Background = FindBrush(i == index ? "Brush.Surface" : "Brush.Window");
             _tabHeaders[i].Foreground = FindBrush(i == index ? "Brush.Text" : "Brush.MutedText");
         }
-        _tabContent.Content = BuildTabPage(index);
+        _tabContent.Content = _tabPages[index];
     }
 
     private UIElement BuildTabPage(int index)
