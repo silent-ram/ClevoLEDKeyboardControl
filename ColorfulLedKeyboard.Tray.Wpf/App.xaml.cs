@@ -116,6 +116,19 @@ public partial class App : Application
             }
 
             // 取色器弹窗验收：验证构造不再挂死 + 深色渲染
+            if (_startupArgs.Contains("--singlecolor"))
+            {
+                var singleDialog = new Dialogs.ColorSelectionDialog(
+                    new List<string> { "#00B85C" }, singleSelection: true)
+                { Owner = window };
+                singleDialog.Show();
+                DoEvents();
+                Thread.Sleep(300);
+                DoEvents();
+                Capture(singleDialog, Path.Combine(directory, "singlecolor.png"));
+                singleDialog.Close();
+            }
+
             if (_startupArgs.Contains("--colordialog"))
             {
                 var colorDialog = new Dialogs.ColorSelectionDialog(

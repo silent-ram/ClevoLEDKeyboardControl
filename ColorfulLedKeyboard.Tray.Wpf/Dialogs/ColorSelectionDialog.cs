@@ -26,6 +26,10 @@ public sealed class ColorSelectionDialog : Window
         public RgbColor InstallDefault { get; }
         public RgbColor Current { get; set; }
         public bool Checked { get; set; }
+        public bool IsCurrent { get; set; }
+
+        public System.Windows.Media.Brush BorderBrush =>
+            (System.Windows.Media.Brush)Application.Current.Resources[IsCurrent ? "Brush.Primary" : "Brush.Border"];
 
         // Background 只接受 Brush，Color 结构直接绑定会静默失败（格子显示为空）
         public SolidColorBrush CurrentBrush =>
@@ -59,7 +63,7 @@ public sealed class ColorSelectionDialog : Window
     public ColorSelectionDialog(IReadOnlyCollection<string> selectedColors, bool singleSelection)
     {
         _singleSelection = singleSelection;
-        _choices = BuildChoices(selectedColors);
+        _choices = BuildChoices(selectedColors, singleSelection);
         _numericInputs = [_red, _green, _blue, _hue, _saturation, _value];
 
         Title = "自定义颜色";
@@ -89,7 +93,7 @@ public sealed class ColorSelectionDialog : Window
 
         _grid = new ItemsControl { Margin = new Thickness(0, 10, 0, 0) };
         _grid.ItemsPanel = ItemsPanel();
-        _grid.ItemTemplate = ChoiceTemplate();
+        _grid.ItemTemplate = ChoiceTemplate(singleSelection);
         Grid.SetRow(_grid, 1);
         Grid.SetColumnSpan(_grid, 1);
         grid.Children.Add(_grid);
@@ -124,6 +128,8 @@ public sealed class ColorSelectionDialog : Window
 
         Content = grid;
         _selected = _choices.FirstOrDefault(item => item.Checked);
+        foreach (var item in _choices) item.IsCurrent = ReferenceEquals(item, _selected);
+        _grid.Items.Refresh();
         LoadSelectedChoice();
     }
 
@@ -155,7 +161,7 @@ public sealed class ColorSelectionDialog : Window
         return template;
     }
 
-    private DataTemplate ChoiceTemplate()
+    private DataTemplate ChoiceTemplate(bool hideCheckBox)
     {
         var template = new DataTemplate();
         var gridFactory = new FrameworkElementFactory(typeof(Grid));
@@ -165,7 +171,7 @@ public sealed class ColorSelectionDialog : Window
         var swatch = new FrameworkElementFactory(typeof(Border));
         swatch.Name = "Swatch";
         swatch.SetValue(Border.CornerRadiusProperty, new CornerRadius(4));
-        swatch.SetValue(Border.BorderBrushProperty, (Brush)Application.Current.Resources["Brush.Border"]);
+        swatch.SetBinding(Border.BorderBrushProperty, new Binding("BorderBrush"));
         swatch.SetValue(Border.BorderThicknessProperty, new Thickness(1));
         swatch.SetBinding(Border.BackgroundProperty, new Binding("CurrentBrush"));
         swatch.SetValue(Grid.RowProperty, 0);
@@ -177,6 +183,7 @@ public sealed class ColorSelectionDialog : Window
         check.SetBinding(CheckBox.IsCheckedProperty, new Binding("Checked"));
         check.SetValue(HorizontalAlignmentProperty, HorizontalAlignment.Right);
         check.SetValue(VerticalAlignmentProperty, VerticalAlignment.Top);
+        if (hideCheckBox) check.SetValue(UIElement.VisibilityProperty, Visibility.Collapsed);
         check.AddHandler(CheckBox.CheckedEvent,
             new RoutedEventHandler((sender, _) => OnChoiceCheckedChanged((ColorChoiceVm)((FrameworkElement)sender).DataContext)));
         check.AddHandler(CheckBox.UncheckedEvent,
@@ -278,8 +285,22 @@ public sealed class ColorSelectionDialog : Window
 
     private static Brush FindBrush(string key) => (Brush)Application.Current.Resources[key];
 
-    private static List<ColorChoiceVm> BuildChoices(IReadOnlyCollection<string> selectedColors)
+    private static List<ColorChoiceVm> BuildChoices(IReadOnlyCollection<string> selectedColors, bool singleSelection)
     {
+        // 单选模式（如界面强调色）：只有一个格子，即"当前颜色"，勾选框隐藏，
+        // 点击调色板格子=选取该颜色，编辑器修改即时更新此格。
+        if (singleSelection)
+        {
+            var current = selectedColors.FirstOrDefault() is { } hex
+                ? RgbColor.FromHex(hex)
+                : new RgbColor(255, 0, 0);
+            // 第一格恒显"当前颜色"；其后为调色板快捷格——点一下即应用该颜色
+            // （应用时颜色会复制到第一格，见 SelectChoice）。
+            var slots = new List<ColorChoiceVm> { new(current) { Checked = true } };
+            slots.AddRange(InstallPalette().Select(color => new ColorChoiceVm(color)));
+            return slots;
+        }
+
         var installPalette = InstallPalette();
         var choices = installPalette.Select(color => new ColorChoiceVm(color)).ToList();
         var normalizedSelected = selectedColors
@@ -354,7 +375,21 @@ public sealed class ColorSelectionDialog : Window
 
     private void SelectChoice(ColorChoiceVm choice)
     {
+        if (_singleSelection)
+        {
+            // 单选：调色板格子是快捷取色——把颜色应用到恒居首位的"当前色"格，
+            // 选区始终保持在第一格（"第一个显示当前色"）。
+            if (!ReferenceEquals(choice, _selected))
+            {
+                _selected!.Current = choice.Current;
+            }
+            foreach (var item in _choices) item.IsCurrent = ReferenceEquals(item, _selected);
+            _grid.Items.Refresh();
+            SetEditorColor(_selected!.Current);
+            return;
+        }
         _selected = choice;
+        foreach (var item in _choices) item.IsCurrent = ReferenceEquals(item, choice);
         _grid.Items.Refresh();
         SetEditorColor(choice.Current);
     }

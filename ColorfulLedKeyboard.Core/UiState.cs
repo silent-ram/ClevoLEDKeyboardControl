@@ -33,11 +33,15 @@ public sealed class UiState
     public int LastPage { get; set; }
     public bool MusicAdvancedExpanded { get; set; }
 
+    /// <summary>外观卡用户添加的自定义强调色（ARGB）。</summary>
+    public List<int> CustomAccents { get; set; } = [];
+
     public UiState Clone() => new()
     {
         Version = Version,
         Theme = Theme,
         AccentArgb = AccentArgb,
+        CustomAccents = [.. CustomAccents],
         WindowX = WindowX,
         WindowY = WindowY,
         WindowWidth = WindowWidth,
