@@ -13,8 +13,13 @@ internal sealed class UiState
 {
     public const int CurrentVersion = 1;
 
+    // AccentArgb 约定：0 = 调色板默认强调色；-1 = 跟随键盘主色；其余为 ARGB。
+    public const int AccentDefault = 0;
+    public const int AccentFollowKeyboard = -1;
+
     public int Version { get; set; } = CurrentVersion;
     public UiThemeKind Theme { get; set; } = UiThemeKind.Windows11;
+    public int AccentArgb { get; set; } = AccentDefault;
     public int WindowX { get; set; } = int.MinValue;
     public int WindowY { get; set; } = int.MinValue;
     public int WindowWidth { get; set; } = 1180;
@@ -26,6 +31,7 @@ internal sealed class UiState
     {
         Version = Version,
         Theme = Theme,
+        AccentArgb = AccentArgb,
         WindowX = WindowX,
         WindowY = WindowY,
         WindowWidth = WindowWidth,

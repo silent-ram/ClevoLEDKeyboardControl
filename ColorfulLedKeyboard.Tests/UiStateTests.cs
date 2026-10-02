@@ -20,21 +20,20 @@ public sealed class UiStateTests : IDisposable
     }
 
     [Theory]
-    [InlineData(0)]
-    [InlineData(1)]
-    [InlineData(2)]
-    public void ThemeDefinitionsAreUnified(int themeValue)
+    [InlineData(0, "深色仪器风", true)]
+    [InlineData(1, "浅色工作台", false)]
+    [InlineData(2, "浅色工作台", false)]
+    public void ThemeDefinitionsMatchDesignLanguage(int themeValue, string name, bool isDark)
     {
         var kind = (UiThemeKind)themeValue;
         var theme = UiTheme.For(kind);
 
-        // 全新视觉方案后只有一套"深色仪器风"设计；kind 仅作旧配置兼容保留。
+        // "仪器面板"设计语言的深浅两套变体；kind 仅为旧配置兼容保留（Technology/Warm → 浅色）。
         Assert.Equal(kind, theme.Kind);
-        Assert.Equal("深色仪器风", theme.DisplayName);
-        Assert.Equal(10, theme.CornerRadius);
+        Assert.Equal(name, theme.DisplayName);
+        Assert.Equal(isDark, theme.IsDark);
         Assert.NotEqual(theme.Window, theme.Text);
         Assert.NotEqual(theme.Primary, theme.Surface);
-        Assert.Equal(UiTheme.For(UiThemeKind.Windows11).Window, theme.Window);
     }
 
     [Theory]
@@ -49,6 +48,31 @@ public sealed class UiStateTests : IDisposable
         Assert.True(Contrast(theme.MutedText, theme.Surface) >= 4.5);
         Assert.True(Contrast(theme.Text, theme.Window) >= 4.5);
         Assert.True(Contrast(theme.PrimaryText, theme.Primary) >= 4.5);
+    }
+
+    [Theory]
+    [InlineData(0)]       // 默认（琥珀/琥珀铜）
+    [InlineData(-1)]      // 跟随键盘：解析失败时回退默认
+    [InlineData(0x38C8F0)] // 青
+    [InlineData(0xE05C8C)] // 玫红
+    [InlineData(0x1E63D0)] // 深蓝
+    public void AccentOverrideKeepsReadableContrast(int accentArgb)
+    {
+        foreach (var kind in Enum.GetValues<UiThemeKind>())
+        {
+            var baseTheme = UiTheme.For(kind);
+            var theme = accentArgb switch
+            {
+                0 => baseTheme,
+                -1 => baseTheme,
+                _ => baseTheme.WithAccent(Color.FromArgb(255, (accentArgb >> 16) & 0xFF, (accentArgb >> 8) & 0xFF, accentArgb & 0xFF))
+            };
+
+            Assert.True(Contrast(theme.PrimaryText, theme.Primary) >= 4.5,
+                $"{kind} accent #{accentArgb:X8}: {Contrast(theme.PrimaryText, theme.Primary):F2}");
+            Assert.True(Contrast(theme.Text, theme.PrimarySoft) >= 3.0,
+                $"{kind} accent #{accentArgb:X8} soft: {Contrast(theme.Text, theme.PrimarySoft):F2}");
+        }
     }
 
     [Fact]

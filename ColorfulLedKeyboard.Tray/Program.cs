@@ -29,7 +29,9 @@ static class Program
         };
 
         ApplicationConfiguration.Initialize();
-        ThemeManager.Initialize(UiStateStore.Shared.Load().Theme);
+        var uiState = UiStateStore.Shared.Load();
+        ThemeManager.Initialize(uiState.Theme);
+        UiAccent.ApplyFromState(uiState.AccentArgb);
         var openSettingsOnStartup = args.Any(arg =>
             string.Equals(arg, "--settings", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(arg, "/settings", StringComparison.OrdinalIgnoreCase));

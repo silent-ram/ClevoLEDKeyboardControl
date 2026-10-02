@@ -330,6 +330,8 @@ public sealed partial class SettingsForm : ThemedForm
                 selectedPage.PerformLayout();
                 _pageTitle.Text = pageDefinitions[navigation.SelectedIndex].Title;
                 _uiStateStore.Update(state => state.LastPage = navigation.SelectedIndex);
+                _pageScrollBarOverlay?.Attach(selectedPage);
+                _pageScrollBarOverlay?.Invalidate();
             }
         };
         navigation.SelectedIndex = Math.Clamp(_initialUiState.LastPage, 0, pageDefinitions.Length - 1);
@@ -340,6 +342,18 @@ public sealed partial class SettingsForm : ThemedForm
         content.Controls.Add(statusHeader, 0, 0);
         content.Controls.Add(pages, 0, 1);
         split.Panel2.Controls.Add(content);
+
+        // 深色滚动条：盖住页面原生白色滚动条（覆盖层负责视觉与拖拽，滚轮仍由页面处理）。
+        // Z 序：索引 0 在最前，两个覆盖条必须置于所有页面面板之上；
+        // 尺寸取 18px ≥ 原生滚动条宽度，避免拐角与边缘露白。
+        _pageScrollBarOverlay = new PageScrollBarOverlay { Width = UiMetrics.ScaleForDpi(18, DeviceDpi) };
+        _horizontalScrollCover = new Panel { BackColor = ThemeManager.Current.Window, Height = UiMetrics.ScaleForDpi(18, DeviceDpi) };
+        pages.Controls.Add(_horizontalScrollCover);
+        pages.Controls.Add(_pageScrollBarOverlay);
+        pages.Controls.SetChildIndex(_horizontalScrollCover, 0);
+        pages.Controls.SetChildIndex(_pageScrollBarOverlay, 0);
+        pages.Resize += (_, _) => PositionScrollChrome(pages);
+        PositionScrollChrome(pages);
 
         var buttons = new TableLayoutPanel
         {
@@ -879,6 +893,7 @@ public sealed partial class SettingsForm : ThemedForm
         folderActions.Controls.AddRange([openFolder, reset]);
         _updateAvailableStatusRow = PlainRow(_updateAvailableStatus);
         _updateAvailableStatusRow.Visible = false;
+        page.Controls.Add(BuildAppearanceCard());
         page.Controls.Add(new UiCard("自动更新", Row("自动检查更新", _updateInterval), _updateAvailableStatusRow));
         page.Controls.Add(new UiCard("用户改进计划", PlainRow(_userImprovementPlanEnabled), PlainRow(_userImprovementPlanDescription)));
         page.Controls.Add(new UiCard("开机自启动", PlainRow(_startupEnabled), PlainRow(_startupState)));
@@ -1172,10 +1187,11 @@ public sealed partial class SettingsForm : ThemedForm
             _musicPresetChangesStaged = false;
             UpdateMusicPresetEditState();
             _initialUiState = _uiStateStore.Load().Clone();
-            _initialUiState.Theme = ThemeManager.CurrentKind;
             _initialUiState.MusicAdvancedExpanded = _musicAdvanced.Checked;
             _uiStateStore.Save(_initialUiState);
             UpdateSaveBar();
+            // "跟随键盘主色"模式下，灯色改了界面强调色要跟着走。
+            if (_accentMode == UiState.AccentFollowKeyboard) UiAccent.ApplyFromState(UiState.AccentFollowKeyboard);
             SettingsSaved?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex) when (ex is FormatException or IOException or UnauthorizedAccessException)
@@ -3190,7 +3206,16 @@ internal sealed class SequenceEditor : UserControl
 
 internal sealed class SceneAutomationEditorV2 : UserControl
 {
-    private readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
+    private readonly TabControl _tabs = new()
+    {
+        Dock = DockStyle.Fill,
+        // FlatButtons + 自绘：摆脱原生 TabControl 的浅色页签条，深浅主题下都是扁平页签。
+        Appearance = TabAppearance.FlatButtons,
+        DrawMode = TabDrawMode.OwnerDrawFixed,
+        SizeMode = TabSizeMode.Fixed,
+        ItemSize = new Size(108, 30),
+        Padding = new Point(10, 6)
+    };
     private readonly AutomationRuleListBox _music = new() { Dock = DockStyle.Fill };
     private readonly AutomationRuleListBox _lighting = new() { Dock = DockStyle.Fill };
     private readonly AutomationRuleListBox _schedule = new() { Dock = DockStyle.Fill };
@@ -3203,12 +3228,34 @@ internal sealed class SceneAutomationEditorV2 : UserControl
         Width = UiMetrics.ContentWidth;
         Height = 430;
         Controls.Add(_tabs);
+        _tabs.DrawItem += DrawTabItem;
+        _tabs.SelectedIndexChanged += (_, _) => _tabs.Invalidate();
         _tabs.TabPages.Add(BuildTab("音乐程序", _music, AddMusic, EditMusic, RemoveMusic, MoveMusic));
         _tabs.TabPages.Add(BuildTab("灯效程序", _lighting, AddLighting, EditLighting, RemoveLighting, MoveLighting));
         _tabs.TabPages.Add(BuildTab("时间计划", _schedule, AddSchedule, EditSchedule, RemoveSchedule, MoveSchedule));
         _music.DoubleClick += (_, _) => EditMusic();
         _lighting.DoubleClick += (_, _) => EditLighting();
         _schedule.DoubleClick += (_, _) => EditSchedule();
+    }
+
+    private void DrawTabItem(object? sender, DrawItemEventArgs e)
+    {
+        if (e.Index < 0 || e.Index >= _tabs.TabPages.Count) return;
+        var theme = ThemeManager.Current;
+        var selected = e.State.HasFlag(DrawItemState.Selected);
+        var rect = e.Bounds;
+        using (var background = new SolidBrush(selected ? theme.Surface : theme.Window))
+        {
+            e.Graphics.FillRectangle(background, rect);
+        }
+        if (selected)
+        {
+            using var accent = new SolidBrush(theme.Primary);
+            e.Graphics.FillRectangle(accent, rect.X + 4, rect.Bottom - 3, rect.Width - 8, 2);
+        }
+        TextRenderer.DrawText(e.Graphics, _tabs.TabPages[e.Index].Text, UiFonts.Body(9.5F), rect,
+            selected ? theme.Text : theme.MutedText,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
     }
 
     public event EventHandler? Changed;

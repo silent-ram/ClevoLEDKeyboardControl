@@ -91,6 +91,141 @@ public sealed partial class SettingsForm
         return page;
     }
 
+    private int _accentMode = UiState.AccentDefault;
+    private bool _updatingAppearanceControls;
+    private readonly List<(Button Swatch, int AccentArgb)> _accentSwatches = [];
+    private readonly RadioButton _darkThemeRadio = new() { Text = "深色仪器风", AutoSize = true };
+    private readonly RadioButton _lightThemeRadio = new() { Text = "浅色工作台", AutoSize = true };
+    private readonly Label _accentSummary = new() { AutoSize = true, ForeColor = SystemColors.GrayText };
+    private PageScrollBarOverlay? _pageScrollBarOverlay;
+    private Panel? _horizontalScrollCover;
+
+    private void PositionScrollChrome(Panel pages)
+    {
+        if (_pageScrollBarOverlay is null || _horizontalScrollCover is null) return;
+        var width = UiMetrics.ScaleForDpi(18, DeviceDpi);
+        var height = UiMetrics.ScaleForDpi(18, DeviceDpi);
+        _pageScrollBarOverlay.Bounds = new Rectangle(
+            Math.Max(0, pages.ClientSize.Width - width), 0, width, Math.Max(0, pages.ClientSize.Height - height));
+        _horizontalScrollCover.Bounds = new Rectangle(
+            0, Math.Max(0, pages.ClientSize.Height - height), pages.ClientSize.Width, height);
+    }
+
+    private UiCard BuildAppearanceCard()
+    {
+        var hint = new Label
+        {
+            Text = "主题立即生效并记住；强调色应用于按钮、导航选中态与链接。",
+            Width = UiMetrics.ContentWidth,
+            Height = 28,
+            ForeColor = ThemeManager.Current.MutedText
+        };
+        _accentMode = _uiStateStore.Load().AccentArgb;
+        _darkThemeRadio.CheckedChanged += (_, _) => { if (_darkThemeRadio.Checked) SelectThemeKind(UiThemeKind.Windows11); };
+        _lightThemeRadio.CheckedChanged += (_, _) => { if (_lightThemeRadio.Checked) SelectThemeKind(UiThemeKind.Technology); };
+        var themeRow = new FlowLayoutPanel
+        {
+            Width = UiMetrics.ContentWidth,
+            Height = 40,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false
+        };
+        _lightThemeRadio.Margin = new Padding(24, 3, 3, 3);
+        themeRow.Controls.Add(_darkThemeRadio);
+        themeRow.Controls.Add(_lightThemeRadio);
+
+        var accentRow = new FlowLayoutPanel
+        {
+            Width = UiMetrics.ContentWidth,
+            Height = 44,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false
+        };
+        accentRow.Controls.Add(new Label { Text = "强调色", AutoSize = true, Margin = new Padding(0, 9, 12, 0) });
+        AddAccentSwatch(accentRow, UiState.AccentDefault, "默认");
+        AddAccentSwatch(accentRow, Color.FromArgb(56, 200, 240).ToArgb(), "青");
+        AddAccentSwatch(accentRow, Color.FromArgb(224, 92, 140).ToArgb(), "玫红");
+        AddAccentSwatch(accentRow, Color.FromArgb(74, 222, 128).ToArgb(), "翠绿");
+        var follow = new Button
+        {
+            Text = "跟随键盘主色",
+            Width = 136,
+            Height = UiMetrics.ButtonHeight,
+            Margin = new Padding(2, 3, 10, 0)
+        };
+        follow.Click += (_, _) => SelectAccent(UiState.AccentFollowKeyboard);
+        accentRow.Controls.Add(follow);
+
+        UpdateAppearanceControls();
+        return new UiCard("外观", hint, themeRow, accentRow, _accentSummary);
+    }
+
+    private void SelectThemeKind(UiThemeKind kind)
+    {
+        if (_updatingAppearanceControls || ThemeManager.CurrentKind == kind) return;
+        ThemeManager.SetTheme(kind);
+        _uiStateStore.Update(state => state.Theme = kind);
+    }
+
+    private void SelectAccent(int accentArgb)
+    {
+        _accentMode = accentArgb;
+        _uiStateStore.Update(state => state.AccentArgb = accentArgb);
+        UiAccent.ApplyFromState(accentArgb);
+        UpdateAppearanceControls();
+    }
+
+    private void UpdateAppearanceControls()
+    {
+        if (_updatingAppearanceControls) return;
+        _updatingAppearanceControls = true;
+        try
+        {
+            var theme = ThemeManager.Current;
+            _darkThemeRadio.Checked = ThemeManager.CurrentKind == UiThemeKind.Windows11;
+            _lightThemeRadio.Checked = ThemeManager.CurrentKind != UiThemeKind.Windows11;
+            foreach (var (swatch, accentArgb) in _accentSwatches)
+            {
+                swatch.BackColor = accentArgb == UiState.AccentDefault ? theme.Primary : Color.FromArgb(accentArgb);
+                var selected = accentArgb == _accentMode;
+                swatch.FlatAppearance.BorderColor = selected ? theme.Primary : theme.Border;
+                swatch.FlatAppearance.BorderSize = selected ? 2 : 1;
+            }
+            _accentSummary.Text = DescribeAccent();
+        }
+        finally
+        {
+            _updatingAppearanceControls = false;
+        }
+    }
+
+    private string DescribeAccent() => $"当前强调色：{_accentMode switch
+    {
+        UiState.AccentDefault => "默认",
+        UiState.AccentFollowKeyboard => "跟随键盘主色",
+        _ => $"#{_accentMode & 0xFFFFFF:X6}"
+    }}";
+
+    private void AddAccentSwatch(FlowLayoutPanel row, int accentArgb, string name)
+    {
+        var swatch = new Button
+        {
+            Width = 34,
+            Height = 26,
+            FlatStyle = FlatStyle.Flat,
+            UseVisualStyleBackColor = false,
+            AccessibleDescription = "ColorSwatch",
+            AccessibleName = $"强调色 {name}",
+            Margin = new Padding(0, 5, 10, 0),
+            Cursor = Cursors.Hand,
+            TabStop = false
+        };
+        swatch.Click += (_, _) => SelectAccent(accentArgb);
+        _accentSwatches.Add((swatch, accentArgb));
+        row.Controls.Add(swatch);
+        ThemeManager.ApplyRoundedRegion(swatch, 5);
+    }
+
     private void OnThemeChanged(object? sender, EventArgs e)
     {
         if (IsDisposed) return;
@@ -99,6 +234,7 @@ public sealed partial class SettingsForm
         UpdateStatusHeader();
         UpdateMusicPresetEditState();
         UpdateSaveBar();
+        UpdateAppearanceControls();
         if (_updateAvailableStatus.Visible) _updateAvailableStatus.LinkColor = ThemeManager.Current.Error;
         Invalidate(true);
     }
@@ -138,7 +274,8 @@ public sealed partial class SettingsForm
         _loadingSettings = true;
         try
         {
-            _uiStateStore.Save(_initialUiState.Clone());
+            // 主题/强调色即时生效且独立持久化，不随"恢复修改"回滚；这里只还原音乐预设展开态。
+            _uiStateStore.Update(state => state.MusicAdvancedExpanded = _initialUiState.MusicAdvancedExpanded);
             _settingsChanged = false;
         }
         finally
@@ -163,7 +300,6 @@ public sealed partial class SettingsForm
             e.Cancel = true;
             return;
         }
-        _uiStateStore.Save(_initialUiState.Clone());
         _allowClose = true;
     }
 
@@ -322,3 +458,29 @@ public sealed partial class SettingsForm
     }
 }
 
+
+/// <summary>强调色的解析与跟随：把 UiState 里持久化的 ARGB 约定翻译成 ThemeManager 的强调色。</summary>
+internal static class UiAccent
+{
+    public static void ApplyFromState(int accentArgb) => ThemeManager.AccentOverride = ResolveAccent(accentArgb);
+
+    public static Color? ResolveAccent(int accentArgb) => accentArgb switch
+    {
+        UiState.AccentDefault => null,
+        UiState.AccentFollowKeyboard => ReadKeyboardAccent(),
+        _ => Color.FromArgb(accentArgb)
+    };
+
+    public static Color? ReadKeyboardAccent()
+    {
+        try
+        {
+            var rgb = RgbColor.FromHex(new SettingsStore().Load().Effect.Color);
+            return Color.FromArgb(rgb.R, rgb.G, rgb.B);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+}

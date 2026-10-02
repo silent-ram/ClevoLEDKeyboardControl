@@ -4,12 +4,12 @@ using System.Runtime.InteropServices;
 
 namespace ColorfulLedKeyboard.Tray;
 
-// 全新视觉方案：深色仪器风。
-// 设计立场：背光键盘活在暗处，RGB 光效在深色底上最有表现力——因此全套界面
-// 采用深色仪器面板式配色；工作色用克制的琥珀金（仪表指示灯的语言），
-// 唯一的"彩色"留给产品本身：一条 RGB 光谱条（UiSpectrum）作为签名元素，
-// 只出现在导航选中态与页头两处，呼应软件真正控制的东西——彩色的光。
-// UiThemeKind 仅为兼容旧配置文件与持久化测试保留，所有 kind 返回同一套设计。
+// 全新视觉方案："仪器面板"设计语言，含深浅两套变体。
+// 设计立场：背光键盘活在暗处，RGB 光效在深色底上最有表现力——深色"深色仪器风"
+// 是默认；同时提供同一语言的浅色"浅色工作台"变体，深/浅共用同一布局与组件。
+// 工作色用克制的琥珀金（仪表指示灯的语言），且允许用户更换强调色（含跟随键盘灯色）。
+// 唯一的"彩色"签名元素是 RGB 光谱条（UiSpectrum），只出现在导航选中态与页头两处。
+// UiThemeKind 仅为兼容旧配置保留：Windows11 映射深色，Technology/Warm 映射浅色。
 internal sealed record UiTheme(
     UiThemeKind Kind,
     string DisplayName,
@@ -28,7 +28,13 @@ internal sealed record UiTheme(
 {
     private static Color Hex(string value) => ColorTranslator.FromHtml(value);
 
-    public static UiTheme For(UiThemeKind kind) => new(
+    public static UiTheme For(UiThemeKind kind) => kind switch
+    {
+        UiThemeKind.Technology or UiThemeKind.Warm => Light(kind),
+        _ => Dark(kind)
+    };
+
+    private static UiTheme Dark(UiThemeKind kind) => new(
         kind,
         "深色仪器风",
         Hex("#14161B"),      // Window：深炭底，带一点冷调，不用纯黑
@@ -44,11 +50,58 @@ internal sealed record UiTheme(
         Hex("#262B36"),      // Hover：中性悬停
         10);
 
-    // 主按钮文字用近黑，保证琥珀底上的对比度；其余深色场景文本统一走 Text。
-    public Color PrimaryText => Hex("#221A08");
-    public Color Success => Hex("#6FBE83");
-    public Color Warning => Hex("#E08845");
-    public Color Error => Hex("#E26A5E");
+    private static UiTheme Light(UiThemeKind kind) => new(
+        kind,
+        "浅色工作台",
+        Hex("#F4F5F8"),      // Window：冷调浅灰
+        Hex("#FFFFFF"),      // Surface：纯白卡片
+        Hex("#ECeEF4"),      // Sidebar
+        Hex("#F7F8FB"),      // Field
+        Hex("#D8DDE7"),      // Border
+        Hex("#1B2233"),      // Text
+        Hex("#5D6779"),      // MutedText
+        Hex("#9A6A1E"),      // Primary：深琥珀铜，白字对比 ≥ 4.5:1
+        Hex("#7E5617"),      // Secondary
+        Hex("#F4E8CF"),      // PrimarySoft：琥珀染色的浅底
+        Hex("#E9ECF3"),      // Hover
+        10);
+
+    public bool IsDark => Luminance(Window) < 0.5;
+
+    // 主按钮文字按强调色亮度自动取深/浅，保证任意强调色下的对比度（阈值按 4.5:1 反推）。
+    public Color PrimaryText => Luminance(Primary) > 0.22 ? Hex("#221A08") : Color.White;
+
+    public Color Success => IsDark ? Hex("#6FBE83") : Hex("#1F7A3D");
+    public Color Warning => IsDark ? Hex("#E08845") : Hex("#9A5410");
+    public Color Error => IsDark ? Hex("#E26A5E") : Hex("#B3261E");
+
+    /// <summary>把强调色换成自定义颜色，并重算所有派生色（选中底/按压色等）。</summary>
+    public UiTheme WithAccent(Color accent)
+    {
+        var secondary = Multiply(accent, 0.8f);
+        var soft = Blend(accent, Surface, 0.16f);
+        return this with { Primary = accent, Secondary = secondary, PrimarySoft = soft };
+    }
+
+    internal static float Luminance(Color color)
+    {
+        static double Channel(byte value)
+        {
+            var component = value / 255d;
+            return component <= 0.04045 ? component / 12.92 : Math.Pow((component + 0.055) / 1.055, 2.4);
+        }
+        return (float)(0.2126 * Channel(color.R) + 0.7152 * Channel(color.G) + 0.0722 * Channel(color.B));
+    }
+
+    private static Color Multiply(Color color, float factor) => Color.FromArgb(
+        Math.Clamp((int)(color.R * factor), 0, 255),
+        Math.Clamp((int)(color.G * factor), 0, 255),
+        Math.Clamp((int)(color.B * factor), 0, 255));
+
+    private static Color Blend(Color overlay, Color baseColor, float alpha) => Color.FromArgb(
+        (int)(overlay.R * alpha + baseColor.R * (1 - alpha)),
+        (int)(overlay.G * alpha + baseColor.G * (1 - alpha)),
+        (int)(overlay.B * alpha + baseColor.B * (1 - alpha)));
 }
 
 internal static class UiFonts
@@ -121,12 +174,31 @@ internal static class ThemeManager
 {
     private const int DwmUseImmersiveDarkMode = 20;
     private static UiThemeKind _currentKind = UiThemeKind.Windows11;
+    private static Color? _accentOverride;
     private static readonly ConditionalWeakTable<Control, SurfaceRoleHolder> SurfaceRoles = new();
     private static readonly ConditionalWeakTable<Control, object?> RoundedControls = new();
 
     public static event EventHandler? ThemeChanged;
     public static UiThemeKind CurrentKind => _currentKind;
-    public static UiTheme Current => UiTheme.For(_currentKind);
+    public static UiTheme Current => ApplyAccent(UiTheme.For(_currentKind));
+
+    /// <summary>用户自定义强调色；null 表示用调色板默认。</summary>
+    public static Color? AccentOverride
+    {
+        get => _accentOverride;
+        set
+        {
+            if (_accentOverride == value) return;
+            _accentOverride = value;
+            ThemeChanged?.Invoke(null, EventArgs.Empty);
+        }
+    }
+
+    private static UiTheme ApplyAccent(UiTheme theme) =>
+        _accentOverride is null ? theme : theme.WithAccent(_accentOverride.Value);
+
+    /// <summary>"跟随键盘"等场景在强调色变化后无需切换主题即可刷新派生色。</summary>
+    public static void RefreshAccent() => ThemeChanged?.Invoke(null, EventArgs.Empty);
 
     internal static T SetSurface<T>(T control, ThemeSurfaceRole role) where T : Control
     {
@@ -198,6 +270,7 @@ internal static class ThemeManager
                     textBox.BackColor = textBox.ReadOnly ? theme.Window : theme.Field;
                     textBox.ForeColor = theme.Text;
                     textBox.BorderStyle = BorderStyle.FixedSingle;
+                    ApplyDarkScrollbars(textBox);
                     break;
                 case ComboBox combo:
                     // 视觉样式下的 ComboBox 会忽略 BackColor，改用 Flat 绘制以吃进主题色。
@@ -213,11 +286,13 @@ internal static class ThemeManager
                     list.BackColor = theme.Field;
                     list.ForeColor = theme.Text;
                     list.BorderStyle = BorderStyle.FixedSingle;
+                    ApplyDarkScrollbars(list);
                     break;
                 case ListView listView:
                     listView.BackColor = theme.Field;
                     listView.ForeColor = theme.Text;
                     listView.BorderStyle = BorderStyle.FixedSingle;
+                    ApplyDarkScrollbars(listView);
                     break;
                 case DateTimePicker dateTime:
                     dateTime.CalendarForeColor = theme.Text;
@@ -242,6 +317,10 @@ internal static class ThemeManager
                     trackBar.BackColor = parent.BackColor;
                     trackBar.ForeColor = theme.Text;
                     break;
+                case TabControl tabControl:
+                    tabControl.BackColor = theme.Window;
+                    tabControl.ForeColor = theme.Text;
+                    break;
                 case TabPage tabPage:
                     tabPage.BackColor = theme.Surface;
                     tabPage.ForeColor = theme.Text;
@@ -250,9 +329,34 @@ internal static class ThemeManager
 
             if (!hasSurfaceRole && control is Panel or FlowLayoutPanel or TableLayoutPanel or SplitContainer or UserControl &&
                 control is not UiCard && control is not NavigationListBox)
+            {
                 control.BackColor = parent.BackColor;
+                if (control is Panel panel && panel.AutoScroll) ApplyDarkScrollbars(panel);
+            }
 
             ApplyRecursive(control, theme);
+        }
+    }
+
+    // Win10/11 提供了未公开的暗色主题变体，能让滚动条等原生部件吃进深色；
+    // 失败（老系统/句柄未建）时静默退回原生浅色。句柄在 Show 后才存在，挂事件补涂。
+    private static void ApplyDarkScrollbars(Control control) =>
+        ApplyDarkScrollbars(control, themeIsDark: ThemeManager.Current.IsDark);
+
+    private static void ApplyDarkScrollbars(Control control, bool themeIsDark)
+    {
+        try
+        {
+            if (control.IsDisposed) return;
+            if (!control.IsHandleCreated)
+            {
+                control.HandleCreated += (_, _) => ApplyDarkScrollbars(control, themeIsDark);
+                return;
+            }
+            _ = SetWindowTheme(control.Handle, themeIsDark ? "DarkMode_Explorer" : "Explorer", null);
+        }
+        catch (DllNotFoundException)
+        {
         }
     }
 
@@ -307,7 +411,7 @@ internal static class ThemeManager
             button.ForeColor = theme.PrimaryText;
             button.FlatAppearance.BorderColor = theme.Primary;
             button.FlatAppearance.BorderSize = 1;
-            button.FlatAppearance.MouseOverBackColor = Color.White;
+            button.FlatAppearance.MouseOverBackColor = theme.IsDark ? UiThemeLerp(theme.Primary, Color.White, 0.25f) : UiThemeLerp(theme.Primary, Color.Black, 0.12f);
             button.FlatAppearance.MouseDownBackColor = theme.Secondary;
         }
         else
@@ -321,6 +425,11 @@ internal static class ThemeManager
         }
         ApplyRoundedRegion(button, 6);
     }
+
+    private static Color UiThemeLerp(Color from, Color to, float amount) => Color.FromArgb(
+        (int)(from.R + (to.R - from.R) * amount),
+        (int)(from.G + (to.G - from.G) * amount),
+        (int)(from.B + (to.B - from.B) * amount));
 
     /// <summary>给控件套圆角裁剪。WinForms 的 Region 不抗锯齿，深色底上小圆角的锯齿可接受；
     /// 按钮/卡片统一走这里，保证半径一致。首次调用后挂 Resize，尺寸变化时同步重建。</summary>
@@ -340,8 +449,8 @@ internal static class ThemeManager
         if (!form.IsHandleCreated) return;
         try
         {
-            // 深色界面配深色标题栏，避免出现"深色窗体 + 白色标题条"的割裂感。
-            var value = 1;
+            // 标题栏深浅随主题走，避免"深色窗体 + 白色标题条"的割裂感。
+            var value = Current.IsDark ? 1 : 0;
             _ = DwmSetWindowAttribute(form.Handle, DwmUseImmersiveDarkMode, ref value, sizeof(int));
         }
         catch (DllNotFoundException)
@@ -351,6 +460,9 @@ internal static class ThemeManager
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+
+    [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)]
+    private static extern int SetWindowTheme(IntPtr hWnd, string? subAppName, string? subIdList);
 
     private sealed record SurfaceRoleHolder(ThemeSurfaceRole Role);
 }
@@ -417,12 +529,17 @@ internal sealed class UiCard : FlowLayoutPanel
     {
         base.OnPaint(e);
         var theme = ThemeManager.Current;
-        using var pen = new Pen(theme.Border);
         var rectangle = ClientRectangle;
         rectangle.Width -= 1;
         rectangle.Height -= 1;
         using var path = UiShapes.RoundedRectangle(rectangle, theme.CornerRadius);
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        // 顶缘 1px 内侧高光，让卡片在深浅两套底上都有轻微的"受光"层次。
+        using (var highlightPen = new Pen(Color.FromArgb(theme.IsDark ? 12 : 200, Color.White)))
+        {
+            e.Graphics.DrawPath(highlightPen, path);
+        }
+        using var pen = new Pen(theme.Border);
         e.Graphics.DrawPath(pen, path);
     }
 
@@ -566,6 +683,128 @@ internal sealed class NavigationListBox : ListBox
                 new Rectangle(e.Bounds.Right - badgeWidth - 6, e.Bounds.Y, badgeWidth, e.Bounds.Height),
                 _theme.Error, TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
         if ((e.State & DrawItemState.Focus) != 0) e.DrawFocusRectangle();
+    }
+}
+
+/// <summary>
+/// 盖在 AutoScroll 页面原生滚动条上的深色细滚动条。原生滚动条被覆盖后仍保留滚动逻辑，
+/// 鼠标滚轮照常工作；本控件负责视觉（轨道 + 圆角拖块）与拖拽交互。
+/// </summary>
+internal sealed class PageScrollBarOverlay : Control
+{
+    private ScrollableControl? _target;
+    private bool _dragging;
+    private int _dragOffsetFromThumb;
+
+    public PageScrollBarOverlay()
+    {
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.Opaque | ControlStyles.ResizeRedraw, true);
+    }
+
+    public void Attach(ScrollableControl? target)
+    {
+        if (ReferenceEquals(_target, target))
+        {
+            Invalidate();
+            return;
+        }
+        if (_target is not null)
+        {
+            _target.Scroll -= OnTargetScrollChanged;
+            _target.Resize -= OnTargetScrollChanged;
+        }
+        _target = target;
+        if (_target is not null)
+        {
+            _target.Scroll += OnTargetScrollChanged;
+            _target.Resize += OnTargetScrollChanged;
+        }
+        Invalidate();
+    }
+
+    private void OnTargetScrollChanged(object? sender, EventArgs e) => Invalidate();
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var theme = ThemeManager.Current;
+        using (var track = new SolidBrush(theme.Window))
+        {
+            e.Graphics.FillRectangle(track, ClientRectangle);
+        }
+        if (_target is null || !_target.VerticalScroll.Visible) return;
+        var thumb = ComputeThumb();
+        if (thumb.IsEmpty) return;
+        using var brush = new SolidBrush(_dragging ? theme.Primary : theme.Border);
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        using var path = UiShapes.RoundedRectangle(thumb, Math.Min(4, thumb.Width / 2));
+        e.Graphics.FillPath(brush, path);
+    }
+
+    private Rectangle ComputeThumb()
+    {
+        if (_target is null) return Rectangle.Empty;
+        var scroll = _target.VerticalScroll;
+        var content = scroll.Maximum + scroll.LargeChange;
+        var viewport = _target.ClientSize.Height;
+        if (content <= viewport || scroll.Maximum <= 0) return Rectangle.Empty;
+        var trackHeight = Height - 8;
+        var thumbHeight = Math.Max(28, (int)(trackHeight * Math.Min(1.0, (double)viewport / content)));
+        var y = trackHeight <= thumbHeight
+            ? 0
+            : (int)((double)(scroll.Value - scroll.Minimum) / (scroll.Maximum - scroll.Minimum) * (trackHeight - thumbHeight));
+        return new Rectangle(Width - 8, 4 + y, 5, thumbHeight);
+    }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        base.OnMouseDown(e);
+        if (_target is null) return;
+        var thumb = ComputeThumb();
+        if (thumb.IsEmpty) return;
+        if (thumb.Contains(e.Location))
+        {
+            _dragging = true;
+            _dragOffsetFromThumb = e.Y - thumb.Y;
+            Capture = true;
+        }
+        else
+        {
+            var delta = e.Y < thumb.Y ? -_target.VerticalScroll.LargeChange : _target.VerticalScroll.LargeChange;
+            ScrollTo(_target.VerticalScroll.Value + delta);
+        }
+        Invalidate();
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        if (!_dragging || _target is null) return;
+        var scroll = _target.VerticalScroll;
+        var content = scroll.Maximum + scroll.LargeChange;
+        var viewport = _target.ClientSize.Height;
+        if (content <= viewport) return;
+        var trackHeight = Height - 8;
+        var thumbHeight = Math.Max(28, (int)(trackHeight * Math.Min(1.0, (double)viewport / content)));
+        if (trackHeight <= thumbHeight) return;
+        var value = (int)((double)(e.Y - _dragOffsetFromThumb - 4) / (trackHeight - thumbHeight) * (scroll.Maximum - scroll.Minimum)) + scroll.Minimum;
+        ScrollTo(value);
+    }
+
+    protected override void OnMouseUp(MouseEventArgs e)
+    {
+        base.OnMouseUp(e);
+        if (!_dragging) return;
+        _dragging = false;
+        Capture = false;
+        Invalidate();
+    }
+
+    private void ScrollTo(int value)
+    {
+        if (_target is null) return;
+        var scroll = _target.VerticalScroll;
+        _target.AutoScrollPosition = new Point(0, Math.Clamp(value, scroll.Minimum, scroll.Maximum));
+        Invalidate();
     }
 }
 
