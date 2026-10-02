@@ -526,6 +526,14 @@ public sealed class WpfTrayContext : IDisposable
     {
         if (reloadSettings) _settings = _settingsStore.Load();
         if (refreshEventMonitors) RefreshEventMonitors();
+        // 菜单正打开时严禁重建：定时器每 2 秒走到这里，Items.Clear 会把打开中的
+        // 菜单掏成一个圆角小空框——真机表现为"菜单消失后出现白点/黑点"（随主题变色）。
+        // 与 WinForms 的 Visible 守卫一致：打开期间跳过，关闭后下个周期自然重刷。
+        if (_currentMenu is { IsOpen: true })
+        {
+            UpdateNotifyIconText();
+            return;
+        }
         var oldMenu = _currentMenu;
         _currentMenu = BuildMenu();
         oldMenu?.Items.Clear();

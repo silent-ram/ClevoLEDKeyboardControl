@@ -15,7 +15,10 @@ public sealed class SoftwareSettingsPage : UserControl
     private readonly System.Windows.Controls.RadioButton _darkThemeRadio = MakeRadio("深色仪器风");
     private readonly System.Windows.Controls.RadioButton _lightThemeRadio = MakeRadio("浅色工作台");
     private readonly List<(Button Swatch, int AccentArgb)> _accentSwatches = [];
-    private readonly Button _followKeyboard = MakeButton("跟随键盘主色", 136);
+    private readonly Button _followKeyboard = MakeButton("跟随键盘灯色", 136);
+    // 悬停说明白"跟随"取的是什么颜色，避免误解为实时取屏幕/音乐主色
+    private readonly TextBlock _followHint = MakeMutedLabel(
+        "强调色 = 界面按钮、导航选中态的颜色。“跟随键盘灯色”取灯效里的固定颜色；音乐模式无单一主色，不适用。");
     private readonly TextBlock _accentSummary = MakeMutedLabel("");
     private int _accentMode = AccentDefault;
     private bool _updatingAppearance;
@@ -139,7 +142,8 @@ public sealed class SoftwareSettingsPage : UserControl
         _followKeyboard.Margin = new Thickness(2, 0, 10, 0);
         accentRow.Children.Add(_followKeyboard);
 
-        return MakeCard("外观", hint, themeRow, accentRow, _accentSummary);
+        _followHint.Margin = new Thickness(0, 2, 0, 0);
+        return MakeCard("外观", hint, themeRow, accentRow, _accentSummary, _followHint);
     }
 
     // ---- 载入 / 保存 ----
@@ -219,7 +223,7 @@ public sealed class SoftwareSettingsPage : UserControl
             _accentSummary.Text = $"当前强调色：{_accentMode switch
             {
                 AccentDefault => "默认",
-                AccentFollowKeyboard => "跟随键盘主色",
+                AccentFollowKeyboard => "跟随键盘灯色",
                 _ => $"#{_accentMode & 0xFFFFFF:X6}"
             }}";
         }
