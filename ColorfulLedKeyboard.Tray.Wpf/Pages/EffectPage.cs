@@ -141,7 +141,7 @@ public sealed class EffectPage : UserControl
 
         _presetSectionHost = Section("配置预设");
         _presetComboRow = Row("当前预设", _effectPreset);
-        _presetNameRow = Row("当前预设", _effectPresetName);
+        _presetNameRow = Row("预设名称", _effectPresetName);
         _presetButtonsRow = ButtonRow(_effectSavePreset, _effectCreatePreset, _effectDeletePreset);
         stack.Children.Add(MakeCard("配置预设", _presetComboRow, _presetNameRow, _presetButtonsRow));
 
@@ -157,7 +157,7 @@ public sealed class EffectPage : UserControl
         UpdateModeAvailability();
     }
 
-    private const int ControlLeft = 165;
+    private const int ControlLeft = 130;
     private const int LabelWidth = 130;
 
     // ---- 状态载入 / 保存（移植自 WinForms LoadSettings/SaveSettings 的效果页字段）----
@@ -985,6 +985,8 @@ public sealed class EffectPage : UserControl
             Foreground = FindBrushStatic("Brush.Text")
         });
         control.VerticalAlignment = VerticalAlignment.Center;
+        // 显式 Width 的控件（TextBox 等）在 Star 列默认居中，必须强制左对齐才能与下拉对齐
+        control.HorizontalAlignment = HorizontalAlignment.Left;
         Grid.SetColumn(control, 1);
         grid.Children.Add(control);
         return grid;

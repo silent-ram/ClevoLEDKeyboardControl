@@ -164,7 +164,7 @@ public sealed class MusicPage : UserControl
             Row("歌曲封面来源", _mediaSession), _mediaMatchStatus,
             RowHost(_palettePreview), _currentColorStatus));
         stack.Children.Add(MakeCard("音乐预设与响应", Row("音乐预设", _preset),
-            ButtonRow(_savePreset, _createPreset, _deletePreset), _presetSaveHintHost, Row("当前预设", _presetName),
+            ButtonRow(_savePreset, _createPreset, _deletePreset), _presetSaveHintHost, Row("预设名称", _presetName),
             Row("音乐响应", _responseMode), PlainRow(_customColors), Section("节拍颜色"), _sequence,
             _baseBrightness, _peakBrightness, PlainRow(_followSystemVolume)));
         stack.Children.Add(MakeCard("高级音乐参数", PlainRow(_advanced), _sensitivityRow,
@@ -825,6 +825,7 @@ public sealed class MusicPage : UserControl
             Foreground = FindBrush("Brush.Text")
         });
         control.VerticalAlignment = VerticalAlignment.Center;
+        control.HorizontalAlignment = HorizontalAlignment.Left;
         Grid.SetColumn(control, 1);
         grid.Children.Add(control);
         return grid;
