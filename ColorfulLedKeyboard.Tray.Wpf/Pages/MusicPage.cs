@@ -580,6 +580,8 @@ public sealed class MusicPage : UserControl
             if (!string.IsNullOrWhiteSpace(name))
             {
                 result = name;
+                // 必须设置 DialogResult：仅 Close() 会让 ShowDialog 返回 null（同灯效页修复）。
+                dialog.DialogResult = true;
                 dialog.Close();
                 return;
             }
@@ -589,13 +591,8 @@ public sealed class MusicPage : UserControl
         };
         cancel.Click += (_, _) => dialog.Close();
 
-        while (dialog.ShowDialog() == true)
-        {
-            if (result is not null) return result;
-            input.Focus();
-        }
-
-        return null;
+        dialog.ShowDialog();
+        return result;
     }
 
     private bool UpsertMusicPreset(string name, string? originalName)

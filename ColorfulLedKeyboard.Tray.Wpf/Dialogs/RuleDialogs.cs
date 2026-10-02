@@ -50,7 +50,6 @@ public sealed class AutomationRuleDialog : Window
     private readonly List<UIElement> _musicOnly = [];
     private readonly List<UIElement> _notSchedule = [];
     private bool _loading;
-    private bool _accepted;
 
     private AutomationRuleDialog(RuleKind kind, object rule, EffectPresetSettings effects, IEnumerable<MusicPreset> music)
     {
@@ -126,7 +125,16 @@ public sealed class AutomationRuleDialog : Window
         };
         var ok = new Button { Content = "确定", Style = (Style)Application.Current.Resources["UiButtonPrimary"], MinWidth = 96 };
         var cancel = new Button { Content = "取消", Style = (Style)Application.Current.Resources["UiButton"], MinWidth = 96, Margin = new Thickness(12, 0, 0, 0) };
-        ok.Click += (_, _) => { Save(); if (_accepted) Close(); };
+        ok.Click += (_, _) =>
+        {
+            // 必须设置 DialogResult：仅 Close() 会让 ShowDialog 返回 null，
+            // 调用方会误判为"取消"导致规则永远添加不了。
+            if (Save())
+            {
+                DialogResult = true;
+                Close();
+            }
+        };
         cancel.Click += (_, _) => Close();
         buttons.Children.Add(ok);
         buttons.Children.Add(cancel);
@@ -140,6 +148,7 @@ public sealed class AutomationRuleDialog : Window
         };
         Content = scroll;
         LoadRule();
+        _loading = false;
     }
 
     public static AutomationRuleDialog ForMusic(MusicApplicationRule rule, IEnumerable<MusicPreset> music) =>
@@ -189,15 +198,14 @@ public sealed class AutomationRuleDialog : Window
         foreach (var element in _musicOnly) element.Visibility = _kind == RuleKind.Music ? Visibility.Visible : Visibility.Collapsed;
         foreach (var element in _notSchedule) element.IsEnabled = _kind != RuleKind.Schedule;
         _target.IsEnabled = _kind != RuleKind.Music;
-        _loading = false;
     }
 
-    private void Save()
+    private bool Save()
     {
         if (string.IsNullOrWhiteSpace(_name.Text))
         {
             System.Windows.MessageBox.Show("请输入规则名称。", "ClevoLEDKeyboardControl", MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
+            return false;
         }
 
         var filter = _musicRule?.TimeFilter ?? _lightingRule?.TimeFilter ?? _scheduleRule!.TimeFilter;
@@ -244,7 +252,7 @@ public sealed class AutomationRuleDialog : Window
             }
         }
 
-        _accepted = true;
+        return true;
     }
 
     private string? SelectedPresetId() => _preset.SelectedItem as string is { } name

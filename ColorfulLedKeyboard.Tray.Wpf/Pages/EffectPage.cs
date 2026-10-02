@@ -266,6 +266,9 @@ public sealed class EffectPage : UserControl
     private void OnModeChanged()
     {
         if (_loadingSettings) return;
+        // 模式切换本身是改动（Enabled/OperatingMode），必须点亮保存栏
+        // （WinForms WireDirtyTracking 对模式单选钮挂 MarkDirty，迁移时曾丢失）。
+        MarkDirty();
         UpdateModeAvailability();
         UpdateEffectConfigurationVisibility();
         if (_modeMusic.IsChecked == true)
@@ -809,6 +812,9 @@ public sealed class EffectPage : UserControl
             if (!string.IsNullOrWhiteSpace(name))
             {
                 result = name;
+                // 必须设置 DialogResult：仅 Close() 会让 ShowDialog 返回 null，
+                // 外层会误判为"取消"导致新建预设被丢弃（真机反馈"新建不了"）。
+                dialog.DialogResult = true;
                 dialog.Close();
                 return;
             }
@@ -818,13 +824,8 @@ public sealed class EffectPage : UserControl
         };
         cancel.Click += (_, _) => dialog.Close();
 
-        while (dialog.ShowDialog() == true)
-        {
-            if (result is not null) return result;
-            input.Focus();
-        }
-
-        return null;
+        dialog.ShowDialog();
+        return result;
     }
 
     private bool UpsertEffectPreset(string name, string? originalName)
