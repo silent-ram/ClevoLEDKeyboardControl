@@ -484,11 +484,60 @@ public sealed class WpfTrayContext : IDisposable
 
     private void OpenAbout()
     {
-        System.Windows.MessageBox.Show(
-            $"ClevoLEDKeyboardControl v{ReadVersion()}\n\n面向 Clevo 兼容机型的键盘背光灯效控制程序。\nMaintained by silent-ram",
-            "关于 ClevoLEDKeyboardControl",
-            MessageBoxButton.OK,
-            MessageBoxImage.Information);
+        var window = new Window
+        {
+            Title = "关于 ClevoLEDKeyboardControl",
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+            ResizeMode = ResizeMode.NoResize,
+            ShowInTaskbar = false,
+            Width = 420,
+            Height = 240,
+            Background = (System.Windows.Media.Brush)Application.Current.Resources["Brush.Window"],
+            FontFamily = (System.Windows.Media.FontFamily)Application.Current.Resources["Font.Body"],
+            FontSize = 12,
+            Foreground = (System.Windows.Media.Brush)Application.Current.Resources["Brush.Text"]
+        };
+        window.SourceInitialized += (_, _) => WpfThemeManager.ApplyTitleBarMode(window);
+
+        var stack = new System.Windows.Controls.StackPanel { Margin = new Thickness(24) };
+        stack.Children.Add(new System.Windows.Controls.TextBlock
+        {
+            Text = "ClevoLEDKeyboardControl",
+            FontSize = 18,
+            FontWeight = FontWeights.Bold,
+            Foreground = (System.Windows.Media.Brush)Application.Current.Resources["Brush.Text"]
+        });
+        stack.Children.Add(new System.Windows.Shapes.Rectangle
+        {
+            Height = 3,
+            MaxWidth = 200,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 8, 0, 0),
+            Fill = (System.Windows.Media.Brush)Application.Current.Resources["Brush.Spectrum"]
+        });
+        stack.Children.Add(new System.Windows.Controls.TextBlock
+        {
+            Text = $"版本 v{ReadVersion()}",
+            Foreground = (System.Windows.Media.Brush)Application.Current.Resources["Brush.MutedText"],
+            Margin = new Thickness(0, 8, 0, 0)
+        });
+        stack.Children.Add(new System.Windows.Controls.TextBlock
+        {
+            Text = "面向 Clevo 兼容机型的键盘背光灯效控制程序。",
+            Margin = new Thickness(0, 4, 0, 0)
+        });
+        var close = new Button
+        {
+            Content = "关闭",
+            Style = (Style)Application.Current.Resources["UiButtonPrimary"],
+            MinWidth = 96,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 16, 0, 0)
+        };
+        close.Click += (_, _) => window.Close();
+        stack.Children.Add(close);
+        window.Content = stack;
+        window.Show();
     }
 
     private static string ReadVersion()
