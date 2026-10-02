@@ -256,12 +256,6 @@ public sealed class UpdateChecker
             : null;
     }
 
-    public static bool ShouldPrompt(Version version)
-    {
-        var state = LoadState();
-        return !string.Equals(state?.LastPromptedVersion, version.ToString(3), StringComparison.OrdinalIgnoreCase);
-    }
-
     public static void MarkPrompted(Version version)
     {
         var state = LoadState() ?? new UpdateCheckState();

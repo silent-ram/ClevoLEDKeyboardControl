@@ -847,38 +847,6 @@ public sealed class TrayApplicationContext : ApplicationContext
         settings.SavedEffects.Normalize();
     }
 
-    private static void RestoreSavedEffect(KeyboardSettings settings, EffectType effect)
-    {
-        settings.SavedEffects ??= new EffectMemorySettings();
-        settings.SavedEffects.Normalize();
-        settings.Effect = effect switch
-        {
-            EffectType.Static => KeyboardSettings.CloneEffect(settings.SavedEffects.Static),
-            EffectType.Rainbow => KeyboardSettings.CloneEffect(settings.SavedEffects.Rainbow),
-            EffectType.Breathing => KeyboardSettings.CloneEffect(settings.SavedEffects.Breathing),
-            EffectType.Sequence => KeyboardSettings.CloneEffect(settings.SavedEffects.Sequence),
-            EffectType.Pulse => KeyboardSettings.CloneEffect(settings.SavedEffects.Pulse),
-            EffectType.Heartbeat => KeyboardSettings.CloneEffect(settings.SavedEffects.Heartbeat),
-            _ => KeyboardSettings.CloneEffect(settings.Effect)
-        };
-        settings.Effect.Type = effect;
-        if (effect == EffectType.Rainbow)
-        {
-            settings.Effect.CustomSequenceColorsEnabled = true;
-        }
-
-        settings.Mode = effect switch
-        {
-            EffectType.Static => KeyboardMode.Static,
-            EffectType.Rainbow => KeyboardMode.Rainbow,
-            EffectType.Breathing => KeyboardMode.Breathing,
-            EffectType.Sequence => KeyboardMode.Sequence,
-            EffectType.Pulse => KeyboardMode.Pulse,
-            EffectType.Heartbeat => KeyboardMode.Heartbeat,
-            EffectType.Off => KeyboardMode.Off,
-            _ => settings.Mode
-        };
-    }
 
     private static void ApplyEffectToSettings(KeyboardSettings settings, LightingEffectSettings effect)
     {

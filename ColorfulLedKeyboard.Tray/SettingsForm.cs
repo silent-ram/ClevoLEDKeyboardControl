@@ -18,14 +18,12 @@ public sealed partial class SettingsForm : ThemedForm
     private NavigationListBox? _navigation;
     private readonly ComboBox _effectType = new();
     private readonly SliderRow _brightness = new("全局亮度", 0, 100, "%");
-    private readonly ComboBox _speed = new();
     private readonly Button _customColors = new() { Text = "自定义颜色", Width = 128, Height = ButtonHeight };
     private readonly ColorPickerRow _effectColor = new("效果颜色");
     private readonly SliderRow _period = new("呼吸周期", 300, 30000, " ms");
     private readonly SliderRow _minimumBrightness = new("最低亮度", 0, 100, "%");
     private readonly CheckBox _hardBlink = new() { Text = "硬闪烁" };
     private readonly SequenceEditor _sequence = new();
-    private Panel? _speedRow;
     private Panel? _customColorsRow;
     private Panel? _hardBlinkRow;
     private Panel? _effectTypeRow;
@@ -81,15 +79,10 @@ public sealed partial class SettingsForm : ThemedForm
     private readonly ComboBox _idleAfter = new();
     private readonly SliderRow _idleBrightness = new("空闲亮度", 0, 100, "%");
     private readonly CheckBox _idleTurnOff = new() { Text = "空闲后关闭灯效" };
-    private readonly CheckBox _scheduleEnabled = new() { Text = "启用时间计划" };
-    private readonly TimeRangePicker _evening = new("傍晚时段");
-    private readonly TimeRangePicker _night = new("深夜时段");
     private readonly CheckBox _typingPulseEnabled = new() { Text = "启用敲字闪烁" };
     private readonly SliderRow _typingPulsePeakBrightness = new("触发亮度", 0, 100, "%");
     private readonly SliderRow _typingPulseHold = new("保持时间", 20, 2000, " ms");
     private readonly SliderRow _typingPulseFade = new("回落时间", 50, 5000, " ms");
-    private readonly CheckBox _appProfilesEnabled = new() { Text = "启用应用场景配置" };
-    private readonly AppProfileEditor _appProfiles = new();
     private readonly CheckBox _automationEnabled = new() { Text = "启用场景自动化" };
     private readonly SceneAutomationEditorV2 _sceneAutomation = new();
     private readonly Label _automationStatus = new()
@@ -132,9 +125,6 @@ public sealed partial class SettingsForm : ThemedForm
         Visible = false
     };
     private Panel? _updateAvailableStatusRow;
-    private readonly Label _serviceSummary = new();
-    private readonly Label _componentSummary = new();
-    private readonly Label _controlSummary = new();
     private static readonly double[] MusicSensitivityValues = [0.5, 1.0, 1.5, 2.0, 2.2, 2.5, 2.8, 3.1, 3.4, 3.6, 3.8, 4.0];
     private static readonly int[] MusicAttackValues = [10, 15, 20, 25, 30, 40];
     private static readonly int[] MusicReleaseValues = [70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200];
@@ -410,12 +400,6 @@ public sealed partial class SettingsForm : ThemedForm
         return panel;
     }
 
-    private static void ConfigureStatusLabel(Label label, int x, int y)
-    {
-        label.Location = new Point(x, y);
-        label.Size = new Size(280, 28);
-        label.AutoEllipsis = true;
-    }
 
     private void UpdateStatusHeader()
     {
@@ -423,13 +407,6 @@ public sealed partial class SettingsForm : ThemedForm
         var serviceReady = diagnostics.ServiceStatus == "运行中";
         var componentReady = diagnostics.DriverStatus.StartsWith("已安装", StringComparison.OrdinalIgnoreCase);
 
-        _serviceSummary.Text = $"服务：{diagnostics.ServiceStatus}";
-        _componentSummary.Text = $"厂商灯控组件：{(componentReady ? "正常" : "需要检查")}";
-        _componentSummary.Tag = diagnostics.DriverStatus;
-        _controlSummary.Text = serviceReady && componentReady
-            ? "灯效控制：可用"
-            : "灯效控制：需要检查";
-        _headerStatus.Text = serviceReady && componentReady ? "● 服务与灯控正常" : "⚠ 需要检查运行状态";
         _headerStatus.ForeColor = serviceReady && componentReady ? ThemeManager.Current.Success : ThemeManager.Current.Warning;
         UpdateOverviewStatus(diagnostics, serviceReady, componentReady);
     }
@@ -455,8 +432,6 @@ public sealed partial class SettingsForm : ThemedForm
         _effectType.DropDownStyle = ComboBoxStyle.DropDownList;
         _effectType.Items.AddRange(["固定颜色", "RGB 循环", "单色呼吸", "循环呼吸", "脉冲", "心跳"]);
 
-        _speed.DropDownStyle = ComboBoxStyle.DropDownList;
-        _speed.Items.AddRange(["非常慢", "慢", "正常", "快", "很快"]);
         _effectPreset.DropDownStyle = ComboBoxStyle.DropDownList;
         _effectPreset.SelectedIndexChanged += (_, _) =>
         {
@@ -493,7 +468,6 @@ public sealed partial class SettingsForm : ThemedForm
             UpdateEffectConfigurationVisibility();
         };
 
-        _speedRow = Row("速度", _speed);
         _customColorsRow = PlainRow(_customColors);
         _hardBlinkRow = PlainRow(_hardBlink);
         _sequenceSection = Section("循环颜色");
@@ -506,7 +480,7 @@ public sealed partial class SettingsForm : ThemedForm
 
         _effectTypeRow = Row("当前效果", _effectType);
         page.Controls.Add(new UiCard("模式", modeRow, _modeHint));
-        page.Controls.Add(new UiCard("灯效参数", _effectTypeRow, _brightness, _effectColor, _speedRow,
+        page.Controls.Add(new UiCard("灯效参数", _effectTypeRow, _brightness, _effectColor,
             _period, _minimumBrightness, _hardBlinkRow, _customColorsRow, _sequenceSection, _sequenceSummary, _sequence));
         page.Controls.Add(new UiCard("配置预设", _effectPresetRow, _effectPresetNameRow, _effectPresetButtonsRow));
         return page;
@@ -788,14 +762,6 @@ public sealed partial class SettingsForm : ThemedForm
         return page;
     }
 
-    private Panel BuildAppProfilesPage()
-    {
-        var page = CreatePage();
-        page.Controls.Add(PlainRow(_appProfilesEnabled));
-        page.Controls.Add(_appProfiles);
-        return page;
-    }
-
     private Panel BuildDiagnosticsPage()
     {
         var page = CreatePage();
@@ -978,7 +944,6 @@ public sealed partial class SettingsForm : ThemedForm
             };
 
             _brightness.Value = settings.Brightness;
-            _speed.SelectedIndex = SpeedToIndex(settings.Effect.Step, settings.Effect.IntervalMs);
             _effectColor.ColorHex = settings.Effect.Color;
             _period.Value = EffectivePeriodValue(settings.Effect);
             _minimumBrightness.Value = settings.Effect.MinimumBrightness;
@@ -1021,7 +986,6 @@ public sealed partial class SettingsForm : ThemedForm
             _idleAfter.SelectedIndex = SecondsToIdleIndex(settings.IdleDim.AfterSeconds);
             _idleBrightness.Value = settings.IdleDim.Brightness;
             _idleTurnOff.Checked = settings.IdleDim.TurnOff;
-            _scheduleEnabled.Checked = settings.Schedule.Enabled;
             _typingPulseEnabled.Checked = settings.TypingPulse.Enabled;
             _typingPulsePeakBrightness.Value = settings.TypingPulse.PeakBrightness;
             _typingPulseHold.Value = settings.TypingPulse.HoldMs;
@@ -1030,8 +994,6 @@ public sealed partial class SettingsForm : ThemedForm
             _notificationFlashColor.ColorHex = settings.NotificationFlash.Color;
             _notificationFlashPulses.Value = settings.NotificationFlash.Pulses;
             _notificationFlashCooldown.Value = settings.NotificationFlash.CooldownSeconds;
-            _appProfilesEnabled.Checked = settings.AppProfiles.Enabled;
-            _appProfiles.Rules = settings.AppProfiles.Rules;
             _automationEnabled.Checked = settings.Automation.Enabled;
             _sceneAutomation.SetPresets(settings.EffectPresets, settings.Effect.Music.CustomPresets);
             _sceneAutomation.Automation = settings.Automation;
@@ -1039,10 +1001,6 @@ public sealed partial class SettingsForm : ThemedForm
             _updateInterval.SelectedIndex = UpdateIntervalToIndex(settings.Update.CheckInterval);
             _userImprovementPlanEnabled.Checked = settings.UserImprovementPlan.Enabled;
 
-            var evening = settings.Schedule.Rules.FirstOrDefault(rule => rule.Name == "Evening");
-            var night = settings.Schedule.Rules.FirstOrDefault(rule => rule.Name == "Night");
-            _evening.SetRange(evening?.Start ?? "19:00", evening?.End ?? "23:30");
-            _night.SetRange(night?.Start ?? "23:30", night?.End ?? "07:00");
             _effectChangedByUser = false;
             UpdateBrightnessAvailability();
             UpdateCustomColorsButton();
@@ -1188,30 +1146,6 @@ public sealed partial class SettingsForm : ThemedForm
         }
     }
 
-    private List<ScheduleRule> BuildScheduleRules()
-    {
-        return
-        [
-            new ScheduleRule
-            {
-                Name = "Evening",
-                Start = _evening.StartTime,
-                End = _evening.EndTime,
-                Enabled = true,
-                Brightness = 35,
-                Effect = new LightingEffectSettings { Type = EffectType.Static, Color = "#FFD2A1" }
-            },
-            new ScheduleRule
-            {
-                Name = "Night",
-                Start = _night.StartTime,
-                End = _night.EndTime,
-                Enabled = true,
-                Brightness = 0,
-                Effect = new LightingEffectSettings { Type = EffectType.Off }
-            }
-        ];
-    }
 
     private static FlowLayoutPanel CreatePage()
     {
@@ -1363,11 +1297,6 @@ public sealed partial class SettingsForm : ThemedForm
 
         _brightness.Visible = !hideEffectParams && effect != EffectType.Off;
         _effectColor.Visible = singleColor;
-        if (_speedRow is not null)
-        {
-            _speedRow.Visible = false;
-        }
-
         _period.LabelText = effect switch
         {
             EffectType.Rainbow => "停留时长",
@@ -1981,17 +1910,6 @@ public sealed partial class SettingsForm : ThemedForm
         return $"{milliseconds / 1000d:0} 秒";
     }
 
-    private void ApplySpeed(KeyboardSettings settings)
-    {
-        (settings.Effect.Step, settings.Effect.IntervalMs) = _speed.SelectedIndex switch
-        {
-            0 => (1, 160),
-            1 => (1, 80),
-            3 => (6, 30),
-            4 => (10, 20),
-            _ => (3, 40)
-        };
-    }
 
     private static int SpeedToIndex(int step, int intervalMs)
     {
@@ -2941,56 +2859,6 @@ internal sealed class ColorPickerRow : UserControl
     }
 }
 
-internal sealed class TimeRangePicker : UserControl
-{
-    private readonly ComboBox _startHour = new();
-    private readonly ComboBox _startMinute = new();
-    private readonly ComboBox _endHour = new();
-    private readonly ComboBox _endMinute = new();
-
-    public TimeRangePicker(string label)
-    {
-        Width = ContentWidth;
-        Height = RowHeight;
-        Controls.Add(new Label { Text = label, Width = LabelWidth, Height = 30, Location = new Point(0, 10) });
-        Setup(_startHour, ControlLeft, Enumerable.Range(0, 24).Select(value => value.ToString("00")));
-        Setup(_startMinute, ControlLeft + 74, ["00", "15", "30", "45"]);
-        Controls.Add(new Label { Text = "到", Location = new Point(ControlLeft + 146, 12), AutoSize = true });
-        Setup(_endHour, ControlLeft + 184, Enumerable.Range(0, 24).Select(value => value.ToString("00")));
-        Setup(_endMinute, ControlLeft + 258, ["00", "15", "30", "45"]);
-    }
-
-    public string StartTime => $"{_startHour.Text}:{_startMinute.Text}";
-
-    public string EndTime => $"{_endHour.Text}:{_endMinute.Text}";
-
-    public void SetRange(string start, string end)
-    {
-        SetTime(start, _startHour, _startMinute);
-        SetTime(end, _endHour, _endMinute);
-    }
-
-    private void Setup(ComboBox combo, int x, IEnumerable<string> values)
-    {
-        combo.DropDownStyle = ComboBoxStyle.DropDownList;
-        combo.Items.AddRange(values.Cast<object>().ToArray());
-        combo.Location = new Point(x, 9);
-        combo.Width = 64;
-        combo.Height = 30;
-        Controls.Add(combo);
-    }
-
-    private static void SetTime(string value, ComboBox hour, ComboBox minute)
-    {
-        if (!TimeOnly.TryParse(value, out var time))
-        {
-            time = new TimeOnly(0, 0);
-        }
-
-        hour.Text = time.Hour.ToString("00");
-        minute.Text = ((time.Minute / 15) * 15).ToString("00");
-    }
-}
 
 internal sealed class SequenceEditor : UserControl
 {
@@ -3798,660 +3666,7 @@ internal sealed class AutomationRuleDialog : ThemedForm
     private sealed record PresetOption(string Id, string Name) { public override string ToString() => Name; }
 }
 
-internal sealed class SceneAutomationEditor : UserControl
-{
-    private static readonly EffectType[] LightingTypes =
-    [
-        EffectType.Static, EffectType.Rainbow, EffectType.Breathing,
-        EffectType.Sequence, EffectType.Pulse, EffectType.Heartbeat
-    ];
-    private static readonly DayOfWeek[] DayValues =
-    [
-        DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday,
-        DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday
-    ];
 
-    private readonly ListBox _list = new();
-    private readonly TextBox _name = new();
-    private readonly CheckBox _enabled = new() { Text = "启用此规则", AutoSize = true };
-    private readonly CheckBox _timeEnabled = new() { Text = "限制时间段", AutoSize = true };
-    private readonly DateTimePicker _start = TimePicker();
-    private readonly DateTimePicker _end = TimePicker();
-    private readonly CheckBox[] _days =
-    [
-        new() { Text = "一", AutoSize = true }, new() { Text = "二", AutoSize = true },
-        new() { Text = "三", AutoSize = true }, new() { Text = "四", AutoSize = true },
-        new() { Text = "五", AutoSize = true }, new() { Text = "六", AutoSize = true },
-        new() { Text = "日", AutoSize = true }
-    ];
-    private readonly CheckBox _applicationsEnabled = new() { Text = "限制前台应用（多个进程任一匹配）", AutoSize = true };
-    private readonly TextBox _processNames = new();
-    private readonly ComboBox _target = new();
-    private readonly ComboBox _effectType = new();
-    private readonly ComboBox _preset = new();
-    private readonly CheckBox _brightnessEnabled = new() { Text = "限制最大亮度", AutoSize = true };
-    private readonly NumericUpDown _brightness = new() { Minimum = 0, Maximum = 100, Width = 90 };
-    private readonly Label _validation = new() { AutoSize = true, ForeColor = Color.Firebrick, MaximumSize = new Size(760, 0) };
-    private readonly List<SceneRule> _rules = [];
-    private EffectPresetSettings _effectPresets = new();
-    private List<MusicPreset> _musicPresets = [];
-    private bool _loading;
-
-    public SceneAutomationEditor()
-    {
-        Width = UiMetrics.ContentWidth;
-        Height = 610;
-        _list.SetBounds(0, 4, 350, 150);
-        _list.SelectedIndexChanged += (_, _) => LoadSelected();
-        Controls.Add(_list);
-        AddButton("添加", 370, 4, 82, AddRule);
-        AddButton("复制", 460, 4, 82, CloneRule);
-        AddButton("删除", 550, 4, 82, RemoveRule);
-        AddButton("上移", 370, 48, 82, () => MoveRule(-1));
-        AddButton("下移", 460, 48, 82, () => MoveRule(1));
-
-        AddLabel("名称", 0, 175);
-        _name.SetBounds(165, 171, 300, 28);
-        Controls.Add(_name);
-        _enabled.SetBounds(500, 174, 130, 26);
-        Controls.Add(_enabled);
-
-        _timeEnabled.SetBounds(0, 215, 130, 26);
-        Controls.Add(_timeEnabled);
-        _start.SetBounds(165, 211, 110, 28);
-        _end.SetBounds(315, 211, 110, 28);
-        Controls.Add(_start);
-        Controls.Add(_end);
-        Controls.Add(new Label { Text = "至", AutoSize = true, Location = new Point(286, 216) });
-
-        Controls.Add(new Label { Text = "星期（不选表示每天）", AutoSize = true, Location = new Point(0, 255) });
-        for (var i = 0; i < _days.Length; i++)
-        {
-            _days[i].Location = new Point(165 + i * 55, 251);
-            Controls.Add(_days[i]);
-        }
-
-        _applicationsEnabled.SetBounds(0, 291, 300, 26);
-        Controls.Add(_applicationsEnabled);
-        _processNames.SetBounds(165, 324, 420, 28);
-        Controls.Add(_processNames);
-        AddButton("选择运行应用", 600, 321, 140, PickApplication);
-        Controls.Add(new Label { Text = "进程名用逗号分隔", AutoSize = true, ForeColor = SystemColors.GrayText, Location = new Point(165, 355) });
-
-        AddLabel("场景动作", 0, 390);
-        _target.DropDownStyle = ComboBoxStyle.DropDownList;
-        _target.Items.AddRange(["灯效预设", "音乐预设", "关闭灯光"]);
-        _target.SetBounds(165, 386, 160, 28);
-        Controls.Add(_target);
-        _effectType.DropDownStyle = ComboBoxStyle.DropDownList;
-        _effectType.Items.AddRange(["固定颜色", "RGB 循环", "单色呼吸", "颜色序列", "脉冲", "心跳"]);
-        _effectType.SetBounds(340, 386, 160, 28);
-        Controls.Add(_effectType);
-
-        AddLabel("目标预设", 0, 432);
-        _preset.DropDownStyle = ComboBoxStyle.DropDownList;
-        _preset.SetBounds(165, 428, 335, 28);
-        Controls.Add(_preset);
-        _brightnessEnabled.SetBounds(0, 474, 150, 26);
-        _brightness.SetBounds(165, 470, 90, 28);
-        Controls.Add(_brightnessEnabled);
-        Controls.Add(_brightness);
-        Controls.Add(new Label { Text = "%", AutoSize = true, Location = new Point(260, 475) });
-        _validation.Location = new Point(0, 520);
-        Controls.Add(_validation);
-
-        _name.TextChanged += (_, _) => SaveSelected();
-        _enabled.CheckedChanged += (_, _) => SaveSelected();
-        _timeEnabled.CheckedChanged += (_, _) => SaveSelected();
-        _start.ValueChanged += (_, _) => SaveSelected();
-        _end.ValueChanged += (_, _) => SaveSelected();
-        foreach (var day in _days) day.CheckedChanged += (_, _) => SaveSelected();
-        _applicationsEnabled.CheckedChanged += (_, _) => SaveSelected();
-        _processNames.TextChanged += (_, _) => SaveSelected();
-        _target.SelectedIndexChanged += (_, _) => { if (!_loading) { RefreshPresetOptions(); SaveSelected(); } };
-        _effectType.SelectedIndexChanged += (_, _) => { if (!_loading) { RefreshPresetOptions(); SaveSelected(); } };
-        _preset.SelectedIndexChanged += (_, _) => SaveSelected();
-        _brightnessEnabled.CheckedChanged += (_, _) => SaveSelected();
-        _brightness.ValueChanged += (_, _) => SaveSelected();
-    }
-
-    public List<SceneRule> Rules
-    {
-        get => _rules.Select(Clone).ToList();
-        set
-        {
-            _rules.Clear();
-            _rules.AddRange((value ?? []).Select(Clone));
-            RefreshList();
-        }
-    }
-
-    public void SetPresets(EffectPresetSettings effects, IEnumerable<MusicPreset> music)
-    {
-        _effectPresets = KeyboardSettings.CloneEffectPresets(effects);
-        _musicPresets = MusicSettings.BuiltInPresets.Concat(music).Select(CloneMusic).ToList();
-        RefreshPresetOptions();
-    }
-
-    private void AddRule()
-    {
-        _rules.Add(new SceneRule
-        {
-            Name = "新场景",
-            Conditions = new SceneConditions { TimeEnabled = true, Start = "00:00", End = "00:00" }
-        }.Normalize());
-        RefreshList();
-        _list.SelectedIndex = _rules.Count - 1;
-    }
-
-    private void CloneRule()
-    {
-        if (SelectedRule is not { } selected) return;
-        var clone = Clone(selected);
-        clone.Id = Guid.NewGuid().ToString("N");
-        clone.Name += " 副本";
-        _rules.Insert(_list.SelectedIndex + 1, clone);
-        RefreshList();
-        _list.SelectedIndex++;
-    }
-
-    private void RemoveRule()
-    {
-        if (_list.SelectedIndex < 0) return;
-        var index = _list.SelectedIndex;
-        _rules.RemoveAt(index);
-        RefreshList();
-        if (_rules.Count > 0) _list.SelectedIndex = Math.Min(index, _rules.Count - 1);
-    }
-
-    private void MoveRule(int offset)
-    {
-        var index = _list.SelectedIndex;
-        var target = index + offset;
-        if (index < 0 || target < 0 || target >= _rules.Count) return;
-        (_rules[index], _rules[target]) = (_rules[target], _rules[index]);
-        RefreshList();
-        _list.SelectedIndex = target;
-    }
-
-    private void PickApplication()
-    {
-        using var dialog = new RunningAppsForm();
-        if (dialog.ShowDialog() != DialogResult.OK || string.IsNullOrWhiteSpace(dialog.SelectedProcessName)) return;
-        var names = ParseProcesses(_processNames.Text);
-        if (!names.Contains(dialog.SelectedProcessName, StringComparer.OrdinalIgnoreCase)) names.Add(dialog.SelectedProcessName);
-        _processNames.Text = string.Join(", ", names);
-        _applicationsEnabled.Checked = true;
-    }
-
-    private void LoadSelected()
-    {
-        _loading = true;
-        try
-        {
-            var rule = SelectedRule;
-            if (rule is null)
-            {
-                UpdateAvailability();
-                _validation.Text = "尚无规则，请点击“添加”。";
-                return;
-            }
-            _name.Text = rule.Name;
-            _enabled.Checked = rule.Enabled;
-            _timeEnabled.Checked = rule.Conditions.TimeEnabled;
-            _start.Value = DateTime.Today + TimeOnly.Parse(rule.Conditions.Start).ToTimeSpan();
-            _end.Value = DateTime.Today + TimeOnly.Parse(rule.Conditions.End).ToTimeSpan();
-            for (var i = 0; i < _days.Length; i++) _days[i].Checked = rule.Conditions.Days.Contains(DayValues[i]);
-            _applicationsEnabled.Checked = rule.Conditions.ApplicationsEnabled;
-            _processNames.Text = string.Join(", ", rule.Conditions.ProcessNames);
-            _target.SelectedIndex = (int)rule.Action.Target;
-            _effectType.SelectedIndex = Math.Max(0, Array.IndexOf(LightingTypes, rule.Action.LightingEffectType));
-            _brightnessEnabled.Checked = rule.Action.BrightnessLimit.HasValue;
-            _brightness.Value = rule.Action.BrightnessLimit ?? 100;
-            RefreshPresetOptions(rule.Action.PresetId);
-            UpdateAvailability();
-            UpdateValidation(rule);
-        }
-        finally { _loading = false; }
-    }
-
-    private void SaveSelected()
-    {
-        if (_loading || SelectedRule is not { } rule) return;
-        rule.Name = _name.Text;
-        rule.Enabled = _enabled.Checked;
-        rule.Conditions.TimeEnabled = _timeEnabled.Checked;
-        rule.Conditions.Start = _start.Value.ToString("HH:mm");
-        rule.Conditions.End = _end.Value.ToString("HH:mm");
-        rule.Conditions.Days = DayValues.Where((_, index) => _days[index].Checked).ToList();
-        rule.Conditions.ApplicationsEnabled = _applicationsEnabled.Checked;
-        rule.Conditions.ProcessNames = ParseProcesses(_processNames.Text);
-        rule.Action.Target = (SceneTargetKind)Math.Max(0, _target.SelectedIndex);
-        rule.Action.LightingEffectType = LightingTypes[Math.Max(0, _effectType.SelectedIndex)];
-        rule.Action.PresetId = (_preset.SelectedItem as ScenePresetOption)?.Id ?? "";
-        rule.Action.BrightnessLimit = _brightnessEnabled.Checked ? (int)_brightness.Value : null;
-        rule.Normalize();
-        UpdateAvailability();
-        UpdateValidation(rule);
-        RefreshList(true);
-    }
-
-    private void RefreshPresetOptions(string? selectedId = null)
-    {
-        if (_target.SelectedIndex < 0) return;
-        selectedId ??= (_preset.SelectedItem as ScenePresetOption)?.Id;
-        _preset.Items.Clear();
-        if (_target.SelectedIndex == (int)SceneTargetKind.LightingPreset)
-        {
-            var type = LightingTypes[Math.Max(0, _effectType.SelectedIndex)];
-            _preset.Items.Add(new ScenePresetOption(EffectPresetSettings.BuiltInId(type), "软件默认配置"));
-            foreach (var preset in _effectPresets.ForType(type)) _preset.Items.Add(new ScenePresetOption(preset.Id, preset.Name));
-        }
-        else if (_target.SelectedIndex == (int)SceneTargetKind.MusicPreset)
-        {
-            foreach (var preset in _musicPresets) _preset.Items.Add(new ScenePresetOption(preset.Id, preset.Name));
-        }
-        for (var i = 0; i < _preset.Items.Count; i++)
-        {
-            if ((_preset.Items[i] as ScenePresetOption)?.Id == selectedId) { _preset.SelectedIndex = i; break; }
-        }
-        if (_preset.SelectedIndex < 0 && !string.IsNullOrWhiteSpace(selectedId))
-        {
-            _preset.Items.Add(new ScenePresetOption(selectedId, "[缺失预设]"));
-            _preset.SelectedIndex = _preset.Items.Count - 1;
-        }
-        if (_preset.SelectedIndex < 0 && _preset.Items.Count > 0) _preset.SelectedIndex = 0;
-        UpdateAvailability();
-    }
-
-    private void UpdateAvailability()
-    {
-        var hasRule = SelectedRule is not null;
-        var lighting = _target.SelectedIndex == (int)SceneTargetKind.LightingPreset;
-        var off = _target.SelectedIndex == (int)SceneTargetKind.Off;
-        _name.Enabled = hasRule;
-        _enabled.Enabled = hasRule;
-        _timeEnabled.Enabled = hasRule;
-        foreach (var day in _days) day.Enabled = hasRule;
-        _applicationsEnabled.Enabled = hasRule;
-        _target.Enabled = hasRule;
-        _effectType.Enabled = hasRule;
-        _brightnessEnabled.Enabled = hasRule;
-        _effectType.Visible = lighting;
-        _preset.Enabled = hasRule && !off;
-        _brightness.Enabled = hasRule && _brightnessEnabled.Checked;
-        _start.Enabled = hasRule && _timeEnabled.Checked;
-        _end.Enabled = hasRule && _timeEnabled.Checked;
-        _processNames.Enabled = hasRule && _applicationsEnabled.Checked;
-        _validation.Enabled = true;
-    }
-
-    private void UpdateValidation(SceneRule rule)
-    {
-        string? error = !rule.Conditions.IsValid ? "请至少启用一个有效条件；应用条件必须包含进程名。" : null;
-        if (error is null && rule.Action.Target != SceneTargetKind.Off &&
-            !PresetExists(rule.Action)) error = "引用的预设不存在；此规则不会执行。";
-        _validation.Text = error ?? "规则有效。条件组之间按“并且”匹配，多个进程按“任一”匹配。";
-        _validation.ForeColor = error is null ? Color.DarkGreen : Color.Firebrick;
-    }
-
-    private bool PresetExists(SceneAction action) => action.Target switch
-    {
-        SceneTargetKind.Off => true,
-        SceneTargetKind.LightingPreset =>
-            action.PresetId == EffectPresetSettings.BuiltInId(action.LightingEffectType) ||
-            _effectPresets.ForType(action.LightingEffectType).Any(item => item.Id == action.PresetId),
-        SceneTargetKind.MusicPreset => _musicPresets.Any(item => item.Id == action.PresetId),
-        _ => false
-    };
-
-    private void RefreshList(bool preserveSelection = false)
-    {
-        var selected = preserveSelection ? _list.SelectedIndex : -1;
-        _list.Items.Clear();
-        foreach (var rule in _rules)
-            _list.Items.Add($"{(rule.Enabled ? "" : "[停用] ")}{rule.Name}");
-        if (_rules.Count == 0) { _list.SelectedIndex = -1; LoadSelected(); }
-        else _list.SelectedIndex = Math.Clamp(selected, 0, _rules.Count - 1);
-    }
-
-    private static List<string> ParseProcesses(string text) => text
-        .Split([',', ';', '，', '；'], StringSplitOptions.RemoveEmptyEntries)
-        .Select(AppProfileRule.NormalizeProcessName)
-        .Where(name => !string.IsNullOrWhiteSpace(name))
-        .Distinct(StringComparer.OrdinalIgnoreCase)
-        .ToList();
-
-    private static SceneRule Clone(SceneRule rule) => new SceneRule
-    {
-        Id = rule.Id,
-        Name = rule.Name,
-        Enabled = rule.Enabled,
-        Conditions = new SceneConditions
-        {
-            TimeEnabled = rule.Conditions.TimeEnabled,
-            Start = rule.Conditions.Start,
-            End = rule.Conditions.End,
-            Days = [.. rule.Conditions.Days],
-            ApplicationsEnabled = rule.Conditions.ApplicationsEnabled,
-            ProcessNames = [.. rule.Conditions.ProcessNames]
-        },
-        Action = new SceneAction
-        {
-            Target = rule.Action.Target,
-            LightingEffectType = rule.Action.LightingEffectType,
-            PresetId = rule.Action.PresetId,
-            BrightnessLimit = rule.Action.BrightnessLimit
-        }
-    }.Normalize();
-
-    private static MusicPreset CloneMusic(MusicPreset preset)
-    {
-        var clone = new MusicPreset { Id = preset.Id, Name = preset.Name };
-        clone.ResponseMode = preset.ResponseMode;
-        clone.Colors = [.. preset.Colors];
-        clone.LowColor = preset.LowColor;
-        clone.HighColor = preset.HighColor;
-        clone.Sensitivity = preset.Sensitivity;
-        clone.AttackMs = preset.AttackMs;
-        clone.ReleaseMs = preset.ReleaseMs;
-        clone.BaseBrightness = preset.BaseBrightness;
-        clone.PeakBrightness = preset.PeakBrightness;
-        clone.IntervalMs = preset.IntervalMs;
-        clone.NoiseGate = preset.NoiseGate;
-        clone.BeatThreshold = preset.BeatThreshold;
-        clone.PeakHoldMs = preset.PeakHoldMs;
-        clone.FollowSystemVolume = preset.FollowSystemVolume;
-        clone.EqEnabled = preset.EqEnabled;
-        clone.EqLowHz = preset.EqLowHz;
-        clone.EqHighHz = preset.EqHighHz;
-        return clone.Normalize();
-    }
-
-    private SceneRule? SelectedRule => _list.SelectedIndex >= 0 && _list.SelectedIndex < _rules.Count
-        ? _rules[_list.SelectedIndex] : null;
-
-    private void AddButton(string text, int x, int y, int width, Action action)
-    {
-        var button = new Button { Text = text, Location = new Point(x, y), Width = width, Height = UiMetrics.ButtonHeight };
-        button.Click += (_, _) => action();
-        Controls.Add(button);
-    }
-
-    private void AddLabel(string text, int x, int y) =>
-        Controls.Add(new Label { Text = text, Width = UiMetrics.LabelWidth, Height = 28, Location = new Point(x, y) });
-
-    private static DateTimePicker TimePicker() => new()
-    {
-        Format = DateTimePickerFormat.Custom,
-        CustomFormat = "HH:mm",
-        ShowUpDown = true
-    };
-
-    private sealed record ScenePresetOption(string Id, string Name)
-    {
-        public override string ToString() => Name;
-    }
-}
-
-internal sealed class AppProfileEditor : UserControl
-{
-    private readonly ListBox _list = new();
-    private readonly TextBox _processName = new();
-    private readonly ComboBox _effectType = new();
-    private readonly ColorPickerRow _color = new("颜色");
-    private readonly CheckBox _enabled = new() { Text = "启用此规则" };
-    private readonly CheckBox _useAppIconColor = new() { Text = "自动按图标取色" };
-    private readonly Button _pickProcess = new() { Text = "选择进程" };
-    private readonly List<AppProfileRule> _rules = [];
-    private bool _loading;
-
-    public AppProfileEditor()
-    {
-        Width = ContentWidth;
-        Height = 500;
-
-        _list.Location = new Point(0, 4);
-        _list.Size = new Size(360, 160);
-        _list.SelectedIndexChanged += (_, _) => LoadSelected();
-        Controls.Add(_list);
-
-        AddButton("添加运行应用", 385, 4, 140, AddForegroundRule);
-        AddButton("删除规则", 385, 48, 140, RemoveSelected);
-
-        Controls.Add(new Label { Text = "进程名", Width = LabelWidth, Height = 30, Location = new Point(0, 185) });
-        _processName.Location = new Point(ControlLeft, 181);
-        _processName.Width = 300;
-        _processName.Height = 30;
-        _processName.TextChanged += (_, _) => SaveSelected();
-        Controls.Add(_processName);
-
-        _pickProcess.Location = new Point(480, 179);
-        _pickProcess.Width = 125;
-        _pickProcess.Height = ButtonHeight;
-        _pickProcess.Click += (_, _) => PickProcessFromRunningApps();
-        Controls.Add(_pickProcess);
-
-        _effectType.DropDownStyle = ComboBoxStyle.DropDownList;
-        _effectType.Items.AddRange(["固定颜色", "单色呼吸"]);
-        _effectType.Location = new Point(ControlLeft, 222);
-        _effectType.Width = 300;
-        _effectType.Height = 30;
-        _effectType.SelectedIndexChanged += (_, _) => SaveSelected();
-        Controls.Add(new Label { Text = "效果", Width = LabelWidth, Height = 30, Location = new Point(0, 226) });
-        Controls.Add(_effectType);
-
-        _enabled.Location = new Point(ControlLeft, 263);
-        _enabled.AutoSize = true;
-        _enabled.CheckedChanged += (_, _) => SaveSelected();
-        Controls.Add(_enabled);
-
-        _useAppIconColor.Location = new Point(ControlLeft, 298);
-        _useAppIconColor.AutoSize = true;
-        _useAppIconColor.CheckedChanged += (_, _) => SaveSelected();
-        Controls.Add(_useAppIconColor);
-
-        var iconHint = new Label
-        {
-            Text = "自动色开启时使用当前应用图标颜色；关闭后可手动选色。",
-            Location = new Point(350, 298),
-            Size = new Size(430, 44)
-        };
-        Controls.Add(iconHint);
-
-        _color.Location = new Point(0, 350);
-        _color.ColorChanged += (_, _) => SaveSelected();
-        Controls.Add(_color);
-    }
-
-    public List<AppProfileRule> Rules
-    {
-        get => _rules.Select(rule => new AppProfileRule
-            {
-                Name = rule.Name,
-                ProcessName = rule.ProcessName,
-                Enabled = rule.Enabled,
-                AutoColorEnabled = rule.AutoColorEnabled,
-                IconColor = rule.IconColor,
-                Brightness = rule.Brightness,
-                TargetEffect = rule.TargetEffect,
-                ManualColor = rule.ManualColor
-            }.Normalize()).ToList();
-        set
-        {
-            _rules.Clear();
-            _rules.AddRange((value ?? []).Select(rule => new AppProfileRule
-            {
-                Name = rule.Name,
-                ProcessName = rule.ProcessName,
-                Enabled = rule.Enabled,
-                AutoColorEnabled = rule.AutoColorEnabled,
-                IconColor = rule.IconColor,
-                Brightness = rule.Brightness,
-                TargetEffect = rule.TargetEffect,
-                ManualColor = rule.ManualColor
-            }.Normalize()));
-            RefreshList();
-        }
-    }
-
-    private void AddButton(string text, int x, int y, int width, Action action)
-    {
-        var button = new Button { Text = text, Location = new Point(x, y), Width = width, Height = ButtonHeight };
-        button.Click += (_, _) => action();
-        Controls.Add(button);
-    }
-
-    private void AddForegroundRule()
-    {
-        using var dialog = new RunningAppsForm();
-        if (dialog.ShowDialog() != DialogResult.OK || string.IsNullOrWhiteSpace(dialog.SelectedProcessName))
-        {
-            return;
-        }
-
-        var processName = dialog.SelectedProcessName;
-        var iconColor = dialog.SelectedIconColor ?? "#FFFFFF";
-        _rules.Add(new AppProfileRule
-        {
-            Name = processName,
-            ProcessName = processName,
-            AutoColorEnabled = true,
-            IconColor = iconColor,
-            Brightness = 70,
-            TargetEffect = EffectType.Static,
-            ManualColor = iconColor
-        }.Normalize());
-        RefreshList();
-        _list.SelectedIndex = _rules.Count - 1;
-    }
-
-    private void RemoveSelected()
-    {
-        if (_list.SelectedIndex < 0)
-        {
-            return;
-        }
-
-        _rules.RemoveAt(_list.SelectedIndex);
-        RefreshList();
-    }
-
-    private void LoadSelected()
-    {
-        _loading = true;
-        try
-        {
-            var rule = SelectedRule;
-            var enabled = rule is not null;
-            _processName.Enabled = enabled;
-            _pickProcess.Enabled = enabled;
-            _effectType.Enabled = enabled;
-            _color.Enabled = enabled;
-            _enabled.Enabled = enabled;
-            _useAppIconColor.Enabled = enabled;
-
-            if (rule is null)
-            {
-                _processName.Text = "";
-                _effectType.SelectedIndex = 0;
-                _enabled.Checked = false;
-                _useAppIconColor.Checked = false;
-                _color.ColorHex = "#FFFFFF";
-                UpdateColorVisibility();
-                return;
-            }
-
-            _processName.Text = rule.ProcessName;
-            _effectType.SelectedIndex = EffectToIndex(rule.TargetEffect);
-            _enabled.Checked = rule.Enabled;
-            _useAppIconColor.Checked = rule.AutoColorEnabled;
-            _color.ColorHex = rule.AutoColorEnabled ? rule.IconColor : rule.ManualColor;
-            UpdateColorVisibility();
-        }
-        finally
-        {
-            _loading = false;
-        }
-    }
-
-    private void SaveSelected()
-    {
-        if (_loading || SelectedRule is not { } rule)
-        {
-            return;
-        }
-
-        rule.ProcessName = AppProfileRule.NormalizeProcessName(_processName.Text);
-        rule.Name = string.IsNullOrWhiteSpace(rule.ProcessName) ? "新场景" : rule.ProcessName;
-        rule.Enabled = _enabled.Checked;
-        rule.AutoColorEnabled = _useAppIconColor.Checked;
-        rule.TargetEffect = IndexToEffect(_effectType.SelectedIndex);
-        rule.ManualColor = _color.ColorHex;
-        rule.Normalize();
-        UpdateColorVisibility();
-        RefreshList(preserveSelection: true);
-    }
-
-    private void UpdateColorVisibility()
-    {
-        _color.Visible = !_useAppIconColor.Checked;
-    }
-
-    private void PickProcessFromRunningApps()
-    {
-        using var dialog = new RunningAppsForm();
-        if (dialog.ShowDialog() != DialogResult.OK || string.IsNullOrWhiteSpace(dialog.SelectedProcessName))
-        {
-            return;
-        }
-
-        _processName.Text = dialog.SelectedProcessName;
-        if (dialog.SelectedIconColor is not null && SelectedRule is { } rule)
-        {
-            rule.IconColor = dialog.SelectedIconColor;
-        }
-        _useAppIconColor.Checked = true;
-        _effectType.SelectedIndex = 0;
-        SaveSelected();
-    }
-
-    private void RefreshList(bool preserveSelection = false)
-    {
-        var selected = preserveSelection ? _list.SelectedIndex : -1;
-        _list.Items.Clear();
-        foreach (var rule in _rules)
-        {
-            var mode = rule.AutoColorEnabled ? "图标" : "手动";
-            _list.Items.Add($"{(rule.Enabled ? "" : "[停用] ")}{rule.ProcessName} ({mode})");
-        }
-
-        if (_rules.Count == 0)
-        {
-            _list.SelectedIndex = -1;
-            LoadSelected();
-            return;
-        }
-
-        _list.SelectedIndex = Math.Clamp(selected, 0, _rules.Count - 1);
-    }
-
-    private AppProfileRule? SelectedRule =>
-        _list.SelectedIndex >= 0 && _list.SelectedIndex < _rules.Count ? _rules[_list.SelectedIndex] : null;
-
-    private static int EffectToIndex(EffectType effect) => effect switch
-    {
-        EffectType.Breathing => 1,
-        _ => 0
-    };
-
-    private static EffectType IndexToEffect(int index) => index switch
-    {
-        1 => EffectType.Breathing,
-        _ => EffectType.Static
-    };
-
-}
 internal sealed class RunningAppsForm : ThemedForm
 {
     private readonly ListView _list = new();
