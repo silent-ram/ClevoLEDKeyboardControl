@@ -28,7 +28,7 @@ internal interface IMusicTunable
 
 /// <summary>
 /// 共享的范围常量 + 归一化逻辑。MusicSettings.Normalize / MusicPreset.Normalize 都委托给此处，
-/// 之后再各自处理独有字段（PresetName/Spotify/CustomPresets 仅 MusicSettings 有；Name 仅 MusicPreset 有）。
+/// 之后再各自处理独有字段（PresetName/CustomPresets 仅 MusicSettings 有；Name 仅 MusicPreset 有）。
 /// </summary>
 internal static class MusicSettingsNormalizer
 {

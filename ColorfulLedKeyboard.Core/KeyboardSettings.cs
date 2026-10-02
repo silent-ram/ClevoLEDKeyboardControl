@@ -346,14 +346,6 @@ public sealed class KeyboardSettings
                 EqEnabled = effect.Music.EqEnabled,
                 EqLowHz = effect.Music.EqLowHz,
                 EqHighHz = effect.Music.EqHighHz,
-                Spotify = new SpotifySettings
-                {
-                    AlbumColorEnabled = effect.Music.Spotify.AlbumColorEnabled,
-                    AlbumColorSource = effect.Music.Spotify.AlbumColorSource,
-                    ClientId = effect.Music.Spotify.ClientId,
-                    RefreshToken = effect.Music.Spotify.RefreshToken,
-                    LastAlbumColor = effect.Music.Spotify.LastAlbumColor
-                },
                 PlayerBinding = new MusicPlayerBinding
                 {
                     Enabled = effect.Music.PlayerBinding.Enabled,

@@ -15,7 +15,6 @@ public sealed class MusicSettings : IMusicTunable
     ];
     public const string DefaultPresetName = "通用";
     public const string BuiltInDefaultPresetId = "builtin:music:general";
-    public const double BeatThresholdAlgorithmScale = 0.10;
 
     public static double ToAlgorithmBeatThreshold(double beatThreshold) =>
         MusicSettingsNormalizer.ToAlgorithmBeatThreshold(beatThreshold);
@@ -59,7 +58,6 @@ public sealed class MusicSettings : IMusicTunable
 
     public int EqHighHz { get; set; } = 5000;
 
-    public SpotifySettings Spotify { get; set; } = new();
 
     /// <summary>
     /// 音乐模式自己的播放器绑定。它不依赖场景自动化，仅在用户手动选择音乐模式时生效。
@@ -74,8 +72,6 @@ public sealed class MusicSettings : IMusicTunable
         PresetName = NormalizePresetName(PresetName);
         var fallbackResponseMode = LevelColorEnabled ? MusicResponseMode.LevelColor : MusicResponseMode.BrightnessPulse;
         MusicSettingsNormalizer.Normalize(this, NormalizeColors, fallbackResponseMode);
-        Spotify ??= new SpotifySettings();
-        Spotify.Normalize();
         PlayerBinding ??= new MusicPlayerBinding();
         PlayerBinding.Normalize();
         LevelColorEnabled = ResponseMode == MusicResponseMode.LevelColor;
@@ -114,30 +110,6 @@ public sealed class MusicSettings : IMusicTunable
         Normalize();
     }
 
-    public MusicPreset ToPreset(string name)
-    {
-        return new MusicPreset
-        {
-            Name = name,
-            ResponseMode = ResponseMode,
-            LowColor = LowColor,
-            HighColor = HighColor,
-            Colors = [.. Colors],
-            Sensitivity = Sensitivity,
-            AttackMs = AttackMs,
-            ReleaseMs = ReleaseMs,
-            BaseBrightness = BaseBrightness,
-            PeakBrightness = PeakBrightness,
-            IntervalMs = IntervalMs,
-            NoiseGate = NoiseGate,
-            BeatThreshold = BeatThreshold,
-            PeakHoldMs = PeakHoldMs,
-            FollowSystemVolume = FollowSystemVolume,
-            EqEnabled = EqEnabled,
-            EqLowHz = EqLowHz,
-            EqHighHz = EqHighHz
-        }.Normalize();
-    }
 
     public static bool IsBuiltInPresetName(string? name)
     {

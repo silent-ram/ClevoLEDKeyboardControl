@@ -289,7 +289,6 @@ public sealed class MusicPage : UserControl
         settings.Effect.Music.AllowSystemMixFallback = _systemMixFallback.IsChecked == true;
         settings.Effect.Music.EqLowHz = _eqLow.Value;
         settings.Effect.Music.EqHighHz = _eqHigh.Value;
-        settings.Effect.Music.Spotify.AlbumColorEnabled = false;
         settings.Effect.Music.BaseBrightness = _baseBrightness.Value;
         settings.Effect.Music.PeakBrightness = _peakBrightness.Value;
         settings.Effect.Music.FollowSystemVolume = _followSystemVolume.IsChecked == true;

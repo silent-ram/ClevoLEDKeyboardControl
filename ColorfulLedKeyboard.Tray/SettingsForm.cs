@@ -1080,7 +1080,6 @@ public sealed partial class SettingsForm : ThemedForm
             settings.Effect.Music.AllowSystemMixFallback = _musicSystemMixFallback.Checked;
             settings.Effect.Music.EqLowHz = _musicEqLow.Value;
             settings.Effect.Music.EqHighHz = _musicEqHigh.Value;
-            settings.Effect.Music.Spotify.AlbumColorEnabled = false;
             settings.Effect.Music.BaseBrightness = _musicBaseBrightness.Value;
             settings.Effect.Music.PeakBrightness = _musicPeakBrightness.Value;
             settings.Effect.Music.FollowSystemVolume = _musicFollowSystemVolume.Checked;

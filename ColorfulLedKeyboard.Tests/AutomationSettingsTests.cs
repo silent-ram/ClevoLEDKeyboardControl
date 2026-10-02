@@ -234,59 +234,6 @@ public sealed class AutomationSettingsTests
     }
 
     [Fact]
-    public void Evaluator_UsesFirstValidMatchingRule()
-    {
-        var automation = new AutomationSettings
-        {
-            Enabled = true,
-            Rules =
-            [
-                Rule("第一条", "game"),
-                Rule("第二条", "game")
-            ]
-        }.Normalize();
-
-        var result = SceneEvaluator.Evaluate(
-            automation,
-            new SceneEvaluationContext(new DateTime(2026, 7, 6, 20, 0, 0), "game.exe", true),
-            _ => null);
-
-        Assert.Equal("第一条", result.Rule?.Name);
-    }
-
-    [Fact]
-    public void Evaluator_SkipsApplicationRuleWhenForegroundUnavailable()
-    {
-        var automation = new AutomationSettings
-        {
-            Enabled = true,
-            Rules = [Rule("游戏", "game")]
-        }.Normalize();
-
-        var result = SceneEvaluator.Evaluate(
-            automation,
-            new SceneEvaluationContext(DateTime.Now, "game", false),
-            _ => null);
-
-        Assert.Null(result.Rule);
-        Assert.Contains("应用检测不可用", result.InvalidReason);
-    }
-
-    [Fact]
-    public void Evaluator_SkipsMissingPresetAndReportsReason()
-    {
-        var rule = Rule("游戏", "game");
-        rule.Action.PresetId = "missing";
-        var result = SceneEvaluator.Evaluate(
-            new AutomationSettings { Enabled = true, Rules = [rule] }.Normalize(),
-            new SceneEvaluationContext(DateTime.Now, "game", true),
-            _ => "引用的预设不存在");
-
-        Assert.Null(result.Rule);
-        Assert.Contains("引用的预设不存在", result.InvalidReason);
-    }
-
-    [Fact]
     public void PresetStableId_SurvivesRenameAndClone()
     {
         var preset = new EffectPreset

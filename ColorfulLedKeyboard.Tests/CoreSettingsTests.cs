@@ -327,21 +327,6 @@ public sealed class CoreSettingsTests
     }
 
     [Fact]
-    public void LightingPresets_DoNotOverrideGlobalBrightness()
-    {
-        var settings = new KeyboardSettings { Brightness = 22 }.Normalize();
-
-        LightingPresets.ApplyWarmWhite(settings);
-        Assert.Equal(22, settings.Brightness);
-
-        LightingPresets.ApplySoftRainbow(settings);
-        Assert.Equal(22, settings.Brightness);
-
-        LightingPresets.ApplyRedBluePulse(settings);
-        Assert.Equal(22, settings.Brightness);
-    }
-
-    [Fact]
     public void MusicSettings_Normalize_DeduplicatesAndLimitsCustomPresets()
     {
         var settings = new MusicSettings
@@ -575,14 +560,6 @@ public sealed class CoreSettingsTests
         Assert.Equal(uiValue, preset.BeatThreshold, precision: 6);
         Assert.Equal(expectedAlgorithmValue, MusicSettingsNormalizer.ToAlgorithmBeatThreshold(settings.BeatThreshold), precision: 6);
         Assert.Equal(expectedAlgorithmValue, MusicSettingsNormalizer.ToAlgorithmBeatThreshold(preset.BeatThreshold), precision: 6);
-    }
-
-    [Fact]
-    public void SpotifySettings_DefaultsAlbumColorSourceToWindowsMediaSession()
-    {
-        var settings = new SpotifySettings().Normalize();
-
-        Assert.Equal(AlbumColorSource.WindowsMediaSession, settings.AlbumColorSource);
     }
 
     [Fact]
@@ -860,7 +837,10 @@ public sealed class CoreSettingsTests
         }.Normalize();
 
         settings.SavedEffects.Rainbow = KeyboardSettings.CloneEffect(settings.Effect);
-        LightingPresets.ApplyWarmWhite(settings);
+        // 等价内联 LightingPresets.ApplyWarmWhite（该测试辅助类已随死代码清理移除）
+        settings.Enabled = true;
+        settings.Effect = new LightingEffectSettings { Type = EffectType.Static, Color = "#FFD2A1" };
+        settings.Normalize();
 
         settings.Effect = KeyboardSettings.CloneEffect(settings.SavedEffects.Rainbow);
         settings.Normalize();
