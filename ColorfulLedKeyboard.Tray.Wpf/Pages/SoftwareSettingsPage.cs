@@ -33,6 +33,7 @@ public sealed class SoftwareSettingsPage : UserControl
         unchecked((int)(0xFF000000u | ((uint)r << 16) | ((uint)g << 8) | b));
     private readonly ContentControl _accentRowHost = new();
     private List<int> _customAccents = [];
+    private Button? _currentSwatch;
     private readonly TextBlock _accentSummary = MakeMutedLabel("");
     private int _accentMode = AccentDefault;
     private readonly UiStateStore _uiStateStore = UiStateStore.Shared;
@@ -227,6 +228,11 @@ public sealed class SoftwareSettingsPage : UserControl
         try
         {
             var defaultAccent = WpfThemeManager.DefaultAccent;
+            if (_currentSwatch is not null)
+            {
+                _currentSwatch.Background = new SolidColorBrush(
+                    WpfThemeManager.AccentOverride ?? defaultAccent);
+            }
             foreach (var (swatch, accentArgb, _) in _accentSwatches)
             {
                 var baseColor = accentArgb == AccentDefault ? defaultAccent : Color.FromArgb(255, (byte)((accentArgb >> 16) & 0xFF), (byte)((accentArgb >> 8) & 0xFF), (byte)(accentArgb & 0xFF));
@@ -266,6 +272,18 @@ public sealed class SoftwareSettingsPage : UserControl
             VerticalAlignment = VerticalAlignment.Center,
             Foreground = FindBrush("Brush.Text")
         });
+        // 第一个格子恒显当前生效的强调色（实时预览，不可点击）
+        _currentSwatch = new Button
+        {
+            Width = 34,
+            Height = 26,
+            Style = (Style)Application.Current.Resources["UiButton"],
+            Margin = new Thickness(0, 0, 10, 0),
+            Focusable = false,
+            IsHitTestVisible = false,
+            ToolTip = "当前强调色"
+        };
+        accentRow.Children.Add(_currentSwatch);
         AddAccentSwatch(accentRow, AccentDefault, "默认");
         foreach (var (name, argb) in PresetAccents)
         {
