@@ -34,6 +34,8 @@ public partial class MainWindow : Window
     private const string BaseTitle = "ClevoLEDKeyboardControl 设置";
     private EffectPage? _effectPage;
     private MusicPage? _musicPage;
+    private AutomationPage? _automationPage;
+    private EventFeedbackPage? _eventFeedbackPage;
     private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private AudioSourceStatusInfo? _lastAudioStatus;
     private bool _ready;
@@ -94,6 +96,8 @@ public partial class MainWindow : Window
     {
         _effectPage?.LoadFromStore(new SettingsStore().Load());
         _musicPage?.LoadFromStore(new SettingsStore().Load());
+        _automationPage?.LoadFromStore(new SettingsStore().Load());
+        _eventFeedbackPage?.LoadFromStore(new SettingsStore().Load());
         UpdateStatusHeader();
         UpdateSaveBar();
     });
@@ -131,8 +135,19 @@ public partial class MainWindow : Window
         _pages.Add(musicPage);
         musicPage.LoadFromStore(new SettingsStore().Load());
         musicPage.SetAdvancedExpanded(_initialUiState.MusicAdvancedExpanded);
-        _pages.Add(new PlaceholderPage("场景自动化"));
-        _pages.Add(new PlaceholderPage("事件反馈"));
+
+        var automationPage = new AutomationPage();
+        automationPage.Changed += (_, _) => UpdateSaveBar();
+        automationPage.SimulatorRequested += (_, _) => new Dialogs.SceneSimulatorDialog(new SettingsStore().Load()) { Owner = this }.ShowDialog();
+        _automationPage = automationPage;
+        _pages.Add(automationPage);
+        automationPage.LoadFromStore(new SettingsStore().Load());
+
+        var eventFeedbackPage = new EventFeedbackPage();
+        eventFeedbackPage.Changed += (_, _) => UpdateSaveBar();
+        _eventFeedbackPage = eventFeedbackPage;
+        _pages.Add(eventFeedbackPage);
+        eventFeedbackPage.LoadFromStore(new SettingsStore().Load());
         _pages.Add(new PlaceholderPage("诊断与恢复"));
         _pages.Add(new PlaceholderPage("软件设置"));
         _pages.Add(new AboutPage());
@@ -181,7 +196,8 @@ public partial class MainWindow : Window
 
     private void UpdateSaveBar()
     {
-        var dirty = _effectPage is { IsDirty: true } || _musicPage is { IsDirty: true };
+        var dirty = _effectPage is { IsDirty: true } || _musicPage is { IsDirty: true } ||
+            _automationPage is { IsDirty: true } || _eventFeedbackPage is { IsDirty: true };
         DirtyLabel.Text = dirty ? "● 有尚未保存的修改" : "✓ 设置已保存";
         DirtyLabel.Foreground = (Brush)Application.Current.Resources[dirty ? "Brush.Warning" : "Brush.Success"];
         RevertButton.IsEnabled = dirty;
@@ -195,6 +211,7 @@ public partial class MainWindow : Window
     {
         var automationStatus = AutomationStatus.Load();
         _musicPage?.RefreshRuntimeStatus(automationStatus);
+        _automationPage?.UpdateStatusText(automationStatus);
         var serviceStatus = GetServiceStatusText();
         var driverStatus = GetDriverStatusText();
         var serviceReady = serviceStatus == "运行中";
