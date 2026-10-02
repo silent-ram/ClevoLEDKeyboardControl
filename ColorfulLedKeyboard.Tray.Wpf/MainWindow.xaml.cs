@@ -36,6 +36,8 @@ public partial class MainWindow : Window
     private MusicPage? _musicPage;
     private AutomationPage? _automationPage;
     private EventFeedbackPage? _eventFeedbackPage;
+    private DiagnosticsPage? _diagnosticsPage;
+    private SoftwareSettingsPage? _softwareSettingsPage;
     private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private AudioSourceStatusInfo? _lastAudioStatus;
     private bool _ready;
@@ -103,9 +105,28 @@ public partial class MainWindow : Window
         _musicPage?.LoadFromStore(new SettingsStore().Load());
         _automationPage?.LoadFromStore(new SettingsStore().Load());
         _eventFeedbackPage?.LoadFromStore(new SettingsStore().Load());
+        _diagnosticsPage?.CollectAll();
+        _softwareSettingsPage?.LoadFromStore(new SettingsStore().Load());
         UpdateStatusHeader();
         UpdateSaveBar();
     });
+
+    /// <summary>软件设置页"发现新版本"徽标（WinForms _navigation.SetBadge 对齐）。</summary>
+    public void UpdateNavigationBadge()
+    {
+        var badge = _softwareSettingsPage?.UpdateBadge;
+        var items = NavItems.Select(item => new NavItem(item.Title, item.Glyph,
+            item.Title == "软件设置" ? badge : null)).ToList();
+        var selected = Navigation.SelectedIndex;
+        Navigation.ItemsSource = items;
+        Navigation.SelectedIndex = selected;
+    }
+
+    /// <summary>托盘侧触发的更新检查（结果落到软件设置页与导航徽标）。</summary>
+    public void RunUpdateCheck(Func<System.Threading.Tasks.Task<UpdateCheckResult?>> check)
+    {
+        _ = _softwareSettingsPage?.CheckForUpdatesNowAsync(check);
+    }
 
     public void ActivateWindow()
     {
@@ -153,8 +174,19 @@ public partial class MainWindow : Window
         _eventFeedbackPage = eventFeedbackPage;
         _pages.Add(eventFeedbackPage);
         eventFeedbackPage.LoadFromStore(new SettingsStore().Load());
-        _pages.Add(new PlaceholderPage("诊断与恢复"));
-        _pages.Add(new PlaceholderPage("软件设置"));
+
+        var diagnosticsPage = new DiagnosticsPage();
+        diagnosticsPage.Changed += (_, _) => ReloadFromStore();
+        _diagnosticsPage = diagnosticsPage;
+        _pages.Add(diagnosticsPage);
+
+        var softwarePage = new SoftwareSettingsPage();
+        softwarePage.SettingsChangedExternally += (_, _) => ReloadFromStore();
+        softwarePage.NavigationBadgeChanged += (_, _) => UpdateNavigationBadge();
+        _softwareSettingsPage = softwarePage;
+        _pages.Add(softwarePage);
+        softwarePage.LoadFromStore(new SettingsStore().Load());
+
         _pages.Add(new AboutPage());
     }
 
@@ -190,6 +222,7 @@ public partial class MainWindow : Window
             _musicPage?.ApplyTo(settings);
             _automationPage?.ApplyTo(settings);
             _eventFeedbackPage?.ApplyTo(settings);
+            _softwareSettingsPage?.ApplyTo(settings);
             _settingsStore.Save(settings);
             _effectPage?.OnSaved(settings);
             _musicPage?.OnSaved(settings);
@@ -219,6 +252,7 @@ public partial class MainWindow : Window
         _musicPage?.LoadFromStore(new SettingsStore().Load());
         _automationPage?.LoadFromStore(new SettingsStore().Load());
         _eventFeedbackPage?.LoadFromStore(new SettingsStore().Load());
+        _softwareSettingsPage?.LoadFromStore(new SettingsStore().Load());
         UpdateStatusHeader();
         UpdateSaveBar();
     }
