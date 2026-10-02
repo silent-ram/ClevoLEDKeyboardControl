@@ -11,7 +11,6 @@ namespace ColorfulLedKeyboard.Tray.Wpf;
 
 /// <summary>
 /// 设置窗口骨架：侧边导航 + 状态页头 + 页面宿主 + 底部保存栏。
-/// Phase 0 只实现"当前状态""关于"两页，其余页面随迁移阶段挂入。
 /// </summary>
 public partial class MainWindow : Window
 {

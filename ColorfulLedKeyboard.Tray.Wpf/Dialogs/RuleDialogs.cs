@@ -49,7 +49,6 @@ public sealed class AutomationRuleDialog : Window
     private readonly System.Windows.Controls.ComboBox _notification = MakeCombo(["继承全局", "强制开启", "强制关闭"]);
     private readonly List<UIElement> _musicOnly = [];
     private readonly List<UIElement> _notSchedule = [];
-    private bool _loading;
 
     private AutomationRuleDialog(RuleKind kind, object rule, EffectPresetSettings effects, IEnumerable<MusicPreset> music)
     {
@@ -149,7 +148,6 @@ public sealed class AutomationRuleDialog : Window
         };
         Content = scroll;
         LoadRule();
-        _loading = false;
     }
 
     public static AutomationRuleDialog ForMusic(MusicApplicationRule rule, IEnumerable<MusicPreset> music) =>
@@ -161,7 +159,6 @@ public sealed class AutomationRuleDialog : Window
 
     private void LoadRule()
     {
-        _loading = true;
         var filter = _musicRule?.TimeFilter ?? _lightingRule?.TimeFilter ?? _scheduleRule!.TimeFilter;
         _name.Text = _musicRule?.Name ?? _lightingRule?.Name ?? _scheduleRule!.Name;
         _enabled.IsChecked = _musicRule?.Enabled ?? _lightingRule?.Enabled ?? _scheduleRule!.Enabled;
@@ -402,7 +399,6 @@ public sealed class RunningAppsDialog : Window
     private List<(string ProcessName, string Title, string? IconColor)> _items = [];
 
     public string? SelectedProcessName { get; private set; }
-    public string? SelectedIconColor { get; private set; }
 
     public RunningAppsDialog()
     {
@@ -486,9 +482,8 @@ public sealed class RunningAppsDialog : Window
     private void Confirm()
     {
         if (_list.SelectedIndex < 0 || _list.SelectedIndex >= _items.Count) return;
-        var (processName, _, iconColor) = _items[_list.SelectedIndex];
+        var (processName, _, _) = _items[_list.SelectedIndex];
         SelectedProcessName = processName;
-        SelectedIconColor = iconColor;
         DialogResult = true;
         Close();
     }

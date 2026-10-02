@@ -22,9 +22,8 @@ public sealed class UiSequenceEditor : UserControl
 
     public event EventHandler? ColorsChanged;
 
-    public UiSequenceEditor(bool showAddButton)
+    public UiSequenceEditor()
     {
-        ShowAddButton = showAddButton;
         var root = new Grid();
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -43,20 +42,14 @@ public sealed class UiSequenceEditor : UserControl
         root.Children.Add(_list);
 
         _buttonColumn = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(10, 0, 0, 0) };
-        AddButton("添加...", () => AddColorRequested?.Invoke(this, EventArgs.Empty), showAddButton);
-        AddButton("删除选中", RemoveSelected, true);
-        AddButton("上移", () => Move(-1), true);
-        AddButton("下移", () => Move(+1), true);
-        AddButton("随机排序", Shuffle, true);
+        AddButton("删除选中", RemoveSelected);
+        AddButton("上移", () => Move(-1));
+        AddButton("下移", () => Move(+1));
+        AddButton("随机排序", Shuffle);
         Grid.SetColumn(_buttonColumn, 1);
         root.Children.Add(_buttonColumn);
         Content = root;
     }
-
-    public bool ShowAddButton { get; }
-
-    /// <summary>ShowAddButton=true 时点击"添加"的请求（由宿主打开取色对话框多选）。</summary>
-    public event EventHandler? AddColorRequested;
 
     public List<string> Colors
     {
@@ -106,9 +99,8 @@ public sealed class UiSequenceEditor : UserControl
         return template;
     }
 
-    private void AddButton(string label, System.Action onClick, bool visible)
+    private void AddButton(string label, System.Action onClick)
     {
-        if (!visible) return;
         var button = new Button
         {
             Content = label,

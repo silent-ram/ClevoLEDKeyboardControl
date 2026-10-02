@@ -65,7 +65,6 @@ public sealed class ColorSelectionDialog : Window
     private readonly System.Windows.Controls.TextBox _hue = SmallBox();
     private readonly System.Windows.Controls.TextBox _saturation = SmallBox();
     private readonly System.Windows.Controls.TextBox _value = SmallBox();
-    private readonly List<System.Windows.Controls.TextBox> _numericInputs;
     private bool _updatingInputs;
     private double _currentHue;
     private double _currentSaturation = 1;
@@ -76,7 +75,6 @@ public sealed class ColorSelectionDialog : Window
     {
         _singleSelection = singleSelection;
         _choices = BuildChoices(selectedColors);
-        _numericInputs = [_red, _green, _blue, _hue, _saturation, _value];
 
         Title = "自定义颜色";
         WindowStartupLocation = WindowStartupLocation.CenterOwner;

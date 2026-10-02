@@ -28,7 +28,7 @@ public sealed class EffectPage : UserControl
     private readonly UiSliderRow _period = new("呼吸周期", 300, 30000, " ms");
     private readonly UiSliderRow _minimumBrightness = new("最低亮度", 0, 100, "%");
     private readonly System.Windows.Controls.CheckBox _hardBlink = MakeCheckBox("硬闪烁");
-    private readonly UiSequenceEditor _sequence = new(showAddButton: false);
+    private readonly UiSequenceEditor _sequence = new();
     private readonly Button _customColors = MakeButton("自定义颜色", 128);
     private readonly System.Windows.Controls.ComboBox _effectPreset = MakeCombo([]);
     private readonly System.Windows.Controls.TextBox _effectPresetName = MakeTextBox(240);

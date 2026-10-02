@@ -44,7 +44,7 @@ public sealed class MusicPage : UserControl
     private readonly System.Windows.Controls.TextBox _presetName = MakeTextBox(220);
     private readonly System.Windows.Controls.ComboBox _responseMode = MakeCombo(["节奏律动", "鼓点响应"]);
     private readonly Button _customColors = MakeButton("自定义颜色", 128);
-    private readonly UiSequenceEditor _sequence = new(showAddButton: false);
+    private readonly UiSequenceEditor _sequence = new();
     private readonly UiSliderRow _baseBrightness = new("基础亮度", 0, 100, "%");
     private readonly UiSliderRow _peakBrightness = new("峰值亮度", 0, 100, "%");
     private readonly System.Windows.Controls.CheckBox _followSystemVolume = MakeCheckBox("跟随 Windows 系统音量");
