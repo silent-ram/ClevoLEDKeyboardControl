@@ -9,8 +9,8 @@
     <!-- NotifyIcon 互操作与图标提取需要 WinForms 面；迁移期保持零新增 NuGet 依赖 -->
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationIcon>..\assets\app.ico</ApplicationIcon>
-    <!-- 切换期程序集名带 .Wpf 后缀，避免与 WinForms 托盘同名冲突；Phase 4 切换默认产物时改回 ColorfulLedKeyboard.Tray -->
-    <AssemblyName>ColorfulLedKeyboard.Tray.Wpf</AssemblyName>
+    <!-- 程序集名/进程名与安装器契约一致（KillTray、Run 键、快捷方式均按此名定位） -->
+    <AssemblyName>ColorfulLedKeyboard.Tray</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,8 +1,8 @@
 param(
     [string]$Configuration = "Release",
     [string]$Version = "",
-    # 迁移期开关：发布 WPF 托盘（ColorfulLedKeyboard.Tray.Wpf）而不是 WinForms 版
-    [switch]$TrayWpf
+    # WPF 托盘已是默认产物；如需临时发布旧 WinForms 版，传 -TrayWinForms
+    [switch]$TrayWinForms
 )
 
 $ErrorActionPreference = "Stop"
@@ -68,7 +68,7 @@ dotnet publish (Join-Path $root "ColorfulLedKeyboard.Service\ColorfulLedKeyboard
     -o $servicePublish `
     @versionArgs
 
-$trayProject = if ($TrayWpf) { Join-Path $root "ColorfulLedKeyboard.Tray.Wpf\ColorfulLedKeyboard.Tray.Wpf.csproj" } else { Join-Path $root "ColorfulLedKeyboard.Tray\ColorfulLedKeyboard.Tray.csproj" }
+$trayProject = if ($TrayWinForms) { Join-Path $root "ColorfulLedKeyboard.Tray\ColorfulLedKeyboard.Tray.csproj" } else { Join-Path $root "ColorfulLedKeyboard.Tray.Wpf\ColorfulLedKeyboard.Tray.Wpf.csproj" }
 dotnet publish $trayProject `
     -c $Configuration `
     -r win-x64 `

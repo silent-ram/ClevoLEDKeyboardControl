@@ -9,8 +9,8 @@ namespace ColorfulLedKeyboard.Tray.Wpf;
 
 public partial class App : Application
 {
-    // 迁移期与 WinForms 托盘并存：互斥名独立，避免互相顶掉；Phase 4 切换时与 WinForms 版对齐。
-    private const string SingleInstanceMutexName = "Local\\ClevoLEDKeyboardControl.Tray.Wpf";
+    // 单实例互斥名与 WinForms 版一致：安装器升级 KillTray 后由本进程接管，避免双实例。
+    private const string SingleInstanceMutexName = "Local\\ClevoLEDKeyboardControl.Tray";
     private const string OpenSettingsEventName = "Local\\ClevoLEDKeyboardControl.OpenSettings";
     private Mutex? _singleInstanceMutex;
     private EventWaitHandle? _openSettingsEvent;

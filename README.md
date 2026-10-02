@@ -8,6 +8,8 @@
 
 本项目基于 [xuha233/ClevoRGBControl](https://github.com/xuha233/ClevoRGBControl) 持续维护。程序采用“Windows 服务负责驱动键盘、托盘程序负责用户会话采集和交互”的架构，通过厂商 Control Center 附带的 `InsydeDCHU.dll` 调用底层键盘接口。
 
+自 v3.5.0 起，托盘程序迁移到 WPF（`ColorfulLedKeyboard.Tray.Wpf` 项目，产物名仍为 `ColorfulLedKeyboard.Tray.exe`），默认深色"仪器面板"视觉，支持深浅主题与自定义强调色（含跟随键盘主色）。原 WinForms 托盘（`ColorfulLedKeyboard.Tray` 项目）保留在解决方案中作为参考实现，可运行 `scripts/publish.ps1 -TrayWinForms` 临时产出。
+
 ## 下载与安装
 
 - [下载最新正式版安装包](https://github.com/silent-ram/ClevoLEDKeyboardControl/releases/latest/download/ClevoLEDKeyboardControlSetup.exe)
