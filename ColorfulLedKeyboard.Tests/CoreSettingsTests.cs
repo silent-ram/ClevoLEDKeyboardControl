@@ -417,8 +417,8 @@ public sealed class CoreSettingsTests
     [InlineData(true, 1)]
     public void SettingsForm_MusicResponseIndex_MapsBeatDetection(bool enabled, int expectedIndex)
     {
-        Assert.Equal(expectedIndex, ColorfulLedKeyboard.Tray.SettingsForm.MusicResponseIndex(enabled));
-        Assert.Equal(enabled, ColorfulLedKeyboard.Tray.SettingsForm.MusicResponseUsesBeatDetection(expectedIndex));
+        Assert.Equal(expectedIndex, MusicResponseMapping.Index(enabled));
+        Assert.Equal(enabled, MusicResponseMapping.UsesBeatDetection(expectedIndex));
     }
 
     [Fact]

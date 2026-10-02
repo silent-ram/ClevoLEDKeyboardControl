@@ -1,3 +1,4 @@
+using ColorfulLedKeyboard.Core;
 using ColorfulLedKeyboard.Tray;
 using System.Drawing;
 
