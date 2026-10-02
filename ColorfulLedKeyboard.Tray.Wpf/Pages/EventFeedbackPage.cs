@@ -22,6 +22,9 @@ public sealed class EventFeedbackPage : UserControl
 
     public bool IsDirty { get; private set; }
 
+    /// <summary>保存成功后由宿主调用，复位脏状态。</summary>
+    public void ResetDirty() => IsDirty = false;
+
     public EventFeedbackPage()
     {
         _typingPulseEnabled.Checked += (_, _) => { MarkChanged(); UpdateVisibility(); };

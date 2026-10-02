@@ -26,8 +26,6 @@ public sealed record AutomationRuleListItem(string Title, string Detail, Automat
         _ => "Brush.Primary"
     });
 
-    private static ListBox MakeRuleList() => new() { MinHeight = 120, MaxHeight = 320 };
-
     private static Brush FindBrush(string key) => (Brush)Application.Current.Resources[key];
 }
 
@@ -61,7 +59,6 @@ public sealed class SceneAutomationEditor : UserControl
             _lists[i].MaxHeight = 320;
             _lists[i].Background = Brushes.Transparent;
             _lists[i].BorderThickness = new Thickness(0);
-            _lists[i].SelectionChanged += (_, _) => { };
         }
 
         var headerRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
@@ -115,7 +112,6 @@ public sealed class SceneAutomationEditor : UserControl
         Content = root;
 
         SelectTab(0);
-        RefreshTabButtons();
     }
 
     public void SetPresets(EffectPresetSettings effects, IEnumerable<MusicPreset> music)
@@ -189,11 +185,6 @@ public sealed class SceneAutomationEditor : UserControl
         panel.Children.Add(buttons);
         panel.Children.Add(_lists[index]);
         return panel;
-    }
-
-    private void RefreshTabButtons()
-    {
-        // 页签按钮随 Changed 重建，无需额外状态
     }
 
     private void AddMusic()
@@ -403,7 +394,6 @@ public sealed class SceneAutomationEditor : UserControl
         var template = new DataTemplate();
         var gridFactory = new FrameworkElementFactory(typeof(Grid));
         gridFactory.SetValue(Grid.BackgroundProperty, FindBrush("Brush.Surface"));
-        gridFactory.SetValue(Grid.MarginProperty, new Thickness(2));
         gridFactory.SetValue(Grid.MarginProperty, new Thickness(0));
         gridFactory.AppendChild(new FrameworkElementFactory(typeof(RowDefinition)));
         gridFactory.AppendChild(new FrameworkElementFactory(typeof(RowDefinition)));

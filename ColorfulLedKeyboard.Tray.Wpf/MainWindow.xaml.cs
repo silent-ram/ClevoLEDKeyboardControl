@@ -51,8 +51,9 @@ public partial class MainWindow : Window
 
         BuildPages();
         BuildNavigation();
-        Navigation.SelectedIndex = Math.Clamp(_initialUiState.LastPage, 0, _pages.Count - 1);
         Navigation.SelectionChanged += (_, _) => ApplySelectedPage(Navigation.SelectedIndex);
+        Navigation.SelectedIndex = Math.Clamp(_initialUiState.LastPage, 0, _pages.Count - 1);
+        ApplySelectedPage(Navigation.SelectedIndex);
 
         ApplyButton.Click += (_, _) => SaveSettings();
         RevertButton.Click += (_, _) => RevertChanges();
@@ -65,7 +66,11 @@ public partial class MainWindow : Window
         SourceInitialized += (_, _) => WpfThemeManager.ApplyTitleBarMode(this);
         Loaded += (_, _) => { _ready = true; UpdateStatusHeader(); };
         WpfThemeManager.ThemeChanged += OnThemeChanged;
-        Closed += (_, _) => WpfThemeManager.ThemeChanged -= OnThemeChanged;
+        Closed += (_, _) =>
+        {
+            _statusTimer.Stop();
+            WpfThemeManager.ThemeChanged -= OnThemeChanged;
+        };
         Closing += (_, _) => PersistWindowState();
     }
 
@@ -169,14 +174,36 @@ public partial class MainWindow : Window
 
     private void SaveSettings()
     {
+        // 音乐预设两段式保存的硬拦截（WinForms 语义一致）：预设未暂存时先去保存预设。
+        if (_musicPage is { IsMusicPresetChanged: true })
+        {
+            SelectPage(2);
+            System.Windows.MessageBox.Show(_musicPage.MusicPresetBlockedMessage, "ClevoLEDKeyboardControl",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
         try
         {
             var settings = _settingsStore.Load();
-        _effectPage?.ApplyTo(settings);
+            _effectPage?.ApplyTo(settings);
+            _musicPage?.ApplyTo(settings);
+            _automationPage?.ApplyTo(settings);
+            _eventFeedbackPage?.ApplyTo(settings);
             _settingsStore.Save(settings);
             _effectPage?.OnSaved(settings);
+            _musicPage?.OnSaved(settings);
+            _automationPage.ResetDirty();
+            _eventFeedbackPage.ResetDirty();
             UpdateStatusHeader();
             UpdateSaveBar();
+            // "跟随键盘主色"模式下，灯色改了界面强调色要跟着走（WinForms 1181 行语义）。
+            if (UiStateStore.Shared.Load().AccentArgb == UiState.AccentFollowKeyboard)
+            {
+                WpfThemeManager.AccentOverride = WpfThemeManager.ResolveAccent(UiState.AccentFollowKeyboard);
+            }
+            // 展开态即时持久化（对照 WinForms 1177-1179）。
+            _uiStateStore.Update(state => state.MusicAdvancedExpanded = _musicPage?.IsAdvancedExpanded ?? false);
             SettingsSaved?.Invoke();
         }
         catch (Exception ex) when (ex is FormatException or IOException or UnauthorizedAccessException)
@@ -190,6 +217,8 @@ public partial class MainWindow : Window
     {
         _effectPage?.LoadFromStore(new SettingsStore().Load());
         _musicPage?.LoadFromStore(new SettingsStore().Load());
+        _automationPage?.LoadFromStore(new SettingsStore().Load());
+        _eventFeedbackPage?.LoadFromStore(new SettingsStore().Load());
         UpdateStatusHeader();
         UpdateSaveBar();
     }

@@ -25,6 +25,10 @@ public sealed class AutomationPage : UserControl
     public event EventHandler? Changed;
 
     public bool IsDirty { get; private set; }
+
+    /// <summary>保存成功后由宿主调用，复位脏状态。</summary>
+    public void ResetDirty() => IsDirty = false;
+
     public event EventHandler? SimulatorRequested;
 
     public AutomationPage()

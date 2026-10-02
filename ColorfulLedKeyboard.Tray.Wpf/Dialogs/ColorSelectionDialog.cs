@@ -113,7 +113,6 @@ public sealed class ColorSelectionDialog : Window
         grid.Children.Add(buttons);
 
         Content = grid;
-        _grid.ItemsSource = _choices;
         _selected = _choices.FirstOrDefault(item => item.Checked);
         LoadSelectedChoice();
     }

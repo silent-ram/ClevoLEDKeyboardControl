@@ -447,6 +447,7 @@ public sealed class WpfTrayContext : IDisposable
         if (_settingsWindow is { IsLoaded: true })
         {
             _settingsWindow.ActivateWindow();
+            _ = CheckForUpdatesWhenSettingsOpenAsync();
             return;
         }
         _settingsWindow = new MainWindow();
@@ -459,6 +460,7 @@ public sealed class WpfTrayContext : IDisposable
         _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         _settingsWindow.Show();
         _settingsWindow.ActivateWindow();
+        _ = CheckForUpdatesWhenSettingsOpenAsync();
     }
 
     private void OpenAbout()

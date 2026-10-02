@@ -262,7 +262,6 @@ public sealed class AutomationRuleDialog : Window
 
     private void RefreshPresets(string? selectedId = null)
     {
-        selectedId ??= null;
         var previousName = _preset.SelectedItem as string;
         _preset.Items.Clear();
         var target = CurrentTarget();
@@ -340,7 +339,8 @@ public sealed class AutomationRuleDialog : Window
 
     private static System.Windows.Controls.ComboBox MakeTimeCombo()
     {
-        var combo = new System.Windows.Controls.ComboBox { Style = (Style)Application.Current.Resources["UiComboBox"], MinWidth = 100 };
+        // IsEditable：非 15 分钟整的既有时间也能显示原值（对照 WinForms DateTimePicker）
+        var combo = new System.Windows.Controls.ComboBox { Style = (Style)Application.Current.Resources["UiComboBox"], MinWidth = 100, IsEditable = true };
         for (var minutes = 0; minutes < 24 * 60; minutes += 15)
         {
             combo.Items.Add($"{minutes / 60:00}:{minutes % 60:00}");

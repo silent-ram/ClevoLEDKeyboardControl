@@ -129,6 +129,18 @@ public sealed class MusicPage : UserControl
         _peakBrightness.ValueChanged += (_, _) => OnMusicPresetControlChanged();
         _followSystemVolume.Checked += (_, _) => OnMusicPresetControlChanged();
         _followSystemVolume.Unchecked += (_, _) => OnMusicPresetControlChanged();
+        // 以下均为音乐预设内容字段（WinForms WireMusicPresetTracking 的 12 项对齐）
+        _responseMode.SelectionChanged += (_, _) => OnMusicPresetControlChanged();
+        _sensitivity.SelectionChanged += (_, _) => OnMusicPresetControlChanged();
+        _attack.SelectionChanged += (_, _) => OnMusicPresetControlChanged();
+        _release.SelectionChanged += (_, _) => OnMusicPresetControlChanged();
+        _noiseGate.ValueChanged += (_, _) => OnMusicPresetControlChanged();
+        _beatThreshold.ValueChanged += (_, _) => OnMusicPresetControlChanged();
+        _eqLow.ValueChanged += (_, _) => OnMusicPresetControlChanged();
+        _eqHigh.ValueChanged += (_, _) => OnMusicPresetControlChanged();
+        _systemMixFallback.Checked += (_, _) => OnMusicPresetControlChanged();
+        _systemMixFallback.Unchecked += (_, _) => OnMusicPresetControlChanged();
+        _presetName.TextChanged += (_, _) => OnMusicPresetControlChanged();
 
         _coverHintRow = _coverColorHint;
         _coverHintRow.Visibility = Visibility.Collapsed;
@@ -831,7 +843,6 @@ public sealed class MusicPage : UserControl
     private static UIElement RowWithHint(string label, FrameworkElement control, FrameworkElement hint)
     {
         var grid = Row(label, control);
-        hint.Margin = new Thickness(12, 0, 0, 0);
         hint.VerticalAlignment = VerticalAlignment.Center;
         ((Grid)grid).Children.Add(hint);
         Grid.SetColumn(hint, 1);
@@ -883,13 +894,6 @@ public sealed class MusicPage : UserControl
         TextWrapping = TextWrapping.Wrap,
         Foreground = FindBrush("Brush.MutedText"),
         Margin = new Thickness(0, 2, 0, 2)
-    };
-
-    private static System.Windows.Controls.RadioButton MakeRadio(string text) => new()
-    {
-        Content = text,
-        Style = (Style)Application.Current.Resources["UiRadioButton"],
-        GroupName = "OperatingMode"
     };
 
     private static System.Windows.Controls.CheckBox MakeCheckBox(string text) => new()

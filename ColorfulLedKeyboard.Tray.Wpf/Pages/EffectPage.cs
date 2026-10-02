@@ -81,7 +81,15 @@ public sealed class EffectPage : UserControl
         _effectType.SelectionChanged += (_, _) => OnEffectTypeChanged();
         _brightness.ValueChanged += (_, _) => MarkDirty();
         _effectColor.ColorChanged += (_, _) => MarkDirty();
-        _period.ValueChanged += (_, _) => UpdateEffectConfigurationVisibility();
+        _period.ValueChanged += (_, _) =>
+        {
+            UpdateEffectConfigurationVisibility();
+            MarkDirty();
+        };
+        _minimumBrightness.ValueChanged += (_, _) => MarkDirty();
+        _hardBlink.Checked += (_, _) => MarkDirty();
+        _hardBlink.Unchecked += (_, _) => MarkDirty();
+        _effectPresetName.TextChanged += (_, _) => MarkDirty();
         _sequence.ColorsChanged += (_, _) =>
         {
             if (SelectedEffectType(EffectType.Rainbow) == EffectType.Rainbow)
