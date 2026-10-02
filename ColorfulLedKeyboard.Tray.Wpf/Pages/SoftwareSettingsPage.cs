@@ -14,7 +14,23 @@ public sealed class SoftwareSettingsPage : UserControl
 
     private readonly System.Windows.Controls.RadioButton _darkThemeRadio = MakeRadio("深色仪器风");
     private readonly System.Windows.Controls.RadioButton _lightThemeRadio = MakeRadio("浅色工作台");
-    private readonly List<(Button Swatch, int AccentArgb)> _accentSwatches = [];
+    private readonly List<(Button Swatch, int AccentArgb, string Name)> _accentSwatches = [];
+    private Button? _customSwatch;
+
+    /// <summary>内置强调色预设（默认色板之外）。</summary>
+    private static readonly (string Name, int Argb)[] PresetAccents =
+    [
+        ("红",   ArgbConst(229, 72, 77)),
+        ("橙",   ArgbConst(247, 107, 21)),
+        ("青",   ArgbConst(56, 200, 240)),
+        ("蓝",   ArgbConst(76, 125, 255)),
+        ("翠绿", ArgbConst(74, 222, 128)),
+        ("紫",   ArgbConst(154, 92, 232)),
+        ("玫红", ArgbConst(224, 92, 140)),
+    ];
+
+    private static int ArgbConst(byte r, byte g, byte b) =>
+        unchecked((int)(0xFF000000u | ((uint)r << 16) | ((uint)g << 8) | b));
     private readonly Button _followKeyboard = MakeButton("跟随键盘灯色", 136);
     // 悬停说明白"跟随"取的是什么颜色，避免误解为实时取屏幕/音乐主色
     private readonly TextBlock _followHint = MakeMutedLabel(
@@ -136,9 +152,25 @@ public sealed class SoftwareSettingsPage : UserControl
             Foreground = FindBrush("Brush.Text")
         });
         AddAccentSwatch(accentRow, AccentDefault, "默认");
-        AddAccentSwatch(accentRow, ArgbOf(56, 200, 240), "青");
-        AddAccentSwatch(accentRow, ArgbOf(224, 92, 140), "玫红");
-        AddAccentSwatch(accentRow, ArgbOf(74, 222, 128), "翠绿");
+        foreach (var (name, argb) in PresetAccents)
+        {
+            AddAccentSwatch(accentRow, argb, name);
+        }
+
+        // 自定义：点击打开取色器（与灯效/音乐页同一套），任选任意颜色
+        _customSwatch = new Button
+        {
+            Width = 34,
+            Height = 26,
+            Style = (Style)Application.Current.Resources["UiButton"],
+            Margin = new Thickness(0, 0, 10, 0),
+            Content = "＋",
+            FontSize = 13,
+            ToolTip = "自定义颜色..."
+        };
+        _customSwatch.Click += (_, _) => OpenCustomAccentPicker();
+        accentRow.Children.Add(_customSwatch);
+
         _followKeyboard.Margin = new Thickness(2, 0, 10, 0);
         accentRow.Children.Add(_followKeyboard);
 
@@ -212,7 +244,7 @@ public sealed class SoftwareSettingsPage : UserControl
         try
         {
             var defaultAccent = WpfThemeManager.DefaultAccent;
-            foreach (var (swatch, accentArgb) in _accentSwatches)
+            foreach (var (swatch, accentArgb, _) in _accentSwatches)
             {
                 var baseColor = accentArgb == AccentDefault ? defaultAccent : Color.FromArgb(255, (byte)((accentArgb >> 16) & 0xFF), (byte)((accentArgb >> 8) & 0xFF), (byte)(accentArgb & 0xFF));
                 swatch.Background = new SolidColorBrush(baseColor);
@@ -220,11 +252,31 @@ public sealed class SoftwareSettingsPage : UserControl
                 swatch.BorderBrush = FindBrush(selected ? "Brush.Primary" : "Brush.Border");
                 swatch.BorderThickness = new Thickness(selected ? 2 : 1);
             }
+            if (_customSwatch is not null)
+            {
+                var customActive = _accentMode != AccentDefault && _accentMode != AccentFollowKeyboard &&
+                    PresetAccents.All(preset => preset.Argb != _accentMode);
+                if (customActive)
+                {
+                    _customSwatch.Content = "";
+                    _customSwatch.Background = new SolidColorBrush(Color.FromArgb(
+                        0xFF, (byte)((_accentMode >> 16) & 0xFF), (byte)((_accentMode >> 8) & 0xFF), (byte)(_accentMode & 0xFF)));
+                    _customSwatch.BorderBrush = FindBrush("Brush.Primary");
+                }
+                else
+                {
+                    _customSwatch.Content = "＋";
+                    _customSwatch.Background = FindBrush("Brush.Field");
+                    _customSwatch.BorderBrush = FindBrush("Brush.Border");
+                }
+            }
+            var presetName = PresetAccents.FirstOrDefault(p => p.Argb == _accentMode).Name;
             _accentSummary.Text = $"当前强调色：{_accentMode switch
             {
                 AccentDefault => "默认",
                 AccentFollowKeyboard => "跟随键盘灯色",
-                _ => $"#{_accentMode & 0xFFFFFF:X6}"
+                _ when presetName is not null => presetName,
+                _ => $"#{_accentMode & 0xFFFFFF:X6}（自定义）"
             }}";
         }
         finally
@@ -245,8 +297,36 @@ public sealed class SoftwareSettingsPage : UserControl
             Tag = name
         };
         swatch.Click += (_, _) => SelectAccent(accentArgb);
-        _accentSwatches.Add((swatch, accentArgb));
+        _accentSwatches.Add((swatch, accentArgb, name));
         row.Children.Add(swatch);
+    }
+
+    /// <summary>自定义强调色：复用全局取色器，单选模式。</summary>
+    private void OpenCustomAccentPicker()
+    {
+        string initial;
+        if (_accentMode is AccentDefault or AccentFollowKeyboard ||
+            PresetAccents.Any(preset => preset.Argb == _accentMode))
+        {
+            var d = WpfThemeManager.DefaultAccent;
+            initial = $"#{d.R:X2}{d.G:X2}{d.B:X2}";
+        }
+        else
+        {
+            initial = $"#{_accentMode & 0xFFFFFF:X6}";
+        }
+
+        var dialog = new Dialogs.ColorSelectionDialog(new List<string> { initial }, singleSelection: true)
+        {
+            Owner = Window.GetWindow(this)
+        };
+        if (dialog.ShowDialog() != true) return;
+        var hex = dialog.SelectedColors.FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(hex)) return;
+        if (Controls.UiColorPickerRow.TryParse(hex, out var rgb))
+        {
+            SelectAccent(ArgbOf(rgb.R, rgb.G, rgb.B));
+        }
     }
 
     // ---- 更新检查（WinForms ApplyUpdateAvailability/CheckForUpdatesNowAsync 移植件）----
