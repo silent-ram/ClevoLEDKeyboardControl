@@ -26,6 +26,10 @@ public sealed class ColorSelectionDialog : Window
         public RgbColor InstallDefault { get; }
         public RgbColor Current { get; set; }
         public bool Checked { get; set; }
+
+        // Background 只接受 Brush，Color 结构直接绑定会静默失败（格子显示为空）
+        public SolidColorBrush CurrentBrush =>
+            new(Color.FromRgb(Current.R, Current.G, Current.B));
     }
 
     private readonly bool _singleSelection;
@@ -64,6 +68,7 @@ public sealed class ColorSelectionDialog : Window
         FontFamily = (FontFamily)Application.Current.Resources["Font.Body"];
         FontSize = 12;
         Foreground = (Brush)Application.Current.Resources["Brush.Text"];
+        SourceInitialized += (_, _) => WpfThemeManager.ApplyTitleBarMode(this);
 
         var grid = new Grid { Margin = new Thickness(18) };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(330) });
@@ -129,7 +134,11 @@ public sealed class ColorSelectionDialog : Window
 
     private static Style ButtonStyle() => (Style)Application.Current.Resources["UiButton"];
 
-    private static System.Windows.Controls.TextBox SmallBox() => new() { Width = 62 };
+    private static System.Windows.Controls.TextBox SmallBox() => new()
+    {
+        Width = 62,
+        Style = (Style)Application.Current.Resources["UiTextBox"]
+    };
 
     private ItemsPanelTemplate ItemsPanel()
     {
@@ -153,7 +162,7 @@ public sealed class ColorSelectionDialog : Window
         swatch.SetValue(Border.CornerRadiusProperty, new CornerRadius(4));
         swatch.SetValue(Border.BorderBrushProperty, (Brush)Application.Current.Resources["Brush.Border"]);
         swatch.SetValue(Border.BorderThicknessProperty, new Thickness(1));
-        swatch.SetBinding(Border.BackgroundProperty, new Binding("Current"));
+        swatch.SetBinding(Border.BackgroundProperty, new Binding("CurrentBrush"));
         swatch.SetValue(Grid.RowProperty, 0);
         swatch.AddHandler(Border.MouseDownEvent,
             new MouseButtonEventHandler((sender, _) => SelectChoice((ColorChoiceVm)((FrameworkElement)sender).DataContext)));
@@ -340,11 +349,13 @@ public sealed class ColorSelectionDialog : Window
 
     private void OnChoiceCheckedChanged(ColorChoiceVm choice)
     {
+        // 注意：这里绝不能 Items.Refresh()——容器生成阶段绑定推值就会触发本事件，
+        // Refresh 会重生成容器再触发事件，无限循环挂死 UI 线程。
+        // 互斥通过改 VM 属性完成，双向绑定自动更新其余复选框的显示。
         if (_singleSelection && choice.Checked)
         {
             foreach (var item in _choices.Where(item => item != choice)) item.Checked = false;
         }
-        _grid.Items.Refresh();
     }
 
     private static (double Hue, double Saturation, double Value) ToHsv(RgbColor color)

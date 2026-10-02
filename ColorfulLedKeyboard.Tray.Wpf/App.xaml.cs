@@ -115,6 +115,20 @@ public partial class App : Application
                 picker.Close();
             }
 
+            // 取色器弹窗验收：验证构造不再挂死 + 深色渲染
+            if (_startupArgs.Contains("--colordialog"))
+            {
+                var colorDialog = new Dialogs.ColorSelectionDialog(
+                    new List<string> { "#FF0000", "#00FF00", "#0000FF" }, singleSelection: false)
+                { Owner = window };
+                colorDialog.Show();
+                DoEvents();
+                Thread.Sleep(300);
+                DoEvents();
+                Capture(colorDialog, Path.Combine(directory, "colordialog.png"));
+                colorDialog.Close();
+            }
+
             if (ExtractValue(_startupArgs, "--switch-theme") is { } switchArg &&
                 Enum.TryParse<UiThemeKind>(switchArg, ignoreCase: true, out var targetKind))
             {
