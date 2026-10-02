@@ -33,6 +33,7 @@ public partial class MainWindow : Window
     private readonly List<Control> _pages = [];
     private const string BaseTitle = "ClevoLEDKeyboardControl 设置";
     private EffectPage? _effectPage;
+    private MusicPage? _musicPage;
     private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private AudioSourceStatusInfo? _lastAudioStatus;
     private bool _ready;
@@ -81,13 +82,18 @@ public partial class MainWindow : Window
     public void UpdateAudioSourceLabel(AudioSourceStatusInfo? info)
     {
         _lastAudioStatus = info;
-        Dispatcher.BeginInvoke(UpdateStatusHeader);
+        Dispatcher.BeginInvoke(() =>
+        {
+            _musicPage?.UpdateAudioSourceLabel(info);
+            UpdateStatusHeader();
+        });
     }
 
     /// <summary>托盘侧设置变更后回推；Phase 0 仅刷新状态头。</summary>
     public void ReloadFromStore() => Dispatcher.BeginInvoke(() =>
     {
         _effectPage?.LoadFromStore(new SettingsStore().Load());
+        _musicPage?.LoadFromStore(new SettingsStore().Load());
         UpdateStatusHeader();
         UpdateSaveBar();
     });
@@ -117,7 +123,14 @@ public partial class MainWindow : Window
         _effectPage = effectPage;
         _pages.Add(effectPage);
         effectPage.LoadFromStore(new SettingsStore().Load());
-        _pages.Add(new PlaceholderPage("音乐模式"));
+
+        var musicPage = new MusicPage();
+        musicPage.Changed += (_, _) => UpdateSaveBar();
+        musicPage.MusicPresetStateChanged += (_, _) => UpdateSaveBar();
+        _musicPage = musicPage;
+        _pages.Add(musicPage);
+        musicPage.LoadFromStore(new SettingsStore().Load());
+        musicPage.SetAdvancedExpanded(_initialUiState.MusicAdvancedExpanded);
         _pages.Add(new PlaceholderPage("场景自动化"));
         _pages.Add(new PlaceholderPage("事件反馈"));
         _pages.Add(new PlaceholderPage("诊断与恢复"));
@@ -161,13 +174,14 @@ public partial class MainWindow : Window
     private void RevertChanges()
     {
         _effectPage?.LoadFromStore(new SettingsStore().Load());
+        _musicPage?.LoadFromStore(new SettingsStore().Load());
         UpdateStatusHeader();
         UpdateSaveBar();
     }
 
     private void UpdateSaveBar()
     {
-        var dirty = _effectPage is { IsDirty: true };
+        var dirty = _effectPage is { IsDirty: true } || _musicPage is { IsDirty: true };
         DirtyLabel.Text = dirty ? "● 有尚未保存的修改" : "✓ 设置已保存";
         DirtyLabel.Foreground = (Brush)Application.Current.Resources[dirty ? "Brush.Warning" : "Brush.Success"];
         RevertButton.IsEnabled = dirty;
@@ -179,6 +193,8 @@ public partial class MainWindow : Window
 
     private void UpdateStatusHeader()
     {
+        var automationStatus = AutomationStatus.Load();
+        _musicPage?.RefreshRuntimeStatus(automationStatus);
         var serviceStatus = GetServiceStatusText();
         var driverStatus = GetDriverStatusText();
         var serviceReady = serviceStatus == "运行中";
@@ -338,6 +354,7 @@ public partial class MainWindow : Window
             state.WindowWidth = (int)ActualWidth;
             state.WindowHeight = (int)ActualHeight;
             state.LastPage = _lastPage;
+            state.MusicAdvancedExpanded = _musicPage?.IsAdvancedExpanded ?? false;
         });
     }
 
