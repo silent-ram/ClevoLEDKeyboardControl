@@ -10,7 +10,7 @@
     <SolidColorBrush x:Key="Brush.Border" Color="#D8DDE7" />
     <SolidColorBrush x:Key="Brush.Text" Color="#1B2233" />
     <SolidColorBrush x:Key="Brush.MutedText" Color="#5D6779" />
-    <SolidColorBrush x:Key="Brush.Primary" Color="#1E8FC4" />
+    <SolidColorBrush x:Key="Brush.Primary" Color="#0080FF" />
     <SolidColorBrush x:Key="Brush.Secondary" Color="#17739F" />
     <SolidColorBrush x:Key="Brush.PrimarySoft" Color="#DCF0FA" />
     <SolidColorBrush x:Key="Brush.Hover" Color="#E9ECF3" />

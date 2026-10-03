@@ -48,6 +48,13 @@ public sealed class SoftwareSettingsPage : UserControl
     private int _accentMode = AccentDefault;
     private readonly UiStateStore _uiStateStore = UiStateStore.Shared;
     private bool _updatingAppearance;
+    private readonly List<Border> _closeBadges = [];
+
+    /// <summary>截图验收专用：强制显示所有色块 ✕ 徽标（模拟悬停态）。</summary>
+    public void ShowSwatchCloseBadgesForCapture()
+    {
+        foreach (var badge in _closeBadges) badge.Visibility = Visibility.Visible;
+    }
 
     private readonly System.Windows.Controls.ComboBox _updateInterval = MakeCombo(["从不", "每天", "每周", "每月"]);
     private readonly TextBlock _updateAvailable = new()
@@ -314,12 +321,15 @@ public sealed class SoftwareSettingsPage : UserControl
         {
             Width = 34,
             Height = 26,
+            // 样式自带 Padding=12,5 会在 26px 高的按钮里把 ＋ 字形裁掉，归零后靠 ContentPresenter 居中
+            Padding = new Thickness(0),
             Margin = new Thickness(0, 0, 10, 0),
             Content = "＋",
-            FontSize = 13,
+            FontSize = 15,
             ToolTip = "自定义颜色..."
         };
         add.SetResourceReference(StyleProperty, "UiButton");
+        add.SetResourceReference(Control.ForegroundProperty, "Brush.Text");
         add.Click += (_, _) => OpenCustomAccentPicker();
         accentRow.Children.Add(add);
         return accentRow;
@@ -361,19 +371,35 @@ public sealed class SoftwareSettingsPage : UserControl
 
         if (deletable)
         {
-            var close = new TextBlock
+            // ✕ 徽标：圆底 + 描边 + 主题前景，任何色块/主题下都有对比度
+            //（曾因直接继承默认前景色，深色主题下黑 ✕ 不可见）
+            var closeText = new TextBlock
             {
                 Text = "✕",
-                FontSize = 9,
+                FontSize = 8,
                 FontWeight = FontWeights.Bold,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            closeText.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
+            var close = new Border
+            {
+                Width = 14,
+                Height = 14,
+                CornerRadius = new CornerRadius(7),
+                BorderThickness = new Thickness(1),
                 HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(0, -5, -3, 0),
+                Margin = new Thickness(0, -6, -5, 0),
                 Cursor = System.Windows.Input.Cursors.Hand,
-                Visibility = Visibility.Hidden
+                Visibility = Visibility.Hidden,
+                Child = closeText
             };
+            close.SetResourceReference(Border.BackgroundProperty, "Brush.Window");
+            close.SetResourceReference(Border.BorderBrushProperty, "Brush.Border");
             close.MouseLeftButtonDown += (_, _) => delete();
             container.Children.Add(close);
+            _closeBadges.Add(close);
             container.MouseEnter += (_, _) => close.Visibility = Visibility.Visible;
             container.MouseLeave += (_, _) => close.Visibility = Visibility.Hidden;
             container.ToolTip = $"{name}（悬停右上角 ✕ 删除）";
