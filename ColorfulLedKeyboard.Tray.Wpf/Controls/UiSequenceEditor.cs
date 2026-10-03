@@ -9,14 +9,7 @@ namespace ColorfulLedKeyboard.Tray.Wpf.Controls;
 /// <summary>循环颜色列表：色块 + HEX 行 + 删除/上移/下移/随机排序（对应 WinForms SequenceEditor）。</summary>
 public sealed class UiSequenceEditor : UserControl
 {
-    private readonly ListBox _list = new()
-    {
-        MinHeight = 96,
-        MaxHeight = 168,
-        Background = (Brush)Application.Current.Resources["Brush.Field"],
-        BorderBrush = (Brush)Application.Current.Resources["Brush.Border"],
-        BorderThickness = new Thickness(1)
-    };
+    private readonly ListBox _list;
     private readonly StackPanel _buttonColumn;
     private bool _suppressEvents;
 
@@ -24,6 +17,15 @@ public sealed class UiSequenceEditor : UserControl
 
     public UiSequenceEditor()
     {
+        _list = new ListBox
+        {
+            MinHeight = 96,
+            MaxHeight = 168,
+            BorderThickness = new Thickness(1)
+        };
+        _list.SetResourceReference(BackgroundProperty, "Brush.Field");
+        _list.SetResourceReference(BorderBrushProperty, "Brush.Border");
+
         var root = new Grid();
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -31,12 +33,12 @@ public sealed class UiSequenceEditor : UserControl
         _list.ItemTemplate = ColorRowTemplate();
         var itemStyle = new Style(typeof(ListBoxItem));
         itemStyle.Setters.Add(new Setter(PaddingProperty, new Thickness(8, 5, 8, 5)));
-        itemStyle.Setters.Add(new Setter(ForegroundProperty, (Brush)Application.Current.Resources["Brush.Text"]));
+        itemStyle.Setters.Add(new Setter(ForegroundProperty, new DynamicResourceExtension("Brush.Text")));
         var selectedTrigger = new Trigger { Property = ListBoxItem.IsSelectedProperty, Value = true };
-        selectedTrigger.Setters.Add(new Setter(BackgroundProperty, (Brush)Application.Current.Resources["Brush.PrimarySoft"]));
+        selectedTrigger.Setters.Add(new Setter(BackgroundProperty, new DynamicResourceExtension("Brush.PrimarySoft")));
         itemStyle.Triggers.Add(selectedTrigger);
         var hoverTrigger = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
-        hoverTrigger.Setters.Add(new Setter(BackgroundProperty, (Brush)Application.Current.Resources["Brush.Hover"]));
+        hoverTrigger.Setters.Add(new Setter(BackgroundProperty, new DynamicResourceExtension("Brush.Hover")));
         itemStyle.Triggers.Add(hoverTrigger);
         _list.ItemContainerStyle = itemStyle;
         root.Children.Add(_list);
@@ -84,7 +86,7 @@ public sealed class UiSequenceEditor : UserControl
         swatch.SetValue(Border.WidthProperty, 22.0);
         swatch.SetValue(Border.HeightProperty, 16.0);
         swatch.SetValue(Border.CornerRadiusProperty, new CornerRadius(3));
-        swatch.SetValue(Border.BorderBrushProperty, (Brush)Application.Current.Resources["Brush.Border"]);
+        swatch.SetValue(Border.BorderBrushProperty, new DynamicResourceExtension("Brush.Border"));
         swatch.SetValue(Border.BorderThicknessProperty, new Thickness(1));
         swatch.SetBinding(Border.BackgroundProperty, new Binding("."));
         factory.AppendChild(swatch);
@@ -104,10 +106,10 @@ public sealed class UiSequenceEditor : UserControl
         var button = new Button
         {
             Content = label,
-            Style = (Style)Application.Current.Resources["UiButton"],
             MinWidth = 96,
             Margin = new Thickness(0, 0, 0, 8)
         };
+        button.SetResourceReference(StyleProperty, "UiButton");
         button.Click += (_, _) => onClick();
         _buttonColumn.Children.Add(button);
     }

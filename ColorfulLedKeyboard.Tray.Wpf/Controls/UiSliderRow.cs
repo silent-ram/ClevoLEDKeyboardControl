@@ -18,7 +18,7 @@ public sealed class UiSliderRow : UserControl
     public UiSliderRow(string labelText, int min, int max, string suffix)
     {
         _suffix = suffix;
-        Foreground = (Brush)Application.Current.Resources["Brush.Text"];
+        SetResourceReference(Control.ForegroundProperty, "Brush.Text");
         _label = new TextBlock { Text = labelText, VerticalAlignment = VerticalAlignment.Center };
         _valueText = new TextBlock { VerticalAlignment = VerticalAlignment.Center, MinWidth = 64 };
         _slider = new Slider

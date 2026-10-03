@@ -12,9 +12,6 @@ public partial class AboutPage : UserControl
     private const string IssuesUrl = "https://github.com/silent-ram/ClevoLEDKeyboardControl/issues";
     private const string LicenseUrl = RepositoryUrl + "/blob/main/LICENSE";
 
-    /// <summary>“检查更新”点击；由宿主（设置窗口/托盘关于窗口）接入统一更新检查。</summary>
-    public event Action? CheckForUpdatesRequested;
-
     public AboutPage()
     {
         InitializeComponent();
@@ -40,8 +37,6 @@ public partial class AboutPage : UserControl
         }
         return Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
     }
-
-    private void CheckForUpdates(object sender, RoutedEventArgs e) => CheckForUpdatesRequested?.Invoke();
 
     private void OpenRepository(object sender, RoutedEventArgs e) => OpenUrl(RepositoryUrl);
 

@@ -27,7 +27,6 @@ public sealed class MusicPage : UserControl
         Text = "封面来源依赖服务端的专辑封面采集；未获取到封面时回退音乐预设颜色。",
         TextWrapping = TextWrapping.Wrap,
         MaxWidth = 430,
-        Foreground = FindBrush("Brush.Warning"),
         FontSize = 11.5,
         VerticalAlignment = VerticalAlignment.Center
     };
@@ -85,6 +84,7 @@ public sealed class MusicPage : UserControl
 
     public MusicPage()
     {
+        _coverColorHint.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Warning");
         _bindingColorSource.SelectedIndex = 0;
         _bindingColorSource.SelectionChanged += (_, _) =>
         {
@@ -186,11 +186,11 @@ public sealed class MusicPage : UserControl
 
         var scroll = new ScrollViewer
         {
-            Style = (Style)Application.Current.Resources["DarkScrollViewer"],
             Content = stack,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
         };
+        scroll.SetResourceReference(StyleProperty, "DarkScrollViewer");
         Content = scroll;
 
         SetupComboDefaults();
@@ -355,7 +355,7 @@ public sealed class MusicPage : UserControl
         {
             _musicBindingStatus.Text = "未绑定：音乐模式使用系统混音和音乐预设颜色。";
             _mediaMatchStatus.Text = "媒体会话：未启用播放器绑定。";
-            _mediaMatchStatus.Foreground = FindBrush("Brush.MutedText");
+            _mediaMatchStatus.SetResourceReference(TextBlock.ForegroundProperty, "Brush.MutedText");
             _palettePreview.Colors = _sequence.Colors;
             _currentColorStatus.Text = "当前使用音乐预设配色。";
             _clearPlayer.IsEnabled = false;
@@ -384,14 +384,14 @@ public sealed class MusicPage : UserControl
         if (source == MusicColorSource.Preset)
         {
             _mediaMatchStatus.Text = "媒体会话：颜色来源为音乐预设，封面匹配暂不参与输出。";
-            _mediaMatchStatus.Foreground = FindBrush("Brush.MutedText");
+            _mediaMatchStatus.SetResourceReference(TextBlock.ForegroundProperty, "Brush.MutedText");
         }
         else if (playback is not null)
         {
             var mode = string.IsNullOrWhiteSpace(_musicPlayerBinding.MediaSessionId) ? "自动匹配成功" : "手动匹配成功";
             var cover = playback.Palette.Count > 0 ? $"已获取封面（{playback.Palette.Count} 色）" : "未获取封面，正在使用预设颜色";
             _mediaMatchStatus.Text = $"媒体会话：{mode} → {playback.SourceId}；{(playback.IsPlaying ? "正在播放" : "切歌/暂停过渡")}；{cover}";
-            _mediaMatchStatus.Foreground = FindBrush(playback.Palette.Count > 0 ? "Brush.Success" : "Brush.Warning");
+            _mediaMatchStatus.SetResourceReference(TextBlock.ForegroundProperty, playback.Palette.Count > 0 ? "Brush.Success" : "Brush.Warning");
         }
         else
         {
@@ -410,7 +410,7 @@ public sealed class MusicPage : UserControl
                         : $"媒体会话：{_musicPlayerBinding.ProcessName} 未提供可识别的 Windows 媒体会话。" +
                           (otherPlayers.Count == 0 ? "" : $"检测到的 {string.Join("、", otherPlayers)} 属于其他播放器，不会使用。")
                     : $"媒体会话：选择的会话当前不可用；当前可用：{string.Join("、", candidates)}。";
-            _mediaMatchStatus.Foreground = FindBrush("Brush.Error");
+            _mediaMatchStatus.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Error");
         }
         _currentColorStatus.Text = playback is null
             ? $"当前使用预设颜色：{string.Join("  ", colors)}"
@@ -750,7 +750,7 @@ public sealed class MusicPage : UserControl
             : _musicPresetChangesStaged
                 ? "预设修改已暂存，点击底部“保存并应用”后生效。"
                 : "";
-        _presetSaveHint.Foreground = FindBrush(_musicPresetChanged ? "Brush.Warning" : "Brush.Success");
+        _presetSaveHint.SetResourceReference(TextBlock.ForegroundProperty, _musicPresetChanged ? "Brush.Warning" : "Brush.Success");
         _presetSaveHintHost.Visibility = string.IsNullOrWhiteSpace(_presetSaveHint.Text)
             ? Visibility.Collapsed : Visibility.Visible;
         UpdateMusicPresetButtons();
@@ -819,16 +819,19 @@ public sealed class MusicPage : UserControl
     private static Border MakeCard(string title, params UIElement[] children)
     {
         var stack = new StackPanel();
-        stack.Children.Add(new TextBlock
+        var heading = new TextBlock
         {
             Text = title,
             FontSize = 13,
             FontWeight = FontWeights.Bold,
-            Foreground = FindBrush("Brush.Text"),
             Margin = new Thickness(0, 0, 0, 8)
-        });
+        };
+        heading.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
+        stack.Children.Add(heading);
         foreach (var child in children) stack.Children.Add(child);
-        return new Border { Style = (Style)Application.Current.Resources["UiCard"], Child = stack };
+        var card = new Border { Child = stack };
+        card.SetResourceReference(StyleProperty, "UiCard");
+        return card;
     }
 
     private static UIElement Row(string label, FrameworkElement control)
@@ -836,12 +839,13 @@ public sealed class MusicPage : UserControl
         var grid = new Grid { MinHeight = 40, MaxWidth = UiMetrics.ContentWidth };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(130) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.Children.Add(new TextBlock
+        var labelBlock = new TextBlock
         {
             Text = label,
-            VerticalAlignment = VerticalAlignment.Center,
-            Foreground = FindBrush("Brush.Text")
-        });
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        labelBlock.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
+        grid.Children.Add(labelBlock);
         control.VerticalAlignment = VerticalAlignment.Center;
         control.HorizontalAlignment = HorizontalAlignment.Left;
         Grid.SetColumn(control, 1);
@@ -897,52 +901,62 @@ public sealed class MusicPage : UserControl
         return panel;
     }
 
-    private static TextBlock Section(string text) => new()
+    private static TextBlock Section(string text)
     {
-        Text = text,
-        FontWeight = FontWeights.Bold,
-        Margin = new Thickness(0, 6, 0, 2),
-        Foreground = FindBrush("Brush.Text")
-    };
+        var block = new TextBlock
+        {
+            Text = text,
+            FontWeight = FontWeights.Bold,
+            Margin = new Thickness(0, 6, 0, 2)
+        };
+        block.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
+        return block;
+    }
 
-    private static TextBlock MakeMutedLabel(string text) => new()
+    private static TextBlock MakeMutedLabel(string text)
     {
-        Text = text,
-        TextWrapping = TextWrapping.Wrap,
-        Foreground = FindBrush("Brush.MutedText"),
-        Margin = new Thickness(0, 2, 0, 2)
-    };
+        var block = new TextBlock
+        {
+            Text = text,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 2, 0, 2)
+        };
+        block.SetResourceReference(TextBlock.ForegroundProperty, "Brush.MutedText");
+        return block;
+    }
 
-    private static System.Windows.Controls.CheckBox MakeCheckBox(string text) => new()
+    private static System.Windows.Controls.CheckBox MakeCheckBox(string text)
     {
-        Content = text,
-        Style = (Style)Application.Current.Resources["UiCheckBox"]
-    };
+        var check = new System.Windows.Controls.CheckBox { Content = text };
+        check.SetResourceReference(StyleProperty, "UiCheckBox");
+        return check;
+    }
 
     private static System.Windows.Controls.ComboBox MakeCombo(IEnumerable<string> items)
     {
         var combo = new System.Windows.Controls.ComboBox
         {
-            Style = (Style)Application.Current.Resources["UiComboBox"],
             Width = 280,
             HorizontalAlignment = HorizontalAlignment.Left
         };
+        combo.SetResourceReference(StyleProperty, "UiComboBox");
         foreach (var item in items) combo.Items.Add(item);
         return combo;
     }
 
-    private static System.Windows.Controls.TextBox MakeTextBox(double width) => new()
+    private static System.Windows.Controls.TextBox MakeTextBox(double width)
     {
-        Style = (Style)Application.Current.Resources["UiTextBox"],
-        Width = width
-    };
+        var box = new System.Windows.Controls.TextBox { Width = width };
+        box.SetResourceReference(StyleProperty, "UiTextBox");
+        return box;
+    }
 
-    private static Button MakeButton(string text, double minWidth = 112) => new()
+    private static Button MakeButton(string text, double minWidth = 112)
     {
-        Content = text,
-        Style = (Style)Application.Current.Resources["UiButton"],
-        MinWidth = minWidth
-    };
+        var button = new Button { Content = text, MinWidth = minWidth };
+        button.SetResourceReference(StyleProperty, "UiButton");
+        return button;
+    }
 
     private static void SetupCombo(System.Windows.Controls.ComboBox combo, IEnumerable<string> values)
     {

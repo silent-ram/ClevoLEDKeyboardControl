@@ -191,6 +191,21 @@ public partial class App : Application
                 Dialogs.UpdateStatusDialog.ShowUpToDate("3.5.0");
                 DoEvents();
             }
+
+            // 脏状态下主题热切换验收：等价于用户“有未应用的更改时切换深浅主题”的真实场景。
+            // 此时 OnThemeChanged 因脏守卫跳过整页重建，页面颜色必须靠动态资源引用原地刷新。
+            if (_startupArgs.Contains("--dirty-theme-switch"))
+            {
+                window.MarkDirtyForCapture();
+                WpfThemeManager.SetTheme(UiThemeKind.Technology);
+                DoEvents();
+                foreach (var index in new[] { 5, 3, 1 })
+                {
+                    window.SelectPage(index);
+                    DoEvents();
+                    Capture(window, Path.Combine(directory, $"dirty-switch-page{index}.png"));
+                }
+            }
             Shutdown();
         });
     }

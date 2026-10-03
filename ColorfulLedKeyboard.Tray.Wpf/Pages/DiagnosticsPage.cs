@@ -36,13 +36,14 @@ public sealed class DiagnosticsPage : UserControl
             Row("配置目录", MakeDiagnosticBox("配置目录"))));
         stack.Children.Add(MakeCard("配置恢复", PlainRow(_restoreBackup)));
 
-        Content = new ScrollViewer
+        var scroll = new ScrollViewer
         {
-            Style = (Style)Application.Current.Resources["DarkScrollViewer"],
             Content = stack,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
         };
+        scroll.SetResourceReference(StyleProperty, "DarkScrollViewer");
+        Content = scroll;
         Loaded += (_, _) => CollectAll();
     }
 
@@ -50,11 +51,11 @@ public sealed class DiagnosticsPage : UserControl
     {
         var box = new System.Windows.Controls.TextBox
         {
-            Style = (Style)Application.Current.Resources["UiTextBox"],
             IsReadOnly = true,
-            MinWidth = 500,
-            Background = (Brush)Application.Current.Resources["Brush.Window"]
+            MinWidth = 500
         };
+        box.SetResourceReference(StyleProperty, "UiTextBox");
+        box.SetResourceReference(TextBox.BackgroundProperty, "Brush.Window");
         _fields[key] = box;
         return box;
     }
@@ -218,16 +219,19 @@ public sealed class DiagnosticsPage : UserControl
     private static Border MakeCard(string title, params UIElement[] children)
     {
         var stack = new StackPanel();
-        stack.Children.Add(new TextBlock
+        var heading = new TextBlock
         {
             Text = title,
             FontSize = 13,
             FontWeight = FontWeights.Bold,
-            Foreground = (Brush)Application.Current.Resources["Brush.Text"],
             Margin = new Thickness(0, 0, 0, 8)
-        });
+        };
+        heading.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
+        stack.Children.Add(heading);
         foreach (var child in children) stack.Children.Add(child);
-        return new Border { Style = (Style)Application.Current.Resources["UiCard"], Child = stack };
+        var card = new Border { Child = stack };
+        card.SetResourceReference(StyleProperty, "UiCard");
+        return card;
     }
 
     private static UIElement Row(string label, FrameworkElement control)
@@ -235,7 +239,9 @@ public sealed class DiagnosticsPage : UserControl
         var grid = new Grid { MinHeight = 40, MaxWidth = UiMetrics.ContentWidth };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(130) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)Application.Current.Resources["Brush.Text"] });
+        var labelBlock = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center };
+        labelBlock.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
+        grid.Children.Add(labelBlock);
         control.VerticalAlignment = VerticalAlignment.Center;
         Grid.SetColumn(control, 1);
         grid.Children.Add(control);
@@ -251,10 +257,10 @@ public sealed class DiagnosticsPage : UserControl
         return grid;
     }
 
-    private static Button MakeButton(string text, double minWidth = 112) => new()
+    private static Button MakeButton(string text, double minWidth = 112)
     {
-        Content = text,
-        Style = (Style)Application.Current.Resources["UiButton"],
-        MinWidth = minWidth
-    };
+        var button = new Button { Content = text, MinWidth = minWidth };
+        button.SetResourceReference(StyleProperty, "UiButton");
+        return button;
+    }
 }

@@ -9,11 +9,14 @@ namespace ColorfulLedKeyboard.Tray.Wpf.Pages;
 /// <summary>场景自动化页：运行状态、场景规则编辑器、空闲最终覆盖。</summary>
 public sealed class AutomationPage : UserControl
 {
-    private readonly TextBlock _statusText = new()
+    private readonly TextBlock _statusText = MakeStatusText();
+
+    private static TextBlock MakeStatusText()
     {
-        TextWrapping = TextWrapping.Wrap,
-        Foreground = (Brush)Application.Current.Resources["Brush.MutedText"]
-    };
+        var textBlock = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        textBlock.SetResourceReference(TextBlock.ForegroundProperty, "Brush.MutedText");
+        return textBlock;
+    }
     private readonly System.Windows.Controls.CheckBox _automationEnabled = MakeCheck("启用场景自动化");
     private readonly SceneAutomationEditor _editor = new();
     private readonly System.Windows.Controls.CheckBox _idleEnabled = MakeCheck("启用空闲降亮");
@@ -48,10 +51,10 @@ public sealed class AutomationPage : UserControl
         var priority = new TextBlock
         {
             Text = "有声音乐程序  →  前台灯效程序  →  时间计划  →  手动模式",
-            Foreground = (Brush)Application.Current.Resources["Brush.Primary"],
             FontWeight = FontWeights.Bold,
             Margin = new Thickness(0, 4, 0, 0)
         };
+        priority.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Primary");
         var simulatorRow = new Grid { MinHeight = 40, MaxWidth = UiMetrics.ContentWidth };
         _simulator.HorizontalAlignment = HorizontalAlignment.Left;
         simulatorRow.Children.Add(_simulator);
@@ -156,16 +159,19 @@ public sealed class AutomationPage : UserControl
     private static Border MakeCard(string title, params UIElement[] children)
     {
         var stack = new StackPanel();
-        stack.Children.Add(new TextBlock
+        var heading = new TextBlock
         {
             Text = title,
             FontSize = 13,
             FontWeight = FontWeights.Bold,
-            Foreground = (Brush)Application.Current.Resources["Brush.Text"],
             Margin = new Thickness(0, 0, 0, 8)
-        });
+        };
+        heading.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
+        stack.Children.Add(heading);
         foreach (var child in children) stack.Children.Add(child);
-        return new Border { Style = (Style)Application.Current.Resources["UiCard"], Child = stack };
+        var card = new Border { Child = stack };
+        card.SetResourceReference(StyleProperty, "UiCard");
+        return card;
     }
 
     private static UIElement Row(string label, FrameworkElement control)
@@ -173,7 +179,9 @@ public sealed class AutomationPage : UserControl
         var grid = new Grid { MinHeight = 40, MaxWidth = UiMetrics.ContentWidth };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(130) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)Application.Current.Resources["Brush.Text"] });
+        var labelBlock = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center };
+        labelBlock.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
+        grid.Children.Add(labelBlock);
         control.VerticalAlignment = VerticalAlignment.Center;
         Grid.SetColumn(control, 1);
         grid.Children.Add(control);
@@ -200,24 +208,25 @@ public sealed class AutomationPage : UserControl
     {
         var combo = new System.Windows.Controls.ComboBox
         {
-            Style = (Style)Application.Current.Resources["UiComboBox"],
             Width = 280,
             HorizontalAlignment = HorizontalAlignment.Left
         };
+        combo.SetResourceReference(StyleProperty, "UiComboBox");
         foreach (var item in items) combo.Items.Add(item);
         return combo;
     }
 
-    private static System.Windows.Controls.CheckBox MakeCheck(string text) => new()
+    private static System.Windows.Controls.CheckBox MakeCheck(string text)
     {
-        Content = text,
-        Style = (Style)Application.Current.Resources["UiCheckBox"]
-    };
+        var check = new System.Windows.Controls.CheckBox { Content = text };
+        check.SetResourceReference(StyleProperty, "UiCheckBox");
+        return check;
+    }
 
-    private static Button MakeButton(string text, double minWidth = 112) => new()
+    private static Button MakeButton(string text, double minWidth = 112)
     {
-        Content = text,
-        Style = (Style)Application.Current.Resources["UiButton"],
-        MinWidth = minWidth
-    };
+        var button = new Button { Content = text, MinWidth = minWidth };
+        button.SetResourceReference(StyleProperty, "UiButton");
+        return button;
+    }
 }

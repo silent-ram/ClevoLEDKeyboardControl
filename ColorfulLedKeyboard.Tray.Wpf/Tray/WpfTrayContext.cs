@@ -477,7 +477,6 @@ public sealed class WpfTrayContext : IDisposable
             _ = SyncUsageTelemetryAndScheduleAsync();
         };
         _settingsWindow.Closed += (_, _) => _settingsWindow = null;
-        _settingsWindow.AboutCheckUpdatesRequested += () => _ = CheckForUpdatesManuallyAsync();
         _settingsWindow.Show();
         _settingsWindow.ActivateWindow();
         _settingsWindow.RunUpdateCheck(CheckForUpdatesWhenSettingsOpenAsync);
@@ -512,9 +511,7 @@ public sealed class WpfTrayContext : IDisposable
         };
         window.SourceInitialized += (_, _) => WpfThemeManager.ApplyTitleBarMode(window);
         // 直接复用设置窗口的关于页：内容/按钮与设置窗口完全一致，避免两份实现漂移。
-        var page = new Pages.AboutPage();
-        page.CheckForUpdatesRequested += () => _ = CheckForUpdatesManuallyAsync();
-        window.Content = page;
+        window.Content = new Pages.AboutPage();
         _aboutWindow = window;
         window.Closed += (_, _) => _aboutWindow = null;
         window.Show();

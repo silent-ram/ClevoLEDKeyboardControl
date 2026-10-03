@@ -39,6 +39,7 @@ public class Worker : BackgroundService
     {
         _ipcServer.Start();
         EnsureConfigWatcher();
+        var audioStatusReconcile = ReconcileAudioStatusAsync(stoppingToken);
         await FlashStartupAsync(stoppingToken);
 
         while (!stoppingToken.IsCancellationRequested)
@@ -893,6 +894,50 @@ public class Worker : BackgroundService
         while (!stoppingToken.IsCancellationRequested && !_settingsChanged)
         {
             await Task.Delay(pollIntervalMs, stoppingToken);
+        }
+    }
+
+    /// <summary>
+    /// 音频源状态文件对账兜底（每 5 秒）。旧模型只在 SourceChanged 事件时写文件——
+    /// 漏掉一次事件（切设备瞬态解析失败、写入竞争、历史脏数据），文件就永远停在旧值，
+    /// 托盘会一直显示"检测中…"，只能靠重启服务恢复（77648d6、5282a54 两次同类修复
+    /// 都是在给"纯事件驱动写入"打补丁）。对账只在文件与提供方真实状态不一致时才重写，
+    /// 平时零写入、零事件，不增加稳态开销。
+    /// </summary>
+    private async Task ReconcileAudioStatusAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                var truth = new AudioSourceStatusInfo
+                {
+                    Status = _audioSource.Status,
+                    DeviceFriendlyName = _audioSource.DeviceFriendlyName,
+                    DeviceId = _audioSource.DeviceId,
+                    UpdatedAt = DateTimeOffset.UtcNow,
+                };
+                var onDisk = AudioSourceStatusFile.ReadFrom(AppPaths.AudioSourceStatusPath);
+                if (onDisk is null ||
+                    onDisk.Status != truth.Status ||
+                    onDisk.DeviceFriendlyName != truth.DeviceFriendlyName ||
+                    onDisk.DeviceId != truth.DeviceId)
+                {
+                    AudioSourceStatusFile.Write(truth);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Audio status reconcile failed");
+            }
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
         }
     }
 

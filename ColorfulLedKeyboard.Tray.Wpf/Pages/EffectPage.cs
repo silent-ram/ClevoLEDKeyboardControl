@@ -147,11 +147,11 @@ public sealed class EffectPage : UserControl
 
         var scroll = new ScrollViewer
         {
-            Style = (Style)Application.Current.Resources["DarkScrollViewer"],
             Content = stack,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
         };
+        scroll.SetResourceReference(StyleProperty, "DarkScrollViewer");
         Content = scroll;
 
         UpdateEffectConfigurationVisibility();
@@ -181,6 +181,13 @@ public sealed class EffectPage : UserControl
         UpdateBrightnessAvailability();
         UpdateCustomColorsButton();
         UpdateEffectConfigurationVisibility();
+    }
+
+    /// <summary>截图验收专用：制造脏状态，验收“有未保存修改时切主题”路径（此时不走整页重建）。</summary>
+    public void MarkDirtyForCapture()
+    {
+        _effectChangedByUser = true;
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>截图验收专用：临时强制音乐模式以验收折叠态布局宽度。</summary>
@@ -977,20 +984,19 @@ public sealed class EffectPage : UserControl
     private static Border MakeCard(string title, params UIElement[] children)
     {
         var stack = new StackPanel();
-        stack.Children.Add(new TextBlock
+        var heading = new TextBlock
         {
             Text = title,
             FontSize = 13,
             FontWeight = FontWeights.Bold,
-            Foreground = FindBrushStatic("Brush.Text"),
             Margin = new Thickness(0, 0, 0, 8)
-        });
-        foreach (var child in children) stack.Children.Add(child);
-        return new Border
-        {
-            Style = (Style)Application.Current.Resources["UiCard"],
-            Child = stack
         };
+        heading.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
+        stack.Children.Add(heading);
+        foreach (var child in children) stack.Children.Add(child);
+        var card = new Border { Child = stack };
+        card.SetResourceReference(StyleProperty, "UiCard");
+        return card;
     }
 
     private static UIElement Row(string label, FrameworkElement control)
@@ -999,12 +1005,13 @@ public sealed class EffectPage : UserControl
         var grid = new Grid { MinHeight = 40, MaxWidth = UiMetrics.ContentWidth };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(LabelWidth) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.Children.Add(new TextBlock
+        var labelBlock = new TextBlock
         {
             Text = label,
-            VerticalAlignment = VerticalAlignment.Center,
-            Foreground = FindBrushStatic("Brush.Text")
-        });
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        labelBlock.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
+        grid.Children.Add(labelBlock);
         control.VerticalAlignment = VerticalAlignment.Center;
         // 显式 Width 的控件（TextBox 等）在 Star 列默认居中，必须强制左对齐才能与下拉对齐
         control.HorizontalAlignment = HorizontalAlignment.Left;
@@ -1059,58 +1066,68 @@ public sealed class EffectPage : UserControl
         return control;
     }
 
-    private static TextBlock Section(string text) => new()
+    private static TextBlock Section(string text)
     {
-        Text = text,
-        FontWeight = FontWeights.Bold,
-        Margin = new Thickness(0, 6, 0, 2),
-        Foreground = FindBrushStatic("Brush.Text")
-    };
+        var block = new TextBlock
+        {
+            Text = text,
+            FontWeight = FontWeights.Bold,
+            Margin = new Thickness(0, 6, 0, 2)
+        };
+        block.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
+        return block;
+    }
 
-    private static TextBlock MakeHint() => new()
+    private static TextBlock MakeHint()
     {
-        TextWrapping = TextWrapping.Wrap,
-        Foreground = FindBrushStatic("Brush.MutedText"),
-        Margin = new Thickness(0, 4, 0, 0)
-    };
+        var block = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 4, 0, 0)
+        };
+        block.SetResourceReference(TextBlock.ForegroundProperty, "Brush.MutedText");
+        return block;
+    }
 
-    private static System.Windows.Controls.RadioButton MakeRadio(string text) => new()
+    private static System.Windows.Controls.RadioButton MakeRadio(string text)
     {
-        Content = text,
-        Style = (Style)Application.Current.Resources["UiRadioButton"],
-        GroupName = "OperatingMode"
-    };
+        var radio = new System.Windows.Controls.RadioButton { Content = text, GroupName = "OperatingMode" };
+        radio.SetResourceReference(StyleProperty, "UiRadioButton");
+        return radio;
+    }
 
-    private static System.Windows.Controls.CheckBox MakeCheckBox(string text) => new()
+    private static System.Windows.Controls.CheckBox MakeCheckBox(string text)
     {
-        Content = text,
-        Style = (Style)Application.Current.Resources["UiCheckBox"]
-    };
+        var check = new System.Windows.Controls.CheckBox { Content = text };
+        check.SetResourceReference(StyleProperty, "UiCheckBox");
+        return check;
+    }
 
     private static System.Windows.Controls.ComboBox MakeCombo(IEnumerable<string> items)
     {
         var combo = new System.Windows.Controls.ComboBox
         {
-            Style = (Style)Application.Current.Resources["UiComboBox"],
             Width = 280,
             HorizontalAlignment = HorizontalAlignment.Left
         };
+        combo.SetResourceReference(StyleProperty, "UiComboBox");
         foreach (var item in items) combo.Items.Add(item);
         return combo;
     }
 
-    private static System.Windows.Controls.TextBox MakeTextBox(double width) => new()
+    private static System.Windows.Controls.TextBox MakeTextBox(double width)
     {
-        Style = (Style)Application.Current.Resources["UiTextBox"],
-        Width = width
-    };
+        var box = new System.Windows.Controls.TextBox { Width = width };
+        box.SetResourceReference(StyleProperty, "UiTextBox");
+        return box;
+    }
 
-    private static Button MakeButton(string text, double minWidth = 112) => new()
+    private static Button MakeButton(string text, double minWidth = 112)
     {
-        Content = text,
-        Style = (Style)Application.Current.Resources["UiButton"],
-        MinWidth = minWidth
-    };
+        var button = new Button { Content = text, MinWidth = minWidth };
+        button.SetResourceReference(StyleProperty, "UiButton");
+        return button;
+    }
 
     private static Brush FindBrushStatic(string key) => (Brush)Application.Current.Resources[key];
 }

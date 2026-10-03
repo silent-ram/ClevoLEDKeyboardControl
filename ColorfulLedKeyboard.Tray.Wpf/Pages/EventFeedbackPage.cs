@@ -53,20 +53,22 @@ public sealed class EventFeedbackPage : UserControl
         var stack = new StackPanel { Margin = new Thickness(18, 18, 18, 28), MaxWidth = 832 };
         stack.Children.Add(MakeCard("敲字反馈", typingRows));
         stack.Children.Add(MakeCard("通知反馈", notificationRows));
-        stack.Children.Add(MakeCard("当前覆盖关系", new TextBlock
+        var overrideNote = new TextBlock
         {
             Text = "事件策略按“全局 → 音乐规则 → 前台灯效规则”覆盖；空闲关灯会抑制包括通知在内的全部输出。",
-            TextWrapping = TextWrapping.Wrap,
-            Foreground = (Brush)Application.Current.Resources["Brush.MutedText"]
-        }));
+            TextWrapping = TextWrapping.Wrap
+        };
+        overrideNote.SetResourceReference(TextBlock.ForegroundProperty, "Brush.MutedText");
+        stack.Children.Add(MakeCard("当前覆盖关系", overrideNote));
 
-        Content = new ScrollViewer
+        var scroll = new ScrollViewer
         {
-            Style = (Style)Application.Current.Resources["DarkScrollViewer"],
             Content = stack,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
         };
+        scroll.SetResourceReference(StyleProperty, "DarkScrollViewer");
+        Content = scroll;
         UpdateVisibility();
     }
 
@@ -133,16 +135,19 @@ public sealed class EventFeedbackPage : UserControl
     private static Border MakeCard(string title, params UIElement[] children)
     {
         var stack = new StackPanel();
-        stack.Children.Add(new TextBlock
+        var heading = new TextBlock
         {
             Text = title,
             FontSize = 13,
             FontWeight = FontWeights.Bold,
-            Foreground = (Brush)Application.Current.Resources["Brush.Text"],
             Margin = new Thickness(0, 0, 0, 8)
-        });
+        };
+        heading.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
+        stack.Children.Add(heading);
         foreach (var child in children) stack.Children.Add(child);
-        return new Border { Style = (Style)Application.Current.Resources["UiCard"], Child = stack };
+        var card = new Border { Child = stack };
+        card.SetResourceReference(StyleProperty, "UiCard");
+        return card;
     }
 
     private static UIElement RowHost(FrameworkElement control)
@@ -162,9 +167,10 @@ public sealed class EventFeedbackPage : UserControl
         return grid;
     }
 
-    private static System.Windows.Controls.CheckBox MakeCheck(string text) => new()
+    private static System.Windows.Controls.CheckBox MakeCheck(string text)
     {
-        Content = text,
-        Style = (Style)Application.Current.Resources["UiCheckBox"]
-    };
+        var check = new System.Windows.Controls.CheckBox { Content = text };
+        check.SetResourceReference(StyleProperty, "UiCheckBox");
+        return check;
+    }
 }

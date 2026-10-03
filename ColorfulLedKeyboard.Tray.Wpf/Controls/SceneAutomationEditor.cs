@@ -76,12 +76,13 @@ public sealed class SceneAutomationEditor : UserControl
             {
                 Child = header,
                 CornerRadius = new CornerRadius(6, 6, 0, 0),
-                Background = i == 0 ? FindBrush("Brush.Surface") : FindBrush("Brush.Window"),
-                BorderBrush = FindBrush("Brush.Border"),
                 BorderThickness = new Thickness(1, 1, 1, 0),
                 Margin = new Thickness(0, 0, 4, 0),
                 Cursor = System.Windows.Input.Cursors.Hand
             };
+            border.SetResourceReference(Border.BackgroundProperty, i == 0 ? "Brush.Surface" : "Brush.Window");
+            border.SetResourceReference(Border.BorderBrushProperty, "Brush.Border");
+            header.SetResourceReference(TextBlock.ForegroundProperty, i == 0 ? "Brush.Text" : "Brush.MutedText");
             border.MouseLeftButtonDown += (_, _) => SelectTab(index);
             _tabHeaders[i] = header;
             _tabBorders[i] = border;
@@ -90,12 +91,12 @@ public sealed class SceneAutomationEditor : UserControl
 
         var tabHost = new Border
         {
-            Background = FindBrush("Brush.Surface"),
-            BorderBrush = FindBrush("Brush.Border"),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(0, 8, 8, 8),
             Padding = new Thickness(10)
         };
+        tabHost.SetResourceReference(Border.BackgroundProperty, "Brush.Surface");
+        tabHost.SetResourceReference(Border.BorderBrushProperty, "Brush.Border");
         var tabPanel = new DockPanel();
         var buttons = new StackPanel
         {
@@ -147,8 +148,8 @@ public sealed class SceneAutomationEditor : UserControl
         _selectedTab = index;
         for (var i = 0; i < _tabBorders.Length; i++)
         {
-            _tabBorders[i].Background = FindBrush(i == index ? "Brush.Surface" : "Brush.Window");
-            _tabHeaders[i].Foreground = FindBrush(i == index ? "Brush.Text" : "Brush.MutedText");
+            _tabBorders[i].SetResourceReference(Border.BackgroundProperty, i == index ? "Brush.Surface" : "Brush.Window");
+            _tabHeaders[i].SetResourceReference(TextBlock.ForegroundProperty, i == index ? "Brush.Text" : "Brush.MutedText");
         }
         _tabContent.Content = _tabPages[index];
     }
@@ -159,7 +160,8 @@ public sealed class SceneAutomationEditor : UserControl
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
         void Add(string text, System.Action action)
         {
-            var button = new Button { Content = text, Style = (Style)Application.Current.Resources["UiButton"], MinWidth = 112, Margin = new Thickness(0, 0, 10, 0) };
+            var button = new Button { Content = text, MinWidth = 112, Margin = new Thickness(0, 0, 10, 0) };
+            button.SetResourceReference(StyleProperty, "UiButton");
             button.Click += (_, _) => action();
             buttons.Children.Add(button);
         }
@@ -401,7 +403,7 @@ public sealed class SceneAutomationEditor : UserControl
     {
         var template = new DataTemplate();
         var gridFactory = new FrameworkElementFactory(typeof(Grid));
-        gridFactory.SetValue(Grid.BackgroundProperty, FindBrush("Brush.Surface"));
+        gridFactory.SetResourceReference(Grid.BackgroundProperty, "Brush.Surface");
         gridFactory.SetValue(Grid.MarginProperty, new Thickness(0));
         gridFactory.AppendChild(new FrameworkElementFactory(typeof(RowDefinition)));
         gridFactory.AppendChild(new FrameworkElementFactory(typeof(RowDefinition)));
@@ -411,7 +413,7 @@ public sealed class SceneAutomationEditor : UserControl
         var title = new FrameworkElementFactory(typeof(TextBlock));
         title.SetBinding(TextBlock.TextProperty, new Binding("Title"));
         title.SetValue(FontWeightProperty, FontWeights.Bold);
-        title.SetValue(TextBlock.ForegroundProperty, FindBrush("Brush.Text"));
+        title.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
         title.SetValue(TextBlock.MarginProperty, new Thickness(16, 0, 0, 0));
         titleGrid.AppendChild(title);
         var stateText = new FrameworkElementFactory(typeof(TextBlock));
@@ -423,7 +425,7 @@ public sealed class SceneAutomationEditor : UserControl
         var detail = new FrameworkElementFactory(typeof(TextBlock));
         detail.SetValue(Grid.RowProperty, 1);
         detail.SetBinding(TextBlock.TextProperty, new Binding("Detail"));
-        detail.SetValue(TextBlock.ForegroundProperty, FindBrush("Brush.MutedText"));
+        detail.SetResourceReference(TextBlock.ForegroundProperty, "Brush.MutedText");
         detail.SetValue(TextBlock.MarginProperty, new Thickness(16, 0, 0, 0));
         detail.SetValue(TextBlock.TextTrimmingProperty, TextTrimming.CharacterEllipsis);
 
@@ -448,11 +450,11 @@ public sealed class SceneAutomationEditor : UserControl
         var style = new Style(typeof(ListBoxItem));
         style.Setters.Add(new Setter(PaddingProperty, new Thickness(0)));
         style.Setters.Add(new Setter(MarginProperty, new Thickness(0, 0, 0, 6)));
-        style.Setters.Add(new Setter(ForegroundProperty, FindBrush("Brush.Text")));
+        style.Setters.Add(new Setter(ForegroundProperty, new DynamicResourceExtension("Brush.Text")));
         style.Setters.Add(new Setter(BackgroundProperty, Brushes.Transparent));
         var selectedTrigger = new Trigger { Property = ListBoxItem.IsSelectedProperty, Value = true };
         selectedTrigger.Setters.Add(new Setter(BackgroundProperty, Brushes.Transparent));
-        selectedTrigger.Setters.Add(new Setter(BorderBrushProperty, FindBrush("Brush.Primary")));
+        selectedTrigger.Setters.Add(new Setter(BorderBrushProperty, new DynamicResourceExtension("Brush.Primary")));
         style.Triggers.Add(selectedTrigger);
         return style;
     }

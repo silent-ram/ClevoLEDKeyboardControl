@@ -52,7 +52,6 @@ public sealed class SoftwareSettingsPage : UserControl
     private readonly System.Windows.Controls.ComboBox _updateInterval = MakeCombo(["从不", "每天", "每周", "每月"]);
     private readonly TextBlock _updateAvailable = new()
     {
-        Foreground = (Brush)Application.Current.Resources["Brush.Error"],
         Cursor = System.Windows.Input.Cursors.Hand,
         Margin = new Thickness(0, 0, 0, 4),
         Visibility = Visibility.Collapsed
@@ -135,13 +134,14 @@ public sealed class SoftwareSettingsPage : UserControl
             Row("配置文件", _configPath),
             ButtonRow(_openFolder, _reset)));
 
-        Content = new ScrollViewer
+        var scroll = new ScrollViewer
         {
-            Style = (Style)Application.Current.Resources["DarkScrollViewer"],
             Content = stack,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
         };
+        scroll.SetResourceReference(StyleProperty, "DarkScrollViewer");
+        Content = scroll;
     }
 
     private Border BuildAppearanceCard()
@@ -154,13 +154,14 @@ public sealed class SoftwareSettingsPage : UserControl
         themeRow.Children.Add(_lightThemeRadio);
 
         var accentRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 4) };
-        accentRow.Children.Add(new TextBlock
+        var accentLabel = new TextBlock
         {
             Text = "强调色",
             Width = 60,
-            VerticalAlignment = VerticalAlignment.Center,
-            Foreground = FindBrush("Brush.Text")
-        });
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        accentLabel.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
+        accentRow.Children.Add(accentLabel);
         _accentRowHost.Content = BuildAccentRow();
         return MakeCard("外观", hint, themeRow, _accentRowHost, _accentSummary);
     }
@@ -249,7 +250,7 @@ public sealed class SoftwareSettingsPage : UserControl
             {
                 chip.Background = ColorFor(accentArgb);
                 var selected = accentArgb == _accentMode;
-                chip.BorderBrush = FindBrush(selected ? "Brush.Primary" : "Brush.Border");
+                chip.SetResourceReference(Border.BorderBrushProperty, selected ? "Brush.Primary" : "Brush.Border");
                 chip.BorderThickness = new Thickness(selected ? 2 : 1);
             }
             var presetName = PresetAccents.FirstOrDefault(p => p.Argb == _accentMode).Name;
@@ -276,13 +277,14 @@ public sealed class SoftwareSettingsPage : UserControl
     {
         _accentSwatches.Clear();
         var accentRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 4) };
-        accentRow.Children.Add(new TextBlock
+        var accentLabel = new TextBlock
         {
             Text = "强调色",
             Width = 60,
-            VerticalAlignment = VerticalAlignment.Center,
-            Foreground = FindBrush("Brush.Text")
-        });
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        accentLabel.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
+        accentRow.Children.Add(accentLabel);
         // 第一个格子恒显当前生效的强调色（实时预览，不可点击）
         _currentSwatch = new Border
         {
@@ -290,12 +292,12 @@ public sealed class SoftwareSettingsPage : UserControl
             Height = 26,
             CornerRadius = new CornerRadius(5),
             Background = new SolidColorBrush(WpfThemeManager.AccentOverride ?? WpfThemeManager.DefaultAccent),
-            BorderBrush = FindBrush("Brush.Primary"),
             BorderThickness = new Thickness(2),
             Margin = new Thickness(0, 0, 10, 0),
             IsHitTestVisible = false,
             ToolTip = "当前强调色"
         };
+        _currentSwatch.SetResourceReference(Border.BorderBrushProperty, "Brush.Primary");
         accentRow.Children.Add(_currentSwatch);
         AddAccentSwatch(accentRow, AccentDefault, "默认");
         foreach (var (name, argb) in PresetAccents)
@@ -312,12 +314,12 @@ public sealed class SoftwareSettingsPage : UserControl
         {
             Width = 34,
             Height = 26,
-            Style = (Style)Application.Current.Resources["UiButton"],
             Margin = new Thickness(0, 0, 10, 0),
             Content = "＋",
             FontSize = 13,
             ToolTip = "自定义颜色..."
         };
+        add.SetResourceReference(StyleProperty, "UiButton");
         add.Click += (_, _) => OpenCustomAccentPicker();
         accentRow.Children.Add(add);
         return accentRow;
@@ -349,11 +351,11 @@ public sealed class SoftwareSettingsPage : UserControl
         {
             CornerRadius = new CornerRadius(5),
             Background = ColorFor(accentArgb),
-            BorderBrush = FindBrush(_accentMode == accentArgb ? "Brush.Primary" : "Brush.Border"),
             BorderThickness = new Thickness(_accentMode == accentArgb ? 2 : 1),
             ToolTip = name,
             Cursor = System.Windows.Input.Cursors.Hand
         };
+        chip.SetResourceReference(Border.BorderBrushProperty, _accentMode == accentArgb ? "Brush.Primary" : "Brush.Border");
         chip.MouseLeftButtonDown += (_, _) => SelectAccent(accentArgb);
         container.Children.Add(chip);
 
@@ -364,8 +366,6 @@ public sealed class SoftwareSettingsPage : UserControl
                 Text = "✕",
                 FontSize = 9,
                 FontWeight = FontWeights.Bold,
-                Foreground = FindBrush("Brush.Error"),
-                Background = FindBrush("Brush.Surface"),
                 HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Top,
                 Margin = new Thickness(0, -5, -3, 0),
@@ -586,16 +586,19 @@ public sealed class SoftwareSettingsPage : UserControl
     private static Border MakeCard(string title, params UIElement[] children)
     {
         var stack = new StackPanel();
-        stack.Children.Add(new TextBlock
+        var heading = new TextBlock
         {
             Text = title,
             FontSize = 13,
             FontWeight = FontWeights.Bold,
-            Foreground = FindBrush("Brush.Text"),
             Margin = new Thickness(0, 0, 0, 8)
-        });
+        };
+        heading.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
+        stack.Children.Add(heading);
         foreach (var child in children) stack.Children.Add(child);
-        return new Border { Style = (Style)Application.Current.Resources["UiCard"], Child = stack };
+        var card = new Border { Child = stack };
+        card.SetResourceReference(StyleProperty, "UiCard");
+        return card;
     }
 
     private static UIElement Row(string label, FrameworkElement control)
@@ -603,7 +606,9 @@ public sealed class SoftwareSettingsPage : UserControl
         var grid = new Grid { MinHeight = 40, MaxWidth = UiMetrics.ContentWidth };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(130) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, Foreground = FindBrush("Brush.Text") });
+        var labelBlock = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center };
+        labelBlock.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
+        grid.Children.Add(labelBlock);
         control.VerticalAlignment = VerticalAlignment.Center;
         Grid.SetColumn(control, 1);
         grid.Children.Add(control);
@@ -634,44 +639,47 @@ public sealed class SoftwareSettingsPage : UserControl
         return panel;
     }
 
-    private static System.Windows.Controls.RadioButton MakeRadio(string text) => new()
+    private static System.Windows.Controls.RadioButton MakeRadio(string text)
     {
-        Content = text,
-        Style = (Style)Application.Current.Resources["UiRadioButton"],
-        GroupName = "UiTheme"
-    };
+        var radio = new System.Windows.Controls.RadioButton { Content = text, GroupName = "UiTheme" };
+        radio.SetResourceReference(StyleProperty, "UiRadioButton");
+        return radio;
+    }
 
-    private static System.Windows.Controls.CheckBox MakeCheck(string text) => new()
+    private static System.Windows.Controls.CheckBox MakeCheck(string text)
     {
-        Content = text,
-        Style = (Style)Application.Current.Resources["UiCheckBox"]
-    };
+        var check = new System.Windows.Controls.CheckBox { Content = text };
+        check.SetResourceReference(StyleProperty, "UiCheckBox");
+        return check;
+    }
 
     private static System.Windows.Controls.ComboBox MakeCombo(params string[] items)
     {
         var combo = new System.Windows.Controls.ComboBox
         {
-            Style = (Style)Application.Current.Resources["UiComboBox"],
             Width = 280,
             HorizontalAlignment = HorizontalAlignment.Left
         };
+        combo.SetResourceReference(StyleProperty, "UiComboBox");
         foreach (var item in items) combo.Items.Add(item);
         return combo;
     }
 
-    private static Button MakeButton(string text, double minWidth = 112) => new()
+    private static Button MakeButton(string text, double minWidth = 112)
     {
-        Content = text,
-        Style = (Style)Application.Current.Resources["UiButton"],
-        MinWidth = minWidth
-    };
+        var button = new Button { Content = text, MinWidth = minWidth };
+        button.SetResourceReference(StyleProperty, "UiButton");
+        return button;
+    }
 
-    private static TextBlock MakeMutedLabel(string text) => new()
+    private static TextBlock MakeMutedLabel(string text)
     {
-        Text = text,
-        TextWrapping = TextWrapping.Wrap,
-        Foreground = FindBrush("Brush.MutedText")
-    };
-
-    private static Brush FindBrush(string key) => (Brush)Application.Current.Resources[key];
+        var block = new TextBlock
+        {
+            Text = text,
+            TextWrapping = TextWrapping.Wrap
+        };
+        block.SetResourceReference(TextBlock.ForegroundProperty, "Brush.MutedText");
+        return block;
+    }
 }

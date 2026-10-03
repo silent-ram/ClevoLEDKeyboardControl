@@ -13,15 +13,16 @@ public sealed class PalettePreviewControl : UserControl
 
     public PalettePreviewControl()
     {
-        Content = new Border
+        var border = new Border
         {
             Child = _grid,
-            BorderBrush = (Brush)Application.Current.Resources["Brush.Border"],
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(3),
             MinHeight = 22,
             MinWidth = 120
         };
+        border.SetResourceReference(Border.BorderBrushProperty, "Brush.Border");
+        Content = border;
     }
 
     public List<string> Colors
@@ -40,10 +41,9 @@ public sealed class PalettePreviewControl : UserControl
 
             if (_grid.Children.Count == 0)
             {
-                _grid.Children.Add(new Rectangle
-                {
-                    Fill = (Brush)Application.Current.Resources["Brush.Window"]
-                });
+                var empty = new Rectangle();
+                empty.SetResourceReference(Shape.FillProperty, "Brush.Window");
+                _grid.Children.Add(empty);
             }
         }
     }
