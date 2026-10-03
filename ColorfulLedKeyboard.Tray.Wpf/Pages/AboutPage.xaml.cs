@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
 
 namespace ColorfulLedKeyboard.Tray.Wpf.Pages;
 
@@ -34,8 +35,10 @@ public partial class AboutPage : UserControl
     private void OnThemeChanged(object? sender, EventArgs e) => ApplySpectrumText();
 
     /// <summary>
-    /// 把主题光谱签名刷作用到署名文字上：克隆两份渐变周期首尾相接，
-    /// 再用 RelativeTransform 平移一个周期循环——颜色像流光一样滑过文字。
+    /// 把光谱流光作用到署名文字上（移植自 CodexPlusPlus 的 .brand-title：15 色标铺满
+    /// 200% 背景 + background-position 0%→200% 线性循环 + 霓虹 text-shadow）。
+    /// WPF 对应做法：单周期色标 + SpreadMethod=Repeat 平铺 + 平移一个整周期，
+    /// 视觉上就是整条彩虹以恒速“穿过”文字；外挂 DropShadow 模拟发光。
     /// Loaded/Unloaded 成对订阅，页面切走即停动画，主题切换即重取新刷。
     /// </summary>
     private void ApplySpectrumText()
@@ -43,18 +46,33 @@ public partial class AboutPage : UserControl
         var spectrum = Application.Current.Resources["Brush.Spectrum"] as LinearGradientBrush;
         if (spectrum is null || spectrum.GradientStops.Count == 0) return;
 
-        var brush = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 0) };
-        foreach (var stop in spectrum.GradientStops)
+        var stops = spectrum.GradientStops;
+        var brush = new LinearGradientBrush
         {
-            brush.GradientStops.Add(new GradientStop(stop.Color, stop.Offset * 0.5));
-            brush.GradientStops.Add(new GradientStop(stop.Color, stop.Offset * 0.5 + 0.5));
+            StartPoint = new Point(0, 0.5),
+            EndPoint = new Point(1, 0.5),
+            SpreadMethod = GradientSpreadMethod.Repeat
+        };
+        // 单周期：7 色均分 + 首色闭合，Repeat 平铺出无限长的彩虹带
+        for (var i = 0; i < stops.Count; i++)
+        {
+            brush.GradientStops.Add(new GradientStop(stops[i].Color, (double)i / stops.Count));
         }
+        brush.GradientStops.Add(new GradientStop(stops[0].Color, 1.0));
+
         var translate = new TranslateTransform();
         brush.RelativeTransform = translate;
         AuthorText.Foreground = brush;
+        AuthorText.Effect = new DropShadowEffect
+        {
+            Color = (Color)ColorConverter.ConvertFromString("#18D9FF"),
+            BlurRadius = 7,
+            ShadowDepth = 0,
+            Opacity = 0.45
+        };
 
         if (!SystemParameters.ClientAreaAnimation) return; // 用户关闭动画时保持静态渐变
-        translate.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(0, 0.5, TimeSpan.FromSeconds(4))
+        translate.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(0, -1, TimeSpan.FromSeconds(2.8))
         {
             RepeatBehavior = RepeatBehavior.Forever
         });
