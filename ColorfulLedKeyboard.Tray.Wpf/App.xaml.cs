@@ -192,6 +192,16 @@ public partial class App : Application
                 DoEvents();
             }
 
+            // 强调色 ✕ 徽标验收：强制显示悬停态（深浅主题对比度检查）
+            if (_startupArgs.Contains("--swatch-hover"))
+            {
+                window.SelectPage(6);
+                DoEvents();
+                window.ShowSwatchCloseBadgesForCapture();
+                DoEvents();
+                Capture(window, Path.Combine(directory, "page6-swatch-hover.png"));
+            }
+
             // 音乐页节拍颜色缩进验收：滚动到列表区域
             if (_startupArgs.Contains("--music-scroll"))
             {

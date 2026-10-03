@@ -97,6 +97,9 @@ public partial class MainWindow : Window
     /// <summary>截图验收专用：滚动音乐页到节拍颜色列表。</summary>
     public void ScrollMusicPageForCapture() => _musicPage?.ScrollToBeatColorsForCapture();
 
+    /// <summary>截图验收专用：强制显示强调色块的 ✕ 徽标（模拟悬停）。</summary>
+    public void ShowSwatchCloseBadgesForCapture() => _softwareSettingsPage?.ShowSwatchCloseBadgesForCapture();
+
     /// <summary>截图验收专用：切换场景自动化编辑器页签。</summary>
     public void SelectAutomationEditorTab(int index) => _automationPage?.SelectEditorTab(index);
 
