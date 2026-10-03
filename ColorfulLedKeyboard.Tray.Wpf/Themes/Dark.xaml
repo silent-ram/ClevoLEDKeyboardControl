@@ -206,7 +206,7 @@
     <!-- 悬浮自动隐藏滚动条：覆盖内容、透明轨道、滑块平时淡影，悬停加亮 -->
     <Style x:Key="DarkScrollBar" TargetType="ScrollBar">
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="Width" Value="10" />
+        <Setter Property="Width" Value="8" />
         <Setter Property="Opacity" Value="0.35" />
         <Setter Property="Template">
             <Setter.Value>
@@ -217,7 +217,7 @@
                                 <Thumb.Template>
                                     <ControlTemplate TargetType="Thumb">
                                         <Border Background="{DynamicResource Brush.Border}"
-                                                CornerRadius="3" Margin="2" Opacity="0.9" />
+                                                CornerRadius="2" Margin="2" Opacity="0.9" />
                                     </ControlTemplate>
                                 </Thumb.Template>
                             </Thumb>

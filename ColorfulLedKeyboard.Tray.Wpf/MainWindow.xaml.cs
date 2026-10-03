@@ -513,6 +513,9 @@ public partial class MainWindow : Window
         Navigation.SelectedIndex = selected;
         ApplySelectedPage(selected);
         UpdateSaveBar();
+        // 重建出的音乐页没有历史音频状态，标签会退回"检测中…"——状态文件稳态下不再变化，
+        // 监视器不会再补发事件，必须在这里用窗口缓存喂一次。
+        _musicPage?.UpdateAudioSourceLabel(_lastAudioStatus);
     }
 
     /// <summary>导航项数据。</summary>
