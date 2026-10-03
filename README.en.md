@@ -1,3 +1,5 @@
+<div align="center">
+
 # ClevoLEDKeyboardControl
 
 [![Latest release](https://img.shields.io/github/v/release/silent-ram/ClevoLEDKeyboardControl?display_name=tag)](https://github.com/silent-ram/ClevoLEDKeyboardControl/releases/latest)
@@ -5,9 +7,14 @@
 [![Windows](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4)](#system-requirements)
 [![.NET 8](https://img.shields.io/badge/.NET-8-512BD4)](global.json)
 
-[简体中文](README.md) | English
+[简体中文](README.md) ｜ **English**
 
-A Windows keyboard RGB control utility for Clevo / 蓝天 (Blue Sky) and compatible laptops, featuring common lighting effects, music-reactive lighting, album-art color extraction, per-app scene automation, event feedback, and tray quick controls.
+A Windows keyboard RGB control utility for Clevo / 蓝天 (Blue Sky) and compatible laptops:
+lighting effects · music reactivity · album-art colors · scene automation · event feedback · tray controls
+
+</div>
+
+## About
 
 This project is actively maintained as a fork of [xuha233/ClevoRGBControl](https://github.com/xuha233/ClevoRGBControl). The architecture separates a Windows service (which drives the keyboard) from a tray application (which collects user-session data and provides the UI), talking to the low-level keyboard interface through the vendor `InsydeDCHU.dll` shipped with Control Center.
 

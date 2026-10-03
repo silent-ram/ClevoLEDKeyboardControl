@@ -1,3 +1,5 @@
+<div align="center">
+
 # ClevoLEDKeyboardControl
 
 [![Latest release](https://img.shields.io/github/v/release/silent-ram/ClevoLEDKeyboardControl?display_name=tag)](https://github.com/silent-ram/ClevoLEDKeyboardControl/releases/latest)
@@ -5,9 +7,14 @@
 [![Windows](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4)](#系统要求)
 [![.NET 8](https://img.shields.io/badge/.NET-8-512BD4)](global.json)
 
-简体中文 | [English](README.en.md)
+**简体中文** ｜ [English](README.en.md)
 
-面向 Clevo / 蓝天及兼容机型的 Windows 键盘 RGB 控制工具，支持常用灯效、音乐律动、播放器封面取色、程序场景自动化、事件反馈和托盘快捷控制。
+面向 Clevo / 蓝天及兼容机型的 Windows 键盘 RGB 控制工具：
+常用灯效 · 音乐律动 · 播放器封面取色 · 程序场景自动化 · 事件反馈 · 托盘快捷控制
+
+</div>
+
+## 简介
 
 本项目基于 [xuha233/ClevoRGBControl](https://github.com/xuha233/ClevoRGBControl) 持续维护。程序采用“Windows 服务负责驱动键盘、托盘程序负责用户会话采集和交互”的架构，通过厂商 Control Center 附带的 `InsydeDCHU.dll` 调用底层键盘接口。
 
@@ -17,8 +24,7 @@
 
 - [下载最新正式版安装包](https://github.com/silent-ram/ClevoLEDKeyboardControl/releases/latest/download/ClevoLEDKeyboardControlSetup.exe)
 - [查看全部版本与发布说明](https://github.com/silent-ram/ClevoLEDKeyboardControl/releases)
-- [夸克网盘下载]
-(https://pan.quark.cn/s/822575d75c7b)
+- [夸克网盘下载](https://pan.quark.cn/s/822575d75c7b)
 
 安装步骤：
 
