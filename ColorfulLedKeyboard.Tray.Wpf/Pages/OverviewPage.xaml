@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <ScrollViewer Style="{DynamicResource DarkScrollViewer}"
                   HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <StackPanel Margin="18,18,18,28" MaxWidth="832" HorizontalAlignment="Center">
+        <StackPanel Margin="18,18,18,28" MaxWidth="832">
             <UniformGrid Columns="3">
                 <Border Style="{DynamicResource UiCard}" Margin="0,0,12,14">
                     <StackPanel>

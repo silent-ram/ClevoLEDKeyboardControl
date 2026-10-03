@@ -477,66 +477,46 @@ public sealed class WpfTrayContext : IDisposable
             _ = SyncUsageTelemetryAndScheduleAsync();
         };
         _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+        _settingsWindow.AboutCheckUpdatesRequested += () => _ = CheckForUpdatesManuallyAsync();
         _settingsWindow.Show();
         _settingsWindow.ActivateWindow();
         _settingsWindow.RunUpdateCheck(CheckForUpdatesWhenSettingsOpenAsync);
+        // 新窗口没有历史状态：先把托盘缓存喂给它，再触发一次监视器刷新
+        // （文件未变化时 FileSystemWatcher 不会补发事件，不喂会一直显示"检测中…"）。
+        _settingsWindow.UpdateAudioSourceLabel(_lastAudioStatus);
+        _audioStatusWatcher?.RefreshNow();
     }
 
-    private void OpenAbout()
+    private Window? _aboutWindow;
+
+    // 截图验收需要独立打开关于窗口，故为 internal
+    internal void OpenAbout()
     {
+        if (_aboutWindow is { IsLoaded: true })
+        {
+            _aboutWindow.Activate();
+            return;
+        }
         var window = new Window
         {
             Title = "关于 ClevoLEDKeyboardControl",
             WindowStartupLocation = WindowStartupLocation.CenterScreen,
-            ResizeMode = ResizeMode.NoResize,
-            ShowInTaskbar = false,
-            Width = 420,
-            Height = 240,
+            Width = 640,
+            Height = 600,
+            MinWidth = 520,
+            MinHeight = 480,
             Background = (System.Windows.Media.Brush)Application.Current.Resources["Brush.Window"],
             FontFamily = (System.Windows.Media.FontFamily)Application.Current.Resources["Font.Body"],
             FontSize = 12,
             Foreground = (System.Windows.Media.Brush)Application.Current.Resources["Brush.Text"]
         };
         window.SourceInitialized += (_, _) => WpfThemeManager.ApplyTitleBarMode(window);
-
-        var stack = new System.Windows.Controls.StackPanel { Margin = new Thickness(24) };
-        stack.Children.Add(new System.Windows.Controls.TextBlock
-        {
-            Text = "ClevoLEDKeyboardControl",
-            FontSize = 18,
-            FontWeight = FontWeights.Bold,
-            Foreground = (System.Windows.Media.Brush)Application.Current.Resources["Brush.Text"]
-        });
-        stack.Children.Add(new System.Windows.Shapes.Rectangle
-        {
-            Height = 3,
-            MaxWidth = 200,
-            HorizontalAlignment = HorizontalAlignment.Left,
-            Margin = new Thickness(0, 8, 0, 0),
-            Fill = (System.Windows.Media.Brush)Application.Current.Resources["Brush.Spectrum"]
-        });
-        stack.Children.Add(new System.Windows.Controls.TextBlock
-        {
-            Text = $"版本 v{ReadVersion()}",
-            Foreground = (System.Windows.Media.Brush)Application.Current.Resources["Brush.MutedText"],
-            Margin = new Thickness(0, 8, 0, 0)
-        });
-        stack.Children.Add(new System.Windows.Controls.TextBlock
-        {
-            Text = "面向 Clevo 兼容机型的键盘背光灯效控制程序。",
-            Margin = new Thickness(0, 4, 0, 0)
-        });
-        var close = new Button
-        {
-            Content = "关闭",
-            Style = (Style)Application.Current.Resources["UiButtonPrimary"],
-            MinWidth = 96,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 16, 0, 0)
-        };
-        close.Click += (_, _) => window.Close();
-        stack.Children.Add(close);
-        window.Content = stack;
+        // 直接复用设置窗口的关于页：内容/按钮与设置窗口完全一致，避免两份实现漂移。
+        var page = new Pages.AboutPage();
+        page.CheckForUpdatesRequested += () => _ = CheckForUpdatesManuallyAsync();
+        window.Content = page;
+        _aboutWindow = window;
+        window.Closed += (_, _) => _aboutWindow = null;
         window.Show();
     }
 
@@ -609,7 +589,9 @@ public sealed class WpfTrayContext : IDisposable
 
     private void OnAudioStatusChanged(AudioSourceStatusInfo? info)
     {
-        _lastAudioStatus = info;
+        // 监视器偶发读到 null（写入瞬间/IPC 超时），不能用它冲掉缓存——
+        // 状态文件只在设备变化时重写，一旦被冲掉，托盘提示会退回"检测中…"且长期不恢复。
+        if (info is not null) _lastAudioStatus = info;
         UpdateNotifyIconText();
         _settingsWindow?.UpdateAudioSourceLabel(info);
     }
@@ -728,11 +710,7 @@ public sealed class WpfTrayContext : IDisposable
                 return;
             }
 
-            System.Windows.MessageBox.Show(
-                $"当前已是最新版本。\n\n当前版本：{result.CurrentVersion.ToString(3)}",
-                "ClevoLEDKeyboardControl",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            Dialogs.UpdateStatusDialog.ShowUpToDate(result.CurrentVersion.ToString(3));
         }
         catch (Exception ex) when (ex is UpdateCheckException or System.Net.Http.HttpRequestException or System.Threading.Tasks.TaskCanceledException or InvalidOperationException)
         {
@@ -747,23 +725,14 @@ public sealed class WpfTrayContext : IDisposable
                 InvalidOperationException => "无法识别 GitHub 最新版本信息，请稍后重试。",
                 _ => "暂时无法连接更新服务器，请稍后重试。"
             };
-            System.Windows.MessageBox.Show(
-                $"检查更新失败：{detail}",
-                "ClevoLEDKeyboardControl",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            Dialogs.UpdateStatusDialog.ShowFailure(detail);
         }
     }
 
     private void ShowUpdateAvailable(UpdateCheckResult result)
     {
         var latest = result.LatestVersion?.ToString(3) ?? "未知";
-        var choice = System.Windows.MessageBox.Show(
-            $"发现新版本：{latest}\n当前版本：{result.CurrentVersion.ToString(3)}\n\n是否打开下载页面？",
-            "ClevoLEDKeyboardControl",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Information);
-        if (choice == MessageBoxResult.Yes) UpdateChecker.OpenReleases();
+        Dialogs.UpdateStatusDialog.ShowAvailable(latest, result.CurrentVersion.ToString(3));
     }
 
     // ---- 遥测 ----

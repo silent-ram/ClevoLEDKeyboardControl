@@ -9,6 +9,7 @@ namespace ColorfulLedKeyboard.Service;
 public sealed class AudioSourceProvider : IDisposable
 {
     private static readonly TimeSpan FallbackThreshold = TimeSpan.FromMilliseconds(1500);
+    private static readonly TimeSpan UnresolvedRetryInterval = TimeSpan.FromSeconds(5);
 
     private readonly object _stateLock = new();
     private readonly IAudioDeviceProbe _probe;
@@ -21,6 +22,7 @@ public sealed class AudioSourceProvider : IDisposable
     private string _deviceId = "";
     private long _lastSampleTicks;
     private long _switchingSinceTicks;
+    private long _lastUnresolvedAttemptTicks;
     private int _hasSample; // 0 = 从未 ReportSamples；1 = 已经 ReportSamples 至少一次
     // 测试模式：以虚拟时钟驱动 fallback；ReportSamples 把 _lastSampleTicks 设为 _virtualNowTicks
     private long _virtualNowTicks;
@@ -246,9 +248,15 @@ public sealed class AudioSourceProvider : IDisposable
 
         if (snapshot is null)
         {
+            // 解析失败（设备切换瞬态/音频端点服务未就绪）：状态降为 Unavailable，但保留上一次的
+            // 设备名——清空名字会把状态文件污染成空值，而文件只在设备变化事件时才重写，
+            // 托盘 UI 会一直卡在"检测中…"（真机复现过）。
             newStatus = AudioSourceStatus.Unavailable;
-            newName = "";
-            newId = "";
+            lock (_stateLock)
+            {
+                newName = _deviceFriendlyName;
+                newId = _deviceId;
+            }
         }
         else if (IsHfp(snapshot))
         {
@@ -339,15 +347,13 @@ public sealed class AudioSourceProvider : IDisposable
         if (_disposed) return;
         try
         {
-            if (System.Threading.Interlocked.CompareExchange(ref _hasSample, 0, 0) == 0) return;
-            var lastTicks = System.Threading.Interlocked.Read(ref _lastSampleTicks);
-
             long nowTicks = _ownsProbe
                 ? DateTime.UtcNow.Ticks
                 : System.Threading.Interlocked.Read(ref _virtualNowTicks);
 
-            var elapsed = TimeSpan.FromTicks(nowTicks - lastTicks);
-
+            // 设备名丢失（从未成功解析过）：定期重试解析，否则状态文件里永远是空名字，
+            // 托盘 UI 只能显示"检测中…"，直到用户手动切换一次音频设备。
+            // 注意必须放在 _hasSample 早退之前——从未有样本（音乐一直没播）时也要能重试。
             AudioSourceStatus current;
             string name, id;
             lock (_stateLock)
@@ -356,6 +362,22 @@ public sealed class AudioSourceProvider : IDisposable
                 name = _deviceFriendlyName;
                 id = _deviceId;
             }
+
+            if (current == AudioSourceStatus.Unavailable && string.IsNullOrWhiteSpace(name))
+            {
+                var lastAttempt = System.Threading.Interlocked.Read(ref _lastUnresolvedAttemptTicks);
+                if (lastAttempt == 0 || nowTicks - lastAttempt > UnresolvedRetryInterval.Ticks)
+                {
+                    System.Threading.Interlocked.Exchange(ref _lastUnresolvedAttemptTicks, nowTicks);
+                    ResolveAndPublish(transitional: true);
+                    return;
+                }
+            }
+
+            if (System.Threading.Interlocked.CompareExchange(ref _hasSample, 0, 0) == 0) return;
+            var lastTicks = System.Threading.Interlocked.Read(ref _lastSampleTicks);
+
+            var elapsed = TimeSpan.FromTicks(nowTicks - lastTicks);
 
             // Active 状态下，超过 1.5s 没样本 → Unavailable
             if (current == AudioSourceStatus.Active && elapsed > FallbackThreshold)

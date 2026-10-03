@@ -170,7 +170,7 @@ public sealed class MusicPage : UserControl
         _eqLowHost = RowHost(_eqLow);
         _eqHighHost = RowHost(_eqHigh);
 
-        var stack = new StackPanel { Margin = new Thickness(18, 18, 18, 28), MaxWidth = 832, HorizontalAlignment = HorizontalAlignment.Center };
+        var stack = new StackPanel { Margin = new Thickness(18, 18, 18, 28), MaxWidth = 832 };
         stack.Children.Add(MakeCard("播放器与当前配色", _audioSourceLabel, _musicBindingStatus,
             ButtonRow(_bindPlayer, _clearPlayer),
             RowWithHint("键盘颜色来源", _bindingColorSource, _coverColorHint),
@@ -453,7 +453,12 @@ public sealed class MusicPage : UserControl
         var deviceName = info?.DeviceFriendlyName ?? "";
         _audioSourceLabel.Text = string.IsNullOrEmpty(deviceName)
             ? "当前音频源：检测中…"
-            : $"当前音频源：{deviceName}";
+            : info?.Status switch
+            {
+                AudioSourceStatus.Switching => $"当前音频源：{deviceName}（切换中…）",
+                AudioSourceStatus.Hfp => $"当前音频源：{deviceName}（蓝牙通话模式，暂不可用）",
+                _ => $"当前音频源：{deviceName}"
+            };
     }
 
     // ---- 预设流（移植自 WinForms 两段式保存）----

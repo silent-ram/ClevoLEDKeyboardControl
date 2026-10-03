@@ -73,7 +73,7 @@ public sealed class EffectPage : UserControl
 
     public EffectPage()
     {
-        var stack = new StackPanel { Margin = new Thickness(18, 18, 18, 28), MaxWidth = 832, HorizontalAlignment = HorizontalAlignment.Center };
+        var stack = new StackPanel { Margin = new Thickness(18, 18, 18, 28), MaxWidth = 832 };
 
         _modeLighting.Checked += (_, _) => OnModeChanged();
         _modeMusic.Checked += (_, _) => OnModeChanged();
@@ -172,6 +172,26 @@ public sealed class EffectPage : UserControl
             _modeMusic.IsChecked = false;
             _modeOff.IsChecked = false;
             _modeLighting.IsChecked = true;
+        }
+        finally
+        {
+            _loadingSettings = false;
+        }
+        UpdateModeAvailability();
+        UpdateBrightnessAvailability();
+        UpdateCustomColorsButton();
+        UpdateEffectConfigurationVisibility();
+    }
+
+    /// <summary>截图验收专用：临时强制音乐模式以验收折叠态布局宽度。</summary>
+    public void ForceMusicModeForCapture()
+    {
+        _loadingSettings = true;
+        try
+        {
+            _modeLighting.IsChecked = false;
+            _modeOff.IsChecked = false;
+            _modeMusic.IsChecked = true;
         }
         finally
         {

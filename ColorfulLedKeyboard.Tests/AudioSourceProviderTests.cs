@@ -70,6 +70,43 @@ public class AudioSourceProviderTests
     }
 
     [Fact]
+    public void RefreshNow_ResolveFails_KeepsPreviousDeviceName()
+    {
+        // 回归：真机上服务启动瞬间解析失败会把状态文件写成空设备名，
+        // 托盘从此永远显示"检测中…"。修复后瞬态失败只降状态，不清名字。
+        var probe = new FakeAudioDeviceProbe();
+        probe.Add(Speaker());
+        probe.DefaultDeviceId = "spk";
+        using var sut = new AudioSourceProvider(probe);
+        Assert.Equal("扬声器 (Realtek)", sut.DeviceFriendlyName);
+
+        probe.DefaultDeviceId = null; // 模拟切换瞬态/音频服务未就绪
+        sut.RefreshNow();
+
+        Assert.Equal(AudioSourceStatus.Unavailable, sut.Status);
+        Assert.Equal("扬声器 (Realtek)", sut.DeviceFriendlyName);
+    }
+
+    [Fact]
+    public void UnresolvedName_RetryRecoversWhenDeviceAppears()
+    {
+        // 回归：设备名从未解析成功时，fallback 应定期重试，而不是等用户手动切设备。
+        var probe = new FakeAudioDeviceProbe();
+        using var sut = new AudioSourceProvider(probe);
+        Assert.Equal(AudioSourceStatus.Unavailable, sut.Status);
+
+        probe.Add(Speaker());
+        probe.DefaultDeviceId = "spk";
+        var events = new List<AudioSourceStatus>();
+        sut.SourceChanged += (_, e) => events.Add(e.Status);
+        sut.TestOnly_AdvanceFallbackClock(TimeSpan.FromSeconds(6));
+
+        Assert.Equal(AudioSourceStatus.Active, sut.Status);
+        Assert.Equal("扬声器 (Realtek)", sut.DeviceFriendlyName);
+        Assert.Contains(AudioSourceStatus.Active, events);
+    }
+
+    [Fact]
     public void DefaultDeviceChanged_ToA2dp_FiresSwitchingThenActive()
     {
         var probe = new FakeAudioDeviceProbe();

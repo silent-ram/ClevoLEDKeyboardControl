@@ -50,7 +50,7 @@ public sealed class EventFeedbackPage : UserControl
         _typingRows = typingRows;
         _notificationRows = notificationRows;
 
-        var stack = new StackPanel { Margin = new Thickness(18, 18, 18, 28), MaxWidth = 832, HorizontalAlignment = HorizontalAlignment.Center };
+        var stack = new StackPanel { Margin = new Thickness(18, 18, 18, 28), MaxWidth = 832 };
         stack.Children.Add(MakeCard("敲字反馈", typingRows));
         stack.Children.Add(MakeCard("通知反馈", notificationRows));
         stack.Children.Add(MakeCard("当前覆盖关系", new TextBlock

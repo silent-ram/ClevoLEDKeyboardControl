@@ -21,7 +21,7 @@ public sealed class DiagnosticsPage : UserControl
         _refresh.Click += (_, _) => CollectAll();
         _restoreBackup.Click += (_, _) => RestoreLastGood();
 
-        var stack = new StackPanel { Margin = new Thickness(18, 18, 18, 28), MaxWidth = 832, HorizontalAlignment = HorizontalAlignment.Center };
+        var stack = new StackPanel { Margin = new Thickness(18, 18, 18, 28), MaxWidth = 832 };
         stack.Children.Add(MakeCard("服务与硬件",
             Row("服务状态", MakeDiagnosticBox("服务状态")),
             Row("驱动 DLL", MakeDiagnosticBox("驱动 DLL")),

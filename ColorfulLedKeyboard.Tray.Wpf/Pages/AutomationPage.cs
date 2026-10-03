@@ -56,7 +56,7 @@ public sealed class AutomationPage : UserControl
         _simulator.HorizontalAlignment = HorizontalAlignment.Left;
         simulatorRow.Children.Add(_simulator);
 
-        var stack = new StackPanel { Margin = new Thickness(18, 18, 18, 28), MaxWidth = 832, HorizontalAlignment = HorizontalAlignment.Center };
+        var stack = new StackPanel { Margin = new Thickness(18, 18, 18, 28), MaxWidth = 832 };
         stack.Children.Add(MakeCard("运行状态", _statusText, priority, simulatorRow));
         stack.Children.Add(MakeCard("场景规则", PlainRow(_automationEnabled), Indent(_editor)));
         stack.Children.Add(MakeCard("空闲最终覆盖", PlainRow(_idleEnabled), Row("空闲时间", _idleAfter),

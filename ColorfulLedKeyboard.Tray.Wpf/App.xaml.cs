@@ -94,6 +94,7 @@ public partial class App : Application
             }
 
             if (_startupArgs.Contains("--force-lighting")) window.ForceLightingModeForCapture();
+            if (_startupArgs.Contains("--force-music")) window.ForceMusicModeForCapture();
             for (var index = 0; index < window.PageCount; index++)
             {
                 window.SelectPage(index);
@@ -159,6 +160,36 @@ public partial class App : Application
                 window.SelectPage(6);
                 DoEvents();
                 Capture(window, Path.Combine(directory, $"page6-switched-{targetKind}.png"));
+            }
+
+            // 托盘"关于"独立窗口验收：与设置窗口关于页复用同一内容
+            if (_startupArgs.Contains("--about-window"))
+            {
+                _trayContext!.OpenAbout();
+                DoEvents();
+                var about = Current.Windows.OfType<Window>().FirstOrDefault(w => w.Title.StartsWith("关于"));
+                if (about is not null)
+                {
+                    DoEvents();
+                    Capture(about, Path.Combine(directory, "about-window.png"));
+                    about.Close();
+                }
+            }
+
+            // 更新弹窗主题化验收：ShowDialog 自带消息泵，先排队截图+关闭，再同步打开
+            if (_startupArgs.Contains("--update-dialog"))
+            {
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                {
+                    var dialog = Current.Windows.OfType<Window>()
+                        .FirstOrDefault(w => w.Title.StartsWith("检查更新"));
+                    if (dialog is null) return;
+                    DoEvents();
+                    Capture(dialog, Path.Combine(directory, "update-dialog.png"));
+                    dialog.Close();
+                }));
+                Dialogs.UpdateStatusDialog.ShowUpToDate("3.5.0");
+                DoEvents();
             }
             Shutdown();
         });

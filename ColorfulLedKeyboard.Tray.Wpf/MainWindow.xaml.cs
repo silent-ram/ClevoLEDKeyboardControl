@@ -44,6 +44,9 @@ public partial class MainWindow : Window
 
     public event Action? SettingsSaved;
 
+    /// <summary>关于页"检查更新"；托盘上下文接入手动检查（结果弹主题化对话框）。</summary>
+    public event Action? AboutCheckUpdatesRequested;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -87,6 +90,9 @@ public partial class MainWindow : Window
 
     /// <summary>截图验收专用。</summary>
     public void ForceLightingModeForCapture() => _effectPage?.ForceLightingModeForCapture();
+
+    /// <summary>截图验收专用：强制音乐模式验收灯效页折叠态布局。</summary>
+    public void ForceMusicModeForCapture() => _effectPage?.ForceMusicModeForCapture();
 
     /// <summary>截图验收专用：切换场景自动化编辑器页签。</summary>
     public void SelectAutomationEditorTab(int index) => _automationPage?.SelectEditorTab(index);
@@ -200,7 +206,9 @@ public partial class MainWindow : Window
         _pages.Add(softwarePage);
         softwarePage.LoadFromStore(new SettingsStore().Load());
 
-        _pages.Add(new AboutPage());
+        var aboutPage = new AboutPage();
+        aboutPage.CheckForUpdatesRequested += () => AboutCheckUpdatesRequested?.Invoke();
+        _pages.Add(aboutPage);
     }
 
     private void ApplySelectedPage(int index)
