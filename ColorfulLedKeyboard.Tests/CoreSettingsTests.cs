@@ -461,7 +461,7 @@ public sealed class CoreSettingsTests
         Assert.False(universal.FollowSystemVolume);
         Assert.Equal(30, universal.BaseBrightness);
         Assert.Equal(100, universal.PeakBrightness);
-        Assert.Equal(46, universal.Colors.Count);
+        Assert.Equal(45, universal.Colors.Count);
         Assert.Equal("#FFD2A1", universal.Colors[0]);
         Assert.Equal("#007500", universal.Colors[^1]);
         Assert.DoesNotContain("#404040", universal.Colors);
