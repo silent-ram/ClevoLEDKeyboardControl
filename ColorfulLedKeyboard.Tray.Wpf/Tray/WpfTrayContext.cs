@@ -500,9 +500,9 @@ public sealed class WpfTrayContext : IDisposable
         {
             Title = "关于 ClevoLEDKeyboardControl",
             WindowStartupLocation = WindowStartupLocation.CenterScreen,
-            Width = 560,
+            Width = 440,
             SizeToContent = SizeToContent.Height,
-            MinWidth = 460,
+            MinWidth = 400,
             Background = (System.Windows.Media.Brush)Application.Current.Resources["Brush.Window"],
             FontFamily = (System.Windows.Media.FontFamily)Application.Current.Resources["Font.Body"],
             FontSize = 12,
