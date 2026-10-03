@@ -11,7 +11,7 @@ A Windows keyboard RGB control utility for Clevo / 蓝天 (Blue Sky) and compati
 
 This project is actively maintained as a fork of [xuha233/ClevoRGBControl](https://github.com/xuha233/ClevoRGBControl). The architecture separates a Windows service (which drives the keyboard) from a tray application (which collects user-session data and provides the UI), talking to the low-level keyboard interface through the vendor `InsydeDCHU.dll` shipped with Control Center.
 
-Since v3.5.0 the tray app runs on WPF (the `ColorfulLedKeyboard.Tray.Wpf` project; the output binary is still `ColorfulLedKeyboard.Tray.exe`), with a dark "instrument panel" look by default, light/dark themes, and custom accent colors. The legacy WinForms tray (the `ColorfulLedKeyboard.Tray` project) stays in the solution as a reference implementation and can still be produced via `scripts/publish.ps1 -TrayWinForms`.
+Since v3.5.0 the tray app runs on WPF (the `ColorfulLedKeyboard.Tray.Wpf` project; the output binary is still `ColorfulLedKeyboard.Tray.exe`), with a dark "instrument panel" look by default, light/dark themes, and custom accent colors (default #0080FF). The legacy WinForms tray (the `ColorfulLedKeyboard.Tray` project) stays in the solution as a reference implementation and can still be produced via `scripts/publish.ps1 -TrayWinForms`.
 
 ## Download & Install
 
@@ -30,31 +30,17 @@ When upgrading from legacy `ClevoRGBControl` / `ColorfulLedKeyboard`, the instal
 
 Dark "instrument panel" visuals with the spectrum signature; light "workbench" theme and custom accents are also available.
 
-### Lighting Effects
+### Lighting Effects & Music Mode
 
-![Lighting effects](docs/screenshots/effect-dark.png)
+![Lighting effects and music mode](docs/screenshots/row-effects.png)
 
-### Music Mode
+### Scene Automation & About
 
-![Music mode](docs/screenshots/music-dark.png)
+![Scene automation and about](docs/screenshots/row-automation-about.png)
 
-### Scene Automation
+### Dark / Light Themes (Software Settings)
 
-![Scene automation](docs/screenshots/automation-dark.png)
-
-### Software Settings (dark / light)
-
-Dark instrument panel:
-
-![Software settings (dark)](docs/screenshots/settings-dark.png)
-
-Light workbench:
-
-![Software settings (light)](docs/screenshots/settings-light.png)
-
-### About
-
-![About](docs/screenshots/about-dark.png)
+![Dark and light themes](docs/screenshots/row-settings.png)
 
 ## Features
 

@@ -11,7 +11,7 @@
 
 本项目基于 [xuha233/ClevoRGBControl](https://github.com/xuha233/ClevoRGBControl) 持续维护。程序采用“Windows 服务负责驱动键盘、托盘程序负责用户会话采集和交互”的架构，通过厂商 Control Center 附带的 `InsydeDCHU.dll` 调用底层键盘接口。
 
-自 v3.5.0 起，托盘程序迁移到 WPF（`ColorfulLedKeyboard.Tray.Wpf` 项目，产物名仍为 `ColorfulLedKeyboard.Tray.exe`），默认深色"仪器面板"视觉，支持深浅主题与自定义强调色（含跟随键盘主色）。原 WinForms 托盘（`ColorfulLedKeyboard.Tray` 项目）保留在解决方案中作为参考实现，可运行 `scripts/publish.ps1 -TrayWinForms` 临时产出。
+自 v3.5.0 起，托盘程序迁移到 WPF（`ColorfulLedKeyboard.Tray.Wpf` 项目，产物名仍为 `ColorfulLedKeyboard.Tray.exe`），默认深色"仪器面板"视觉，支持深浅主题与自定义强调色（默认 #0080FF）。原 WinForms 托盘（`ColorfulLedKeyboard.Tray` 项目）保留在解决方案中作为参考实现，可运行 `scripts/publish.ps1 -TrayWinForms` 临时产出。
 
 ## 下载与安装
 
@@ -30,39 +30,26 @@
 
 ## 界面预览
 
-深色"仪器面板"视觉，光谱签名贯穿标题；支持浅色工作台与自定义强调色。
+深色"仪器面板"视觉，光谱签名贯穿标题；支持浅色工作台与自定义强调色（默认 #0080FF）。
 
-### 灯效设置
+### 灯效设置 与 音乐模式
 
-![灯效设置](docs/screenshots/effect-dark.png)
+![灯效设置与音乐模式](docs/screenshots/row-effects.png)
 
-### 音乐模式
+### 场景自动化 与 关于
 
-![音乐模式](docs/screenshots/music-dark.png)
+![场景自动化与关于](docs/screenshots/row-automation-about.png)
 
-### 场景自动化
+### 深色 / 浅色主题（软件设置页）
 
-![场景自动化](docs/screenshots/automation-dark.png)
-
-### 软件设置（深色 / 浅色主题）
-
-深色仪器风：
-
-![软件设置（深色）](docs/screenshots/settings-dark.png)
-
-浅色工作台：
-
-![软件设置（浅色）](docs/screenshots/settings-light.png)
-
-### 关于
-
-![关于](docs/screenshots/about-dark.png)
+![深浅主题对比](docs/screenshots/row-settings.png)
 
 ## 功能概览
 
 ### 设置界面与主题
 
-- 提供 Windows 11 简洁风、白色科技风和柔和暖色风三套浅色主题，切换后立即应用到设置窗口、弹窗和托盘菜单。
+- 托盘设置界面基于 WPF 全新重写：侧边导航 + 卡片式布局，深色仪器风 / 浅色工作台双主题即时切换，弹窗与托盘菜单跟随主题。
+- 支持自定义强调色（默认 #0080FF），应用于按钮、导航选中态与链接；深浅主题下标题栏自动适配。
 - 当前状态首页集中显示实际运行模式、命中规则、有声程序、歌曲、事件反馈、服务状态和最终亮度。
 - 最终亮度由服务根据灯效亮度、音乐动态范围、场景规则上限和空闲覆盖统一计算。
 - 界面主题、窗口位置、尺寸、最后访问页面和高级参数展开状态保存在当前用户 `LocalAppData`。
