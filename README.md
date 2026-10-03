@@ -3,6 +3,9 @@
 [![Latest release](https://img.shields.io/github/v/release/silent-ram/ClevoLEDKeyboardControl?display_name=tag)](https://github.com/silent-ram/ClevoLEDKeyboardControl/releases/latest)
 [![License](https://img.shields.io/github/license/silent-ram/ClevoLEDKeyboardControl)](LICENSE)
 [![Windows](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4)](#系统要求)
+[![.NET 8](https://img.shields.io/badge/.NET-8-512BD4)](global.json)
+
+简体中文 | [English](README.en.md)
 
 面向 Clevo / 蓝天及兼容机型的 Windows 键盘 RGB 控制工具，支持常用灯效、音乐律动、播放器封面取色、程序场景自动化、事件反馈和托盘快捷控制。
 
@@ -24,6 +27,36 @@
 3. 首次启动后，从系统托盘打开“设置”，选择灯效模式或音乐模式。
 
 从旧版 `ClevoRGBControl` / `ColorfulLedKeyboard` 升级时，安装器会处理旧服务和注册表项。自动化和安全权限迁移前会分别保留配置备份。后续版本可直接覆盖安装：安装器会等待旧服务和托盘退出、修复数据目录权限、保留现有配置，并在安全通信可用后启动新托盘。
+
+## 界面预览
+
+深色"仪器面板"视觉，光谱签名贯穿标题；支持浅色工作台与自定义强调色。
+
+### 灯效设置
+
+![灯效设置](docs/screenshots/effect-dark.png)
+
+### 音乐模式
+
+![音乐模式](docs/screenshots/music-dark.png)
+
+### 场景自动化
+
+![场景自动化](docs/screenshots/automation-dark.png)
+
+### 软件设置（深色 / 浅色主题）
+
+深色仪器风：
+
+![软件设置（深色）](docs/screenshots/settings-dark.png)
+
+浅色工作台：
+
+![软件设置（浅色）](docs/screenshots/settings-light.png)
+
+### 关于
+
+![关于](docs/screenshots/about-dark.png)
 
 ## 功能概览
 
