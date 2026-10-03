@@ -126,6 +126,8 @@ public sealed class MusicPage : UserControl
         _deletePreset.Click += (_, _) => DeleteSelectedCustomMusicPreset();
         _customColors.Click += (_, _) => EditMusicColors();
         _sequence.ColorsChanged += (_, _) => OnMusicPresetControlChanged();
+        // 与灯效页颜色列表同款缩进：左对齐 Row 的 130 标签列，右侧收进 24px 不贴边
+        _sequence.Margin = new Thickness(130, 0, 24, 0);
         _advanced.Checked += (_, _) => UpdateMusicAdvancedVisibility();
         _advanced.Unchecked += (_, _) => UpdateMusicAdvancedVisibility();
         // 基础/峰值联动：峰值不得低于基础（否则保存时会被 Normalize 静默抬回，
@@ -206,6 +208,9 @@ public sealed class MusicPage : UserControl
     }
 
     public bool IsAdvancedExpanded => _advanced.IsChecked == true;
+
+    /// <summary>截图验收专用：滚动到节拍颜色列表区域。</summary>
+    public void ScrollToBeatColorsForCapture() => (Content as ScrollViewer)?.ScrollToEnd();
 
     public void SetAdvancedExpanded(bool expanded)
     {

@@ -94,6 +94,9 @@ public partial class MainWindow : Window
     /// <summary>截图验收专用：制造脏状态，验收脏状态下主题热切换。</summary>
     public void MarkDirtyForCapture() => _effectPage?.MarkDirtyForCapture();
 
+    /// <summary>截图验收专用：滚动音乐页到节拍颜色列表。</summary>
+    public void ScrollMusicPageForCapture() => _musicPage?.ScrollToBeatColorsForCapture();
+
     /// <summary>截图验收专用：切换场景自动化编辑器页签。</summary>
     public void SelectAutomationEditorTab(int index) => _automationPage?.SelectEditorTab(index);
 

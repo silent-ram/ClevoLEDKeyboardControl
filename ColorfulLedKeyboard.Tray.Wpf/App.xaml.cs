@@ -192,6 +192,16 @@ public partial class App : Application
                 DoEvents();
             }
 
+            // 音乐页节拍颜色缩进验收：滚动到列表区域
+            if (_startupArgs.Contains("--music-scroll"))
+            {
+                window.SelectPage(2);
+                DoEvents();
+                window.ScrollMusicPageForCapture();
+                DoEvents();
+                Capture(window, Path.Combine(directory, "page2-scrolled.png"));
+            }
+
             // 脏状态下主题热切换验收：等价于用户“有未应用的更改时切换深浅主题”的真实场景。
             // 此时 OnThemeChanged 因脏守卫跳过整页重建，页面颜色必须靠动态资源引用原地刷新。
             if (_startupArgs.Contains("--dirty-theme-switch"))

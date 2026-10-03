@@ -1060,7 +1060,8 @@ public sealed class EffectPage : UserControl
 
     private static UIElement Indent(FrameworkElement control)
     {
-        control.Margin = new Thickness(ControlLeft, 0, 0, 0);
+        // 左侧对齐控件列，右侧收进 24px：按钮不贴卡片右缘（含音乐页同款列表）
+        control.Margin = new Thickness(ControlLeft, 0, 24, 0);
         control.HorizontalAlignment = HorizontalAlignment.Stretch;
         control.MaxWidth = 590;
         return control;
