@@ -15,11 +15,11 @@ public sealed class UiSliderRow : UserControl
 
     public event EventHandler? ValueChanged;
 
-    public UiSliderRow(string labelText, int min, int max, string suffix)
+    public UiSliderRow(string labelText, int min, int max, string suffix, bool keyLabel = false)
     {
         _suffix = suffix;
         SetResourceReference(Control.ForegroundProperty, "Brush.Text");
-        _label = new TextBlock { Text = labelText, VerticalAlignment = VerticalAlignment.Center };
+        _label = new TextBlock { Text = keyLabel ? AppStrings.Get(labelText) : labelText, VerticalAlignment = VerticalAlignment.Center };
         _valueText = new TextBlock { VerticalAlignment = VerticalAlignment.Center, MinWidth = 64 };
         _slider = new Slider
         {

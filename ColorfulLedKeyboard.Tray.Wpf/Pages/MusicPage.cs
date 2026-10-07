@@ -17,46 +17,48 @@ public sealed class MusicPage : UserControl
     private static readonly int[] MusicAttackValues = [10, 15, 20, 25, 30, 40];
     private static readonly int[] MusicReleaseValues = [70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200];
 
-    private readonly TextBlock _audioSourceLabel = MakeMutedLabel("当前音频源：检测中…");
+    private readonly TextBlock _audioSourceLabel = MakeMutedLabelKey("mus.source.detecting");
     private readonly TextBlock _musicBindingStatus = MakeMutedLabel("");
-    private readonly Button _bindPlayer = MakeButton("绑定正在播放的程序", 170);
-    private readonly Button _clearPlayer = MakeButton("取消绑定", 110);
-    private readonly System.Windows.Controls.ComboBox _bindingColorSource = MakeCombo(["使用音乐预设颜色", "使用歌曲封面主色", "使用歌曲封面配色"]);
+    private readonly Button _bindPlayer = MakeButton("mus.bind", 170);
+    private readonly Button _clearPlayer = MakeButton("mus.unbind", 110);
+    private static readonly string[] ColorSourceKeys = ["mus.color.preset", "mus.color.dominant", "mus.color.palette"];
+    private readonly System.Windows.Controls.ComboBox _bindingColorSource = MakeCombo(ColorSourceKeys, keyed: true);
     private readonly TextBlock _coverColorHint = new()
     {
-        Text = "封面来源依赖服务端的专辑封面采集；未获取到封面时回退音乐预设颜色。",
+        Text = AppStrings.Get("mus.coverHint"),
         TextWrapping = TextWrapping.Wrap,
         MaxWidth = 430,
         FontSize = 11.5,
         VerticalAlignment = VerticalAlignment.Center
     };
-    private readonly System.Windows.Controls.ComboBox _mediaSession = MakeCombo(["自动匹配播放器"]);
+    private readonly System.Windows.Controls.ComboBox _mediaSession = MakeCombo(["mus.session.auto"], keyed: true);
     private readonly TextBlock _mediaMatchStatus = MakeMutedLabel("");
     private readonly PalettePreviewControl _palettePreview = new();
     private readonly TextBlock _currentColorStatus = MakeMutedLabel("");
 
     private readonly System.Windows.Controls.ComboBox _preset = MakeCombo([]);
-    private readonly Button _savePreset = MakeButton("保存预设修改", 140);
-    private readonly Button _createPreset = MakeButton("新建/另存为", 112);
-    private readonly Button _deletePreset = MakeButton("删除预设", 112);
+    private readonly Button _savePreset = MakeButton("mus.preset.saveChanges", 140);
+    private readonly Button _createPreset = MakeButton("mus.preset.saveAs", 112);
+    private readonly Button _deletePreset = MakeButton("mus.preset.delete", 112);
     private readonly TextBlock _presetSaveHint = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(ControlLeft, 0, 0, 0) };
     private readonly System.Windows.Controls.TextBox _presetName = MakeTextBox(220);
-    private readonly System.Windows.Controls.ComboBox _responseMode = MakeCombo(["节奏律动", "鼓点响应"]);
-    private readonly Button _customColors = MakeButton("自定义颜色", 128);
+    private static readonly string[] ResponseModeKeys = ["mus.response.rhythm", "mus.response.beat"];
+    private readonly System.Windows.Controls.ComboBox _responseMode = MakeCombo(ResponseModeKeys, keyed: true);
+    private readonly Button _customColors = MakeButton("mus.customColors", 128);
     private readonly UiSequenceEditor _sequence = new();
-    private readonly UiSliderRow _baseBrightness = new("基础亮度", 0, 100, "%");
-    private readonly UiSliderRow _peakBrightness = new("峰值亮度", 0, 100, "%");
-    private readonly System.Windows.Controls.CheckBox _followSystemVolume = MakeCheckBox("跟随 Windows 系统音量");
+    private readonly UiSliderRow _baseBrightness = new("mus.baseBrightness", 0, 100, "%", keyLabel: true);
+    private readonly UiSliderRow _peakBrightness = new("mus.peakBrightness", 0, 100, "%", keyLabel: true);
+    private readonly System.Windows.Controls.CheckBox _followSystemVolume = MakeCheckBox("mus.followVolume");
 
-    private readonly System.Windows.Controls.CheckBox _advanced = MakeCheckBox("显示高级参数");
+    private readonly System.Windows.Controls.CheckBox _advanced = MakeCheckBox("mus.advanced");
     private readonly System.Windows.Controls.ComboBox _sensitivity = MakeCombo([]);
     private readonly System.Windows.Controls.ComboBox _attack = MakeCombo([]);
     private readonly System.Windows.Controls.ComboBox _release = MakeCombo([]);
-    private readonly UiSliderRow _noiseGate = new("噪声门", 0, 50, "%");
-    private readonly UiSliderRow _beatThreshold = new("节拍阈值", 0, 100, "%");
-    private readonly System.Windows.Controls.CheckBox _systemMixFallback = MakeCheckBox("未绑定播放器时，允许系统混音频段分析");
-    private readonly UiSliderRow _eqLow = new("低频参考", 20, 1000, " Hz");
-    private readonly UiSliderRow _eqHigh = new("高频参考", 40, 16000, " Hz");
+    private readonly UiSliderRow _noiseGate = new("mus.noiseGate", 0, 50, "%", keyLabel: true);
+    private readonly UiSliderRow _beatThreshold = new("mus.beatThreshold", 0, 100, "%", keyLabel: true);
+    private readonly System.Windows.Controls.CheckBox _systemMixFallback = MakeCheckBox("mus.systemMix");
+    private readonly UiSliderRow _eqLow = new("mus.eqLow", 20, 1000, " Hz", keyLabel: true);
+    private readonly UiSliderRow _eqHigh = new("mus.eqHigh", 40, 16000, " Hz", keyLabel: true);
 
     private readonly UIElement _coverHintRow;
     private readonly UIElement _presetSaveHintHost;
@@ -164,25 +166,25 @@ public sealed class MusicPage : UserControl
         _coverHintRow.Visibility = Visibility.Collapsed;
         _presetSaveHintHost = _presetSaveHint;
         _presetSaveHintHost.Visibility = Visibility.Collapsed;
-        _sensitivityRow = Row("灵敏度", _sensitivity);
-        _attackRow = Row("响应速度", _attack);
-        _releaseRow = Row("衰减速度", _release);
+        _sensitivityRow = Row("mus.sensitivity", _sensitivity);
+        _attackRow = Row("mus.attack", _attack);
+        _releaseRow = Row("mus.release", _release);
         _noiseGateHost = RowHost(_noiseGate);
         _beatThresholdHost = RowHost(_beatThreshold);
         _eqLowHost = RowHost(_eqLow);
         _eqHighHost = RowHost(_eqHigh);
 
         var stack = new StackPanel { Margin = new Thickness(18, 18, 18, 28), MaxWidth = 832 };
-        stack.Children.Add(MakeCard("播放器与当前配色", _audioSourceLabel, _musicBindingStatus,
+        stack.Children.Add(MakeCard("mus.card.playback", _audioSourceLabel, _musicBindingStatus,
             ButtonRow(_bindPlayer, _clearPlayer),
-            RowWithHint("键盘颜色来源", _bindingColorSource, _coverColorHint),
-            Row("歌曲封面来源", _mediaSession), _mediaMatchStatus,
+            RowWithHint("mus.row.colorSource", _bindingColorSource, _coverColorHint),
+            Row("mus.row.coverSource", _mediaSession), _mediaMatchStatus,
             RowHost(_palettePreview), _currentColorStatus));
-        stack.Children.Add(MakeCard("音乐预设与响应", Row("音乐预设", _preset),
-            ButtonRow(_savePreset, _createPreset, _deletePreset), _presetSaveHintHost, Row("预设名称", _presetName),
-            Row("音乐响应", _responseMode), PlainRow(_customColors), Section("节拍颜色"), _sequence,
+        stack.Children.Add(MakeCard("mus.card.preset", Row("mus.row.preset", _preset),
+            ButtonRow(_savePreset, _createPreset, _deletePreset), _presetSaveHintHost, Row("mus.row.presetName", _presetName),
+            Row("mus.row.response", _responseMode), PlainRow(_customColors), Section("mus.section.beatColors"), _sequence,
             _baseBrightness, _peakBrightness, PlainRow(_followSystemVolume)));
-        stack.Children.Add(MakeCard("高级音乐参数", PlainRow(_advanced), _sensitivityRow,
+        stack.Children.Add(MakeCard("mus.card.advanced", PlainRow(_advanced), _sensitivityRow,
             _attackRow, _releaseRow, _noiseGateHost, _beatThresholdHost,
             PlainRow(_systemMixFallback), _eqLowHost, _eqHighHost));
 
@@ -226,8 +228,8 @@ public sealed class MusicPage : UserControl
 
     public string MusicPresetBlockedMessage =>
         IsBuiltInMusicPreset(SelectedMusicPresetName())
-            ? "当前内置音乐预设已被修改。请先使用“新建/另存为”保存为自定义预设。"
-            : "当前音乐预设有尚未保存的修改。请先点击“保存预设修改”。";
+            ? AppStrings.Get("mus.block.builtin")
+            : AppStrings.Get("mus.block.dirty");
 
     // ---- 载入 / 保存（移植自 WinForms LoadSettings/SaveSettings 的音乐页字段）----
 
@@ -358,23 +360,23 @@ public sealed class MusicPage : UserControl
         _coverHintRow.Visibility = _bindingColorSource.SelectedIndex is 1 or 2 ? Visibility.Visible : Visibility.Collapsed;
         if (!_musicPlayerBinding.Enabled)
         {
-            _musicBindingStatus.Text = "未绑定：音乐模式使用系统混音和音乐预设颜色。";
-            _mediaMatchStatus.Text = "媒体会话：未启用播放器绑定。";
+            _musicBindingStatus.Text = AppStrings.Get("mus.binding.off");
+            _mediaMatchStatus.Text = AppStrings.Get("mus.session.off");
             _mediaMatchStatus.SetResourceReference(TextBlock.ForegroundProperty, "Brush.MutedText");
             _palettePreview.Colors = _sequence.Colors;
-            _currentColorStatus.Text = "当前使用音乐预设配色。";
+            _currentColorStatus.Text = AppStrings.Get("mus.colors.preset");
             _clearPlayer.IsEnabled = false;
             return;
         }
 
         _clearPlayer.IsEnabled = true;
         var runtime = status?.ActiveMusicApplication == _musicPlayerBinding.ProcessName
-            ? $"；当前 PID：{string.Join(",", status.ActiveProcessIds)}{(string.IsNullOrWhiteSpace(status.TrackTitle) ? "" : $"；{status.TrackTitle}")}"
+            ? AppStrings.Format("mus.pid", string.Join(",", status.ActiveProcessIds)) + (string.IsNullOrWhiteSpace(status.TrackTitle) ? "" : $"；{status.TrackTitle}")
             : "";
         var media = string.IsNullOrWhiteSpace(_musicPlayerBinding.MediaSessionId)
-            ? "；媒体会话：自动匹配"
-            : $"；媒体会话：{_musicPlayerBinding.MediaSessionId}";
-        _musicBindingStatus.Text = $"已绑定：{_musicPlayerBinding.ProcessName}{runtime}{media}";
+            ? AppStrings.Get("mus.media.auto")
+            : AppStrings.Format("mus.media.manual", _musicPlayerBinding.MediaSessionId);
+        _musicBindingStatus.Text = AppStrings.Format("mus.bound", _musicPlayerBinding.ProcessName, runtime, media);
         var mediaState = MediaPlaybackState.Load();
         var playback = mediaState?.Find(_musicPlayerBinding);
         var source = (MusicColorSource)Math.Max(0, _bindingColorSource.SelectedIndex);
@@ -388,14 +390,15 @@ public sealed class MusicPage : UserControl
         _palettePreview.Colors = colors;
         if (source == MusicColorSource.Preset)
         {
-            _mediaMatchStatus.Text = "媒体会话：颜色来源为音乐预设，封面匹配暂不参与输出。";
+            _mediaMatchStatus.Text = AppStrings.Get("mus.session.preset");
             _mediaMatchStatus.SetResourceReference(TextBlock.ForegroundProperty, "Brush.MutedText");
         }
         else if (playback is not null)
         {
-            var mode = string.IsNullOrWhiteSpace(_musicPlayerBinding.MediaSessionId) ? "自动匹配成功" : "手动匹配成功";
-            var cover = playback.Palette.Count > 0 ? $"已获取封面（{playback.Palette.Count} 色）" : "未获取封面，正在使用预设颜色";
-            _mediaMatchStatus.Text = $"媒体会话：{mode} → {playback.SourceId}；{(playback.IsPlaying ? "正在播放" : "切歌/暂停过渡")}；{cover}";
+            var mode = AppStrings.Get(string.IsNullOrWhiteSpace(_musicPlayerBinding.MediaSessionId) ? "mus.match.auto" : "mus.match.manual");
+            var cover = playback.Palette.Count > 0 ? AppStrings.Format("mus.cover.got", playback.Palette.Count) : AppStrings.Get("mus.cover.none");
+            var playState = AppStrings.Get(playback.IsPlaying ? "mus.playing" : "mus.transition");
+            _mediaMatchStatus.Text = AppStrings.Format("mus.session.matched", mode, playback.SourceId, playState, cover);
             _mediaMatchStatus.SetResourceReference(TextBlock.ForegroundProperty, playback.Palette.Count > 0 ? "Brush.Success" : "Brush.Warning");
         }
         else
@@ -408,18 +411,18 @@ public sealed class MusicPage : UserControl
                 .Select(session => session.SourceId).Distinct(StringComparer.OrdinalIgnoreCase).ToList() ?? [];
             var otherPlayers = candidates.Where(id => !matchingCandidates.Contains(id, StringComparer.OrdinalIgnoreCase)).ToList();
             _mediaMatchStatus.Text = candidates.Count == 0
-                ? "媒体会话：尚未检测到 Windows 播放器会话，请先播放歌曲。"
+                ? AppStrings.Get("mus.session.none")
                 : automatic
                     ? matchingCandidates.Count > 0
-                        ? $"媒体会话：检测到多个可能属于 {_musicPlayerBinding.ProcessName} 的来源（{string.Join("、", matchingCandidates)}），请在上方手动选择。"
-                        : $"媒体会话：{_musicPlayerBinding.ProcessName} 未提供可识别的 Windows 媒体会话。" +
-                          (otherPlayers.Count == 0 ? "" : $"检测到的 {string.Join("、", otherPlayers)} 属于其他播放器，不会使用。")
-                    : $"媒体会话：选择的会话当前不可用；当前可用：{string.Join("、", candidates)}。";
+                        ? AppStrings.Format("mus.session.multi", _musicPlayerBinding.ProcessName, string.Join("、", matchingCandidates))
+                        : AppStrings.Format("mus.session.unrecognized", _musicPlayerBinding.ProcessName) +
+                          (otherPlayers.Count == 0 ? "" : AppStrings.Format("mus.session.others", string.Join("、", otherPlayers)))
+                    : AppStrings.Format("mus.session.unavailable", string.Join("、", candidates));
             _mediaMatchStatus.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Error");
         }
         _currentColorStatus.Text = playback is null
-            ? $"当前使用预设颜色：{string.Join("  ", colors)}"
-            : $"当前歌曲：{playback.Title}{(string.IsNullOrWhiteSpace(playback.Artist) ? "" : " - " + playback.Artist)}；实际颜色：{string.Join("  ", colors)}";
+            ? AppStrings.Format("mus.colors.presetList", string.Join("  ", colors))
+            : AppStrings.Format("mus.colors.track", playback.Title, string.IsNullOrWhiteSpace(playback.Artist) ? "" : " - " + playback.Artist, string.Join("  ", colors));
     }
 
     private void RefreshMediaSessions(string? selectedSource = null)
@@ -433,7 +436,7 @@ public sealed class MusicPage : UserControl
             .ToList() ?? [];
         if (!string.IsNullOrWhiteSpace(selectedSource) && !sources.Contains(selectedSource, StringComparer.OrdinalIgnoreCase))
             sources.Add(selectedSource);
-        var desiredItems = new[] { "自动匹配播放器" }.Concat(sources).ToList();
+        var desiredItems = new[] { AppStrings.Get("mus.session.auto") }.Concat(sources).ToList();
         var currentItems = _mediaSession.Items.Cast<object>().Select(item => item?.ToString() ?? "").ToList();
         var desiredIndex = string.IsNullOrWhiteSpace(selectedSource)
             ? 0
@@ -457,12 +460,12 @@ public sealed class MusicPage : UserControl
     {
         var deviceName = info?.DeviceFriendlyName ?? "";
         _audioSourceLabel.Text = string.IsNullOrEmpty(deviceName)
-            ? "当前音频源：检测中…"
+            ? AppStrings.Get("mus.source.detecting")
             : info?.Status switch
             {
-                AudioSourceStatus.Switching => $"当前音频源：{deviceName}（切换中…）",
-                AudioSourceStatus.Hfp => $"当前音频源：{deviceName}（蓝牙通话模式，暂不可用）",
-                _ => $"当前音频源：{deviceName}"
+                AudioSourceStatus.Switching => AppStrings.Format("mus.source.switching", deviceName),
+                AudioSourceStatus.Hfp => AppStrings.Format("mus.source.hfp", deviceName),
+                _ => AppStrings.Format("mus.source.ok", deviceName)
             };
     }
 
@@ -527,7 +530,7 @@ public sealed class MusicPage : UserControl
     {
         if (IsBuiltInMusicPreset(SelectedMusicPresetName()))
         {
-            System.Windows.MessageBox.Show("内置预设不能被修改；请使用“新建/另存为”创建一个自定义预设。",
+            System.Windows.MessageBox.Show(AppStrings.Get("mus.preset.readonly2"),
                 "ClevoLEDKeyboardControl", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
@@ -571,7 +574,7 @@ public sealed class MusicPage : UserControl
     {
         var dialog = new Window
         {
-            Title = "新建/另存为",
+            Title = AppStrings.Get("mus.preset.saveAs"),
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             ResizeMode = ResizeMode.NoResize,
             ShowInTaskbar = false,
@@ -584,10 +587,10 @@ public sealed class MusicPage : UserControl
         };
 
         var input = new System.Windows.Controls.TextBox { Style = (Style)Application.Current.Resources["UiTextBox"], Width = 300 };
-        var ok = new Button { Content = "确定", Style = (Style)Application.Current.Resources["UiButtonPrimary"], MinWidth = 78 };
-        var cancel = new Button { Content = "取消", Style = (Style)Application.Current.Resources["UiButton"], MinWidth = 78, Margin = new Thickness(12, 0, 0, 0) };
+        var ok = new Button { Content = AppStrings.Get("common.confirm"), Style = (Style)Application.Current.Resources["UiButtonPrimary"], MinWidth = 78 };
+        var cancel = new Button { Content = AppStrings.Get("common.cancel"), Style = (Style)Application.Current.Resources["UiButton"], MinWidth = 78, Margin = new Thickness(12, 0, 0, 0) };
         var panel = new StackPanel { Margin = new Thickness(18) };
-        panel.Children.Add(new TextBlock { Text = "预设名称" });
+        panel.Children.Add(new TextBlock { Text = AppStrings.Get("mus.row.presetName") });
         panel.Children.Add(input);
         input.Margin = new Thickness(0, 10, 0, 0);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 14, 0, 0) };
@@ -608,7 +611,7 @@ public sealed class MusicPage : UserControl
                 dialog.Close();
                 return;
             }
-            System.Windows.MessageBox.Show(dialog, "请输入预设名称。", "ClevoLEDKeyboardControl",
+            System.Windows.MessageBox.Show(dialog, AppStrings.Get("mus.preset.emptyName"), "ClevoLEDKeyboardControl",
                 MessageBoxButton.OK, MessageBoxImage.Information);
             input.Focus();
         };
@@ -623,13 +626,13 @@ public sealed class MusicPage : UserControl
         name = name.Trim();
         if (string.IsNullOrWhiteSpace(name))
         {
-            System.Windows.MessageBox.Show("请先输入自定义预设名称。", "ClevoLEDKeyboardControl", MessageBoxButton.OK, MessageBoxImage.Information);
+            System.Windows.MessageBox.Show(AppStrings.Get("mus.preset.emptyName2"), "ClevoLEDKeyboardControl", MessageBoxButton.OK, MessageBoxImage.Information);
             return false;
         }
 
         if (IsBuiltInMusicPreset(name))
         {
-            System.Windows.MessageBox.Show("自定义预设不能使用内置预设名称。", "ClevoLEDKeyboardControl", MessageBoxButton.OK, MessageBoxImage.Information);
+            System.Windows.MessageBox.Show(AppStrings.Get("mus.preset.reserved"), "ClevoLEDKeyboardControl", MessageBoxButton.OK, MessageBoxImage.Information);
             return false;
         }
 
@@ -644,7 +647,7 @@ public sealed class MusicPage : UserControl
 
         if (existing >= 0 && existing != originalIndex)
         {
-            var choice = System.Windows.MessageBox.Show($"预设“{name}”已存在，是否覆盖？", "ClevoLEDKeyboardControl",
+            var choice = System.Windows.MessageBox.Show(AppStrings.Format("mus.preset.overwrite", name), "ClevoLEDKeyboardControl",
                 MessageBoxButton.YesNo, MessageBoxImage.Question);
             if (choice != MessageBoxResult.Yes)
             {
@@ -654,7 +657,7 @@ public sealed class MusicPage : UserControl
 
         if (existing < 0 && originalIndex < 0 && _musicCustomPresets.Count >= 8)
         {
-            System.Windows.MessageBox.Show("最多保存 8 个自定义音乐预设。", "ClevoLEDKeyboardControl", MessageBoxButton.OK, MessageBoxImage.Information);
+            System.Windows.MessageBox.Show(AppStrings.Get("mus.preset.limit"), "ClevoLEDKeyboardControl", MessageBoxButton.OK, MessageBoxImage.Information);
             return false;
         }
 
@@ -683,7 +686,7 @@ public sealed class MusicPage : UserControl
         var name = SelectedMusicPresetName();
         if (IsBuiltInMusicPreset(name))
         {
-            System.Windows.MessageBox.Show("内置预设不能删除。", "ClevoLEDKeyboardControl", MessageBoxButton.OK, MessageBoxImage.Information);
+            System.Windows.MessageBox.Show(AppStrings.Get("mus.preset.noDelete"), "ClevoLEDKeyboardControl", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
@@ -750,10 +753,10 @@ public sealed class MusicPage : UserControl
         var builtIn = IsBuiltInMusicPreset(SelectedMusicPresetName());
         _presetSaveHint.Text = _musicPresetChanged
             ? builtIn
-                ? "内置预设不能直接修改，请使用“新建/另存为”。"
-                : "预设内容已修改，请先点击“保存预设修改”。"
+                ? AppStrings.Get("mus.hint.builtinModified")
+                : AppStrings.Get("mus.hint.modified")
             : _musicPresetChangesStaged
-                ? "预设修改已暂存，点击底部“保存并应用”后生效。"
+                ? AppStrings.Get("mus.hint.staged")
                 : "";
         _presetSaveHint.SetResourceReference(TextBlock.ForegroundProperty, _musicPresetChanged ? "Brush.Warning" : "Brush.Success");
         _presetSaveHintHost.Visibility = string.IsNullOrWhiteSpace(_presetSaveHint.Text)
@@ -918,6 +921,8 @@ public sealed class MusicPage : UserControl
         return block;
     }
 
+    private static TextBlock MakeMutedLabelKey(string key) => MakeMutedLabel(AppStrings.Get(key));
+
     private static TextBlock MakeMutedLabel(string text)
     {
         var block = new TextBlock
@@ -930,14 +935,14 @@ public sealed class MusicPage : UserControl
         return block;
     }
 
-    private static System.Windows.Controls.CheckBox MakeCheckBox(string text)
+    private static System.Windows.Controls.CheckBox MakeCheckBox(string key)
     {
-        var check = new System.Windows.Controls.CheckBox { Content = text };
+        var check = new System.Windows.Controls.CheckBox { Content = AppStrings.Get(key) };
         check.SetResourceReference(StyleProperty, "UiCheckBox");
         return check;
     }
 
-    private static System.Windows.Controls.ComboBox MakeCombo(IEnumerable<string> items)
+    private static System.Windows.Controls.ComboBox MakeCombo(IEnumerable<string> items, bool keyed = false)
     {
         var combo = new System.Windows.Controls.ComboBox
         {
@@ -945,7 +950,7 @@ public sealed class MusicPage : UserControl
             HorizontalAlignment = HorizontalAlignment.Left
         };
         combo.SetResourceReference(StyleProperty, "UiComboBox");
-        foreach (var item in items) combo.Items.Add(item);
+        foreach (var item in items) combo.Items.Add(keyed ? AppStrings.Get(item) : item);
         return combo;
     }
 
@@ -956,9 +961,9 @@ public sealed class MusicPage : UserControl
         return box;
     }
 
-    private static Button MakeButton(string text, double minWidth = 112)
+    private static Button MakeButton(string key, double minWidth = 112)
     {
-        var button = new Button { Content = text, MinWidth = minWidth };
+        var button = new Button { Content = AppStrings.Get(key), MinWidth = minWidth };
         button.SetResourceReference(StyleProperty, "UiButton");
         return button;
     }

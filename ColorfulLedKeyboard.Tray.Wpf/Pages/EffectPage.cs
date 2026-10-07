@@ -14,27 +14,32 @@ namespace ColorfulLedKeyboard.Tray.Wpf.Pages;
 /// </summary>
 public sealed class EffectPage : UserControl
 {
-    public const string SoftwareDefaultPresetName = "软件默认配置";
-    public const string UnsavedEffectPresetName = "当前设置（未保存为预设）";
+    // 预设显示名随语言变化；比较处统一走这两个属性，不做常量比较
+    public static string SoftwareDefaultPresetName => AppStrings.Get("eff.preset.default");
+    public static string UnsavedEffectPresetName => AppStrings.Get("eff.preset.unsaved");
 
-    private static readonly string[] EffectLabels = ["固定颜色", "RGB 循环", "单色呼吸", "循环呼吸", "脉冲", "心跳"];
+    private static string[] EffectLabels => new[]
+    {
+        AppStrings.Get("eff.type.static"), AppStrings.Get("eff.type.rainbow"), AppStrings.Get("eff.type.breathing"),
+        AppStrings.Get("eff.type.sequence"), AppStrings.Get("eff.type.pulse"), AppStrings.Get("eff.type.heartbeat"),
+    };
 
-    private readonly System.Windows.Controls.RadioButton _modeLighting = MakeRadio("灯效模式");
-    private readonly System.Windows.Controls.RadioButton _modeMusic = MakeRadio("音乐模式");
-    private readonly System.Windows.Controls.RadioButton _modeOff = MakeRadio("关闭");
+    private readonly System.Windows.Controls.RadioButton _modeLighting = MakeRadio("eff.mode.lighting");
+    private readonly System.Windows.Controls.RadioButton _modeMusic = MakeRadio("eff.mode.music");
+    private readonly System.Windows.Controls.RadioButton _modeOff = MakeRadio("eff.mode.off");
     private readonly System.Windows.Controls.ComboBox _effectType = MakeCombo(EffectLabels);
-    private readonly UiSliderRow _brightness = new("亮度", 0, 100, "%");
+    private readonly UiSliderRow _brightness = new("eff.brightness", 0, 100, "%", keyLabel: true);
     private readonly UiColorPickerRow _effectColor = new(compact: true);
-    private readonly UiSliderRow _period = new("呼吸周期", 300, 30000, " ms");
-    private readonly UiSliderRow _minimumBrightness = new("最低亮度", 0, 100, "%");
-    private readonly System.Windows.Controls.CheckBox _hardBlink = MakeCheckBox("硬闪烁");
+    private readonly UiSliderRow _period = new("eff.period.breathing", 300, 30000, " ms", keyLabel: true);
+    private readonly UiSliderRow _minimumBrightness = new("eff.period.minBrightness", 0, 100, "%", keyLabel: true);
+    private readonly System.Windows.Controls.CheckBox _hardBlink = MakeCheckBox("eff.hardBlink");
     private readonly UiSequenceEditor _sequence = new();
-    private readonly Button _customColors = MakeButton("自定义颜色", 128);
+    private readonly Button _customColors = MakeButton("eff.customColors", 128);
     private readonly System.Windows.Controls.ComboBox _effectPreset = MakeCombo([]);
     private readonly System.Windows.Controls.TextBox _effectPresetName = MakeTextBox(240);
-    private readonly Button _effectSavePreset = MakeButton("保存灯效预设修改", 160);
-    private readonly Button _effectCreatePreset = MakeButton("新建/另存为");
-    private readonly Button _effectDeletePreset = MakeButton("删除预设");
+    private readonly Button _effectSavePreset = MakeButton("eff.preset.saveChanges", 160);
+    private readonly Button _effectCreatePreset = MakeButton("eff.preset.saveAs");
+    private readonly Button _effectDeletePreset = MakeButton("eff.preset.delete");
 
     private readonly TextBlock _modeHint = MakeHint();
     private readonly TextBlock _sequenceSummary = MakeHint();
@@ -49,7 +54,7 @@ public sealed class EffectPage : UserControl
     private readonly UIElement _sequenceHost;
     private readonly UIElement _sequenceSectionHost;
     private readonly UIElement _sequenceSummaryHost;
-    private readonly TextBlock _sequenceSection = Section("自定义循环颜色");
+    private readonly TextBlock _sequenceSection = Section("eff.section.sequenceColors");
     private readonly UIElement _presetSectionHost;
     private readonly UIElement _presetComboRow;
     private readonly UIElement _presetNameRow;
@@ -124,9 +129,9 @@ public sealed class EffectPage : UserControl
 
         _modeHintHost = _modeHint;
         _modeHintHost.Visibility = Visibility.Collapsed;
-        stack.Children.Add(MakeCard("模式", modeRow, _modeHintHost));
+        stack.Children.Add(MakeCard("eff.card.mode", modeRow, _modeHintHost));
 
-        _effectTypeRow = Row("当前效果", _effectType);
+        _effectTypeRow = Row("eff.row.effect", _effectType);
         _brightnessHost = RowHost(_brightness);
         _effectColorHost = RowHost(_effectColor);
         _periodHost = RowHost(_period);
@@ -136,14 +141,14 @@ public sealed class EffectPage : UserControl
         _sequenceSectionHost = _sequenceSection;
         _sequenceSummaryHost = _sequenceSummary;
         _sequenceHost = Indent(_sequence);
-        stack.Children.Add(MakeCard("灯效参数", _effectTypeRow, _brightnessHost, _effectColorHost, _periodHost,
+        stack.Children.Add(MakeCard("eff.card.params", _effectTypeRow, _brightnessHost, _effectColorHost, _periodHost,
             _minimumBrightnessHost, _hardBlinkRow, _customColorsRow, _sequenceSectionHost, _sequenceSummaryHost, _sequenceHost));
 
-        _presetSectionHost = Section("配置预设");
-        _presetComboRow = Row("当前预设", _effectPreset);
-        _presetNameRow = Row("预设名称", _effectPresetName);
+        _presetSectionHost = Section("eff.card.presets");
+        _presetComboRow = Row("eff.row.preset", _effectPreset);
+        _presetNameRow = Row("eff.row.presetName", _effectPresetName);
         _presetButtonsRow = ButtonRow(_effectSavePreset, _effectCreatePreset, _effectDeletePreset);
-        stack.Children.Add(MakeCard("配置预设", _presetComboRow, _presetNameRow, _presetButtonsRow));
+        stack.Children.Add(MakeCard("eff.card.presets", _presetComboRow, _presetNameRow, _presetButtonsRow));
 
         var scroll = new ScrollViewer
         {
@@ -363,10 +368,10 @@ public sealed class EffectPage : UserControl
         _effectColorHost.Visibility = singleColor ? Visibility.Visible : Visibility.Collapsed;
         _period.SetLabelText(effect switch
         {
-            EffectType.Rainbow => "停留时长",
-            EffectType.Pulse => "脉冲周期",
-            EffectType.Heartbeat => "心跳周期",
-            _ => "呼吸周期"
+            EffectType.Rainbow => AppStrings.Get("eff.hold"),
+            EffectType.Pulse => AppStrings.Get("eff.period.pulse"),
+            EffectType.Heartbeat => AppStrings.Get("eff.period.heartbeat"),
+            _ => AppStrings.Get("eff.period.breathing")
         });
         _periodHost.Visibility = !hideEffectParams && effect is EffectType.Rainbow or EffectType.Breathing or EffectType.Sequence or EffectType.Pulse or EffectType.Heartbeat
             ? Visibility.Visible : Visibility.Collapsed;
@@ -376,10 +381,10 @@ public sealed class EffectPage : UserControl
             ? Visibility.Visible : Visibility.Collapsed;
         _sequenceSection.Text = effect switch
         {
-            EffectType.Sequence => "循环呼吸颜色",
-            EffectType.Pulse => "脉冲颜色",
-            EffectType.Heartbeat => "心跳颜色",
-            _ => "自定义循环颜色"
+            EffectType.Sequence => AppStrings.Get("eff.section.breathingColors"),
+            EffectType.Pulse => AppStrings.Get("eff.section.pulseColors"),
+            EffectType.Heartbeat => AppStrings.Get("eff.section.heartbeatColors"),
+            _ => AppStrings.Get("eff.section.sequenceColors")
         };
         _sequenceSectionHost.Visibility = sequenceVisible ? Visibility.Visible : Visibility.Collapsed;
         _sequenceSummary.Text = BuildSequenceSummary(effect);
@@ -392,12 +397,12 @@ public sealed class EffectPage : UserControl
         _presetButtonsRow.Visibility = presetVisible ? Visibility.Visible : Visibility.Collapsed;
         if (off)
         {
-            _modeHint.Text = "关闭模式不会显示灯效参数。";
+            _modeHint.Text = AppStrings.Get("eff.hint.off");
             _modeHintHost.Visibility = Visibility.Visible;
         }
         else if (music)
         {
-            _modeHint.Text = "音乐模式由音乐页配置，灯效参数已禁用。";
+            _modeHint.Text = AppStrings.Get("eff.hint.music");
             _modeHintHost.Visibility = Visibility.Visible;
         }
         else
@@ -602,36 +607,31 @@ public sealed class EffectPage : UserControl
         var count = _sequence.Colors.Count;
         if (count == 0)
         {
-            return "还没有选择颜色。";
+            return AppStrings.Get("eff.summary.none");
         }
 
         if (effect == EffectType.Sequence)
         {
-            return $"已选择 {count} 个颜色；每个颜色呼吸 {_period.Value} ms，整轮约 {FormatDuration(count * _period.Value)}。";
+            return AppStrings.Format("eff.summary.breathing", count, _period.Value, FormatDuration(count * _period.Value));
         }
 
         if (effect == EffectType.Pulse)
         {
-            return $"已选择 {count} 个颜色；每个颜色脉冲 {_period.Value} ms，整轮约 {FormatDuration(count * _period.Value)}。";
+            return AppStrings.Format("eff.summary.pulse", count, _period.Value, FormatDuration(count * _period.Value));
         }
 
         if (effect == EffectType.Heartbeat)
         {
-            return $"已选择 {count} 个颜色；每个颜色完成一组心跳 {_period.Value} ms，整轮约 {FormatDuration(count * _period.Value)}。";
+            return AppStrings.Format("eff.summary.heartbeat", count, _period.Value, FormatDuration(count * _period.Value));
         }
 
         var holdMs = _period.Value;
-        return $"已选择 {count} 个颜色；每个颜色停留约 {holdMs} ms，整轮约 {FormatDuration(count * holdMs)}。";
+        return AppStrings.Format("eff.summary.hold", count, holdMs, FormatDuration(count * holdMs));
     }
 
     private static string FormatDuration(int milliseconds)
     {
-        if (milliseconds < 10000)
-        {
-            return $"{milliseconds / 1000d:0.0} 秒";
-        }
-
-        return $"{milliseconds / 1000d:0} 秒";
+        return AppStrings.Format("eff.seconds", milliseconds / 1000d);
     }
 
     // ---- 自定义颜色 ----
@@ -772,7 +772,7 @@ public sealed class EffectPage : UserControl
     {
         if (IsSoftwareDefaultEffectPresetSelected())
         {
-            System.Windows.MessageBox.Show("软件默认配置不能被修改；请使用“新建/另存为”创建一个自定义预设。",
+            System.Windows.MessageBox.Show(AppStrings.Get("eff.preset.readonly"),
                 "ClevoLEDKeyboardControl", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
@@ -808,7 +808,7 @@ public sealed class EffectPage : UserControl
     {
         var dialog = new Window
         {
-            Title = "新建/另存为",
+            Title = AppStrings.Get("eff.preset.saveAs"),
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             ResizeMode = ResizeMode.NoResize,
             ShowInTaskbar = false,
@@ -821,10 +821,10 @@ public sealed class EffectPage : UserControl
         };
 
         var input = new System.Windows.Controls.TextBox { Style = (Style)Application.Current.Resources["UiTextBox"], Width = 300 };
-        var ok = new Button { Content = "确定", Style = (Style)Application.Current.Resources["UiButtonPrimary"], MinWidth = 78 };
-        var cancel = new Button { Content = "取消", Style = (Style)Application.Current.Resources["UiButton"], MinWidth = 78, Margin = new Thickness(12, 0, 0, 0) };
+        var ok = new Button { Content = AppStrings.Get("common.confirm"), Style = (Style)Application.Current.Resources["UiButtonPrimary"], MinWidth = 78 };
+        var cancel = new Button { Content = AppStrings.Get("common.cancel"), Style = (Style)Application.Current.Resources["UiButton"], MinWidth = 78, Margin = new Thickness(12, 0, 0, 0) };
         var panel = new StackPanel { Margin = new Thickness(18) };
-        panel.Children.Add(new TextBlock { Text = "预设名称" });
+        panel.Children.Add(new TextBlock { Text = AppStrings.Get("eff.row.presetName") });
         panel.Children.Add(input);
         input.Margin = new Thickness(0, 10, 0, 0);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 14, 0, 0) };
@@ -846,7 +846,7 @@ public sealed class EffectPage : UserControl
                 dialog.Close();
                 return;
             }
-            System.Windows.MessageBox.Show(dialog, "请输入预设名称。", "ClevoLEDKeyboardControl",
+            System.Windows.MessageBox.Show(dialog, AppStrings.Get("eff.preset.emptyName"), "ClevoLEDKeyboardControl",
                 MessageBoxButton.OK, MessageBoxImage.Information);
             input.Focus();
         };
@@ -861,13 +861,13 @@ public sealed class EffectPage : UserControl
         name = name.Trim();
         if (string.IsNullOrWhiteSpace(name))
         {
-            System.Windows.MessageBox.Show("请先输入预设名称。", "ClevoLEDKeyboardControl", MessageBoxButton.OK, MessageBoxImage.Information);
+            System.Windows.MessageBox.Show(AppStrings.Get("eff.preset.emptyName2"), "ClevoLEDKeyboardControl", MessageBoxButton.OK, MessageBoxImage.Information);
             return false;
         }
 
         if (string.Equals(name, SoftwareDefaultPresetName, StringComparison.OrdinalIgnoreCase))
         {
-            System.Windows.MessageBox.Show("自定义预设不能使用“软件默认配置”这个名称。", "ClevoLEDKeyboardControl", MessageBoxButton.OK, MessageBoxImage.Information);
+            System.Windows.MessageBox.Show(AppStrings.Get("eff.preset.reserved"), "ClevoLEDKeyboardControl", MessageBoxButton.OK, MessageBoxImage.Information);
             return false;
         }
 
@@ -880,7 +880,7 @@ public sealed class EffectPage : UserControl
 
         if (existingIndex >= 0 && existingIndex != originalIndex)
         {
-            var choice = System.Windows.MessageBox.Show($"预设“{name}”已存在，是否覆盖？", "ClevoLEDKeyboardControl",
+            var choice = System.Windows.MessageBox.Show(AppStrings.Format("eff.preset.overwrite", name), "ClevoLEDKeyboardControl",
                 MessageBoxButton.YesNo, MessageBoxImage.Question);
             if (choice != MessageBoxResult.Yes)
             {
@@ -890,7 +890,7 @@ public sealed class EffectPage : UserControl
 
         if (existingIndex < 0 && originalIndex < 0 && presets.Count >= EffectPresetSettings.MaxPresetsPerMode)
         {
-            System.Windows.MessageBox.Show($"每个模式最多保存 {EffectPresetSettings.MaxPresetsPerMode} 个预设。",
+            System.Windows.MessageBox.Show(AppStrings.Format("eff.preset.limit", EffectPresetSettings.MaxPresetsPerMode),
                 "ClevoLEDKeyboardControl", MessageBoxButton.OK, MessageBoxImage.Information);
             return false;
         }
@@ -935,7 +935,7 @@ public sealed class EffectPage : UserControl
         }
 
         var name = SelectedEffectPresetName();
-        if (System.Windows.MessageBox.Show($"确定删除预设“{name}”？", "ClevoLEDKeyboardControl",
+        if (System.Windows.MessageBox.Show(AppStrings.Format("eff.preset.confirmDelete", name), "ClevoLEDKeyboardControl",
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
         {
             return;
@@ -986,7 +986,7 @@ public sealed class EffectPage : UserControl
         var stack = new StackPanel();
         var heading = new TextBlock
         {
-            Text = title,
+            Text = AppStrings.Get(title),
             FontSize = 13,
             FontWeight = FontWeights.Bold,
             Margin = new Thickness(0, 0, 0, 8)
@@ -1007,7 +1007,7 @@ public sealed class EffectPage : UserControl
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         var labelBlock = new TextBlock
         {
-            Text = label,
+            Text = AppStrings.Get(label),
             VerticalAlignment = VerticalAlignment.Center
         };
         labelBlock.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
@@ -1067,11 +1067,11 @@ public sealed class EffectPage : UserControl
         return control;
     }
 
-    private static TextBlock Section(string text)
+    private static TextBlock Section(string key)
     {
         var block = new TextBlock
         {
-            Text = text,
+            Text = AppStrings.Get(key),
             FontWeight = FontWeights.Bold,
             Margin = new Thickness(0, 6, 0, 2)
         };
@@ -1090,16 +1090,16 @@ public sealed class EffectPage : UserControl
         return block;
     }
 
-    private static System.Windows.Controls.RadioButton MakeRadio(string text)
+    private static System.Windows.Controls.RadioButton MakeRadio(string key)
     {
-        var radio = new System.Windows.Controls.RadioButton { Content = text, GroupName = "OperatingMode" };
+        var radio = new System.Windows.Controls.RadioButton { Content = AppStrings.Get(key), GroupName = "OperatingMode" };
         radio.SetResourceReference(StyleProperty, "UiRadioButton");
         return radio;
     }
 
-    private static System.Windows.Controls.CheckBox MakeCheckBox(string text)
+    private static System.Windows.Controls.CheckBox MakeCheckBox(string key)
     {
-        var check = new System.Windows.Controls.CheckBox { Content = text };
+        var check = new System.Windows.Controls.CheckBox { Content = AppStrings.Get(key) };
         check.SetResourceReference(StyleProperty, "UiCheckBox");
         return check;
     }
@@ -1123,9 +1123,9 @@ public sealed class EffectPage : UserControl
         return box;
     }
 
-    private static Button MakeButton(string text, double minWidth = 112)
+    private static Button MakeButton(string key, double minWidth = 112)
     {
-        var button = new Button { Content = text, MinWidth = minWidth };
+        var button = new Button { Content = AppStrings.Get(key), MinWidth = minWidth };
         button.SetResourceReference(StyleProperty, "UiButton");
         return button;
     }
