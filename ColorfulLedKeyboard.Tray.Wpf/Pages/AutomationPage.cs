@@ -17,13 +17,13 @@ public sealed class AutomationPage : UserControl
         textBlock.SetResourceReference(TextBlock.ForegroundProperty, "Brush.MutedText");
         return textBlock;
     }
-    private readonly System.Windows.Controls.CheckBox _automationEnabled = MakeCheck("启用场景自动化");
+    private readonly System.Windows.Controls.CheckBox _automationEnabled = MakeCheck("auto.enable");
     private readonly SceneAutomationEditor _editor = new();
-    private readonly System.Windows.Controls.CheckBox _idleEnabled = MakeCheck("启用空闲降亮");
-    private readonly System.Windows.Controls.ComboBox _idleAfter = MakeCombo(["1 分钟", "3 分钟", "5 分钟", "10 分钟", "30 分钟"]);
-    private readonly UiSliderRow _idleBrightness = new("空闲亮度", 0, 100, "%");
-    private readonly System.Windows.Controls.CheckBox _idleTurnOff = MakeCheck("空闲后关闭灯效");
-    private readonly Button _simulator = MakeButton("场景模拟器...", 150);
+    private readonly System.Windows.Controls.CheckBox _idleEnabled = MakeCheck("auto.idle.enable");
+    private readonly System.Windows.Controls.ComboBox _idleAfter = MakeCombo(new[] { AppStrings.Format("auto.minutes", 1), AppStrings.Format("auto.minutes", 3), AppStrings.Format("auto.minutes", 5), AppStrings.Format("auto.minutes", 10), AppStrings.Format("auto.minutes", 30) });
+    private readonly UiSliderRow _idleBrightness = new("auto.idle.brightness", 0, 100, "%", keyLabel: true);
+    private readonly System.Windows.Controls.CheckBox _idleTurnOff = MakeCheck("auto.idle.off");
+    private readonly Button _simulator = MakeButton("auto.simulator", 150);
 
     public event EventHandler? Changed;
 
@@ -50,7 +50,7 @@ public sealed class AutomationPage : UserControl
 
         var priority = new TextBlock
         {
-            Text = "有声音乐程序  →  前台灯效程序  →  时间计划  →  手动模式",
+            Text = AppStrings.Get("auto.priority"),
             FontWeight = FontWeights.Bold,
             Margin = new Thickness(0, 4, 0, 0)
         };
@@ -60,9 +60,9 @@ public sealed class AutomationPage : UserControl
         simulatorRow.Children.Add(_simulator);
 
         var stack = new StackPanel { Margin = new Thickness(18, 18, 18, 28), MaxWidth = 832 };
-        stack.Children.Add(MakeCard("运行状态", _statusText, priority, simulatorRow));
-        stack.Children.Add(MakeCard("场景规则", PlainRow(_automationEnabled), Indent(_editor)));
-        stack.Children.Add(MakeCard("空闲最终覆盖", PlainRow(_idleEnabled), Row("空闲时间", _idleAfter),
+        stack.Children.Add(MakeCard("auto.card.status", _statusText, priority, simulatorRow));
+        stack.Children.Add(MakeCard("auto.card.rules", PlainRow(_automationEnabled), Indent(_editor)));
+        stack.Children.Add(MakeCard("auto.card.idle", PlainRow(_idleEnabled), Row("auto.idle.after", _idleAfter),
             _idleBrightness, PlainRow(_idleTurnOff)));
 
         Content = new ScrollViewer
@@ -119,21 +119,21 @@ public sealed class AutomationPage : UserControl
     {
         if (status is null || DateTimeOffset.UtcNow - status.UpdatedUtc > TimeSpan.FromSeconds(10))
         {
-            _statusText.Text = "服务状态尚未更新。应用条件需要托盘程序保持运行。";
+            _statusText.Text = AppStrings.Get("auto.status.stale");
             return;
         }
 
         var foreground = status.ForegroundAvailable
-            ? $"前台：{status.ForegroundProcessName}"
-            : "应用检测不可用";
+            ? AppStrings.Format("auto.status.foreground", status.ForegroundProcessName)
+            : AppStrings.Get("auto.status.unavailable");
         var active = string.IsNullOrWhiteSpace(status.ActiveRuleName)
-            ? "当前：基础设置"
-            : $"当前：{status.ActiveRuleName} → {status.TargetDescription}";
-        var idle = status.IdleOverrideActive ? "；空闲覆盖生效" : "";
-        var invalid = string.IsNullOrWhiteSpace(status.InvalidReason) ? "" : $"；提示：{status.InvalidReason}";
+            ? AppStrings.Get("auto.status.base")
+            : AppStrings.Format("auto.status.rule", status.ActiveRuleName, status.TargetDescription);
+        var idle = status.IdleOverrideActive ? AppStrings.Get("auto.status.idleOverride") : "";
+        var invalid = string.IsNullOrWhiteSpace(status.InvalidReason) ? "" : AppStrings.Format("auto.status.hint", status.InvalidReason);
         var audio = string.IsNullOrWhiteSpace(status.ActiveMusicApplication)
-            ? "音频：无有声程序"
-            : $"音频：{status.ActiveMusicApplication}（PID {string.Join(",", status.ActiveProcessIds)}）";
+            ? AppStrings.Get("auto.status.noAudio")
+            : AppStrings.Format("auto.status.audio", status.ActiveMusicApplication, string.Join(",", status.ActiveProcessIds));
         _statusText.Text = $"{foreground}；{active}{idle}{invalid}；{audio}";
         if (_editor.Visibility == Visibility.Visible) _editor.RefreshRuntimeState();
     }
@@ -216,16 +216,16 @@ public sealed class AutomationPage : UserControl
         return combo;
     }
 
-    private static System.Windows.Controls.CheckBox MakeCheck(string text)
+    private static System.Windows.Controls.CheckBox MakeCheck(string key)
     {
-        var check = new System.Windows.Controls.CheckBox { Content = text };
+        var check = new System.Windows.Controls.CheckBox { Content = AppStrings.Get(key) };
         check.SetResourceReference(StyleProperty, "UiCheckBox");
         return check;
     }
 
-    private static Button MakeButton(string text, double minWidth = 112)
+    private static Button MakeButton(string key, double minWidth = 112)
     {
-        var button = new Button { Content = text, MinWidth = minWidth };
+        var button = new Button { Content = AppStrings.Get(key), MinWidth = minWidth };
         button.SetResourceReference(StyleProperty, "UiButton");
         return button;
     }

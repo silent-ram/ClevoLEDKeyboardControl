@@ -336,10 +336,10 @@ public partial class MainWindow : Window
         var status = AutomationStatus.Load();
         var fresh = status is not null && DateTimeOffset.UtcNow - status.UpdatedUtc <= TimeSpan.FromSeconds(10);
         var mode = !settings.Enabled || fresh && status!.FinalBrightnessLimit == 0
-            ? "灯光已关闭"
+            ? AppStrings.Get("ov.mode.off")
             : fresh && (!string.IsNullOrWhiteSpace(status!.ActiveMusicApplication) || status.TargetDescription.StartsWith("音乐：", StringComparison.Ordinal))
-                ? "音乐模式"
-                : settings.OperatingMode == OperatingMode.Music ? "音乐模式" : "灯效模式";
+                ? AppStrings.Get("ov.mode.music")
+                : settings.OperatingMode == OperatingMode.Music ? AppStrings.Get("ov.mode.music") : AppStrings.Get("ov.mode.lighting");
         var brightness = fresh && !string.IsNullOrWhiteSpace(status!.BrightnessDisplay)
             ? status.BrightnessDisplay
             : settings.OperatingMode == OperatingMode.Music
@@ -347,16 +347,16 @@ public partial class MainWindow : Window
                 : $"{settings.Brightness}%";
         var brightnessHint = fresh && !string.IsNullOrWhiteSpace(status!.BrightnessDescription)
             ? status.BrightnessDescription
-            : "等待服务计算最终输出";
+            : AppStrings.Get("ov.brightness.waiting");
         var rule = fresh && !string.IsNullOrWhiteSpace(status!.ActiveRuleName)
             ? $"{status.ActiveRuleName} → {status.TargetDescription}"
-            : settings.Automation.Enabled ? "当前使用基础设置" : "场景自动化未启用";
+            : settings.Automation.Enabled ? AppStrings.Get("ov.rule.base") : AppStrings.Get("ov.rule.disabled");
         var player = fresh && !string.IsNullOrWhiteSpace(status!.ActiveMusicApplication)
-            ? $"{status.ActiveMusicApplication} · {(string.IsNullOrWhiteSpace(status.TrackTitle) ? "检测到声音" : status.TrackTitle)}"
-            : "当前没有匹配的有声程序";
-        var typing = settings.TypingPulse.Enabled ? "打字开启" : "打字关闭";
-        var notification = settings.NotificationFlash.Enabled ? "通知开启" : "通知关闭";
-        var events = $"{typing} · {notification}{(fresh && status!.IdleOverrideActive ? " · 空闲覆盖中" : "")}";
+            ? $"{status.ActiveMusicApplication} · {(string.IsNullOrWhiteSpace(status.TrackTitle) ? AppStrings.Get("ov.player.sound") : status.TrackTitle)}"
+            : AppStrings.Get("ov.player.none");
+        var typing = settings.TypingPulse.Enabled ? AppStrings.Get("ov.typing.on") : AppStrings.Get("ov.typing.off");
+        var notification = settings.NotificationFlash.Enabled ? AppStrings.Get("ov.notify.on") : AppStrings.Get("ov.notify.off");
+        var events = $"{typing} · {notification}{(fresh && status!.IdleOverrideActive ? " · " + AppStrings.Get("ov.idle.active") : "")}";
 
         overview.SetRuntime(mode, brightness, brightnessHint, rule, player, events);
     }
