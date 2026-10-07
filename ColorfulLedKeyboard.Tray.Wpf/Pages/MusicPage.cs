@@ -242,7 +242,11 @@ public sealed class MusicPage : UserControl
             RefreshMusicPresetList(settings.Effect.Music.PresetName);
             _presetName.Text = IsBuiltInMusicPreset(settings.Effect.Music.PresetName) ? "" : settings.Effect.Music.PresetName;
             _responseMode.SelectedIndex = MusicResponseMapping.Index(settings.Effect.Music.EqEnabled);
-            _sequence.Colors = settings.Effect.Music.Colors;
+            // 选中内置预设时以内置清单为准（持久化值可能为空或历史乱序），保证显示与内置定义一致
+            _sequence.Colors = IsBuiltInMusicPreset(settings.Effect.Music.PresetName)
+                && FindSelectedMusicPreset() is { } builtIn
+                ? builtIn.Colors
+                : settings.Effect.Music.Colors;
             _sensitivity.SelectedIndex = ClosestIndex(MusicSensitivityValues, settings.Effect.Music.Sensitivity);
             _attack.SelectedIndex = ClosestIndex(MusicAttackValues, settings.Effect.Music.AttackMs);
             _release.SelectedIndex = ClosestIndex(MusicReleaseValues, settings.Effect.Music.ReleaseMs);
