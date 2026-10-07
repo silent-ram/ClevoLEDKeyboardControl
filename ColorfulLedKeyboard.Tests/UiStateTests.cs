@@ -20,6 +20,23 @@ public sealed class UiStateTests : IDisposable
     }
 
     [Fact]
+    public void LanguageDefaultsToAutoAndRoundTrips()
+    {
+        var store = new UiStateStore(PathName);
+        var state = store.Load();
+        Assert.Equal("auto", state.Language);
+
+        state.Language = "en-US";
+        store.Save(state);
+        Assert.Equal("en-US", store.Load().Language);
+
+        // 非法值在 Normalize 时回退 auto
+        state.Language = "klingon";
+        store.Save(state);
+        Assert.Equal("auto", store.Load().Language);
+    }
+
+    [Fact]
     public void StateRoundTripsSelectedThemeAndLayout()
     {
         var store = new UiStateStore(PathName);
