@@ -170,7 +170,8 @@ public sealed class SoftwareSettingsPage : UserControl
         accentLabel.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
         accentRow.Children.Add(accentLabel);
         _accentRowHost.Content = BuildAccentRow();
-        return MakeCard("外观", hint, themeRow, _accentRowHost, _accentSummary);
+        var languageRow = BuildLanguageRow();
+        return MakeCard("外观", hint, themeRow, languageRow, _accentRowHost, _accentSummary);
     }
 
     // ---- 载入 / 保存 ----
@@ -354,6 +355,51 @@ public sealed class SoftwareSettingsPage : UserControl
 
     /// <summary>色块芯片：纯色 Border（无按钮 chrome，悬停保持原色），
     /// 可删除的色块悬停时右上角浮现 ✕。</summary>
+    /// <summary>界面语言行：跟随系统 / 中文 / English，切换即写入 UiState 并触发全局刷新。</summary>
+    private UIElement BuildLanguageRow()
+    {
+        var combo = new System.Windows.Controls.ComboBox
+        {
+            Width = 280,
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Left
+        };
+        combo.SetResourceReference(StyleProperty, "UiComboBox");
+        var items = new[]
+        {
+            (AppStrings.Auto, "跟随系统", "Follow system"),
+            (AppStrings.ZhCn, "中文（简体）", "中文（简体）"),
+            (AppStrings.EnUs, "English", "English"),
+        };
+        foreach (var (_, zh, en) in items)
+        {
+            combo.Items.Add(AppStrings.IsEnglish ? en : zh);
+        }
+        var current = _uiStateStore.Load().Language;
+        combo.SelectedIndex = current switch
+        {
+            AppStrings.ZhCn => 1,
+            AppStrings.EnUs => 2,
+            _ => 0
+        };
+        var suppress = false;
+        combo.SelectionChanged += (_, _) =>
+        {
+            if (suppress) return;
+            var chosen = combo.SelectedIndex switch
+            {
+                1 => AppStrings.ZhCn,
+                2 => AppStrings.EnUs,
+                _ => AppStrings.Auto
+            };
+            if (chosen == _uiStateStore.Load().Language) return;
+            suppress = true;
+            try { combo.SelectedItem = combo.SelectedItem; } finally { suppress = false; }
+            _uiStateStore.Update(state => state.Language = chosen);
+            AppStrings.Apply(chosen);
+        };
+        return Row("界面语言", combo);
+    }
+
     private (FrameworkElement Container, Border Chip) BuildColorChip(int accentArgb, string name, bool deletable, System.Action delete)
     {
         var container = new Grid { Width = 34, Height = 26, Margin = new Thickness(0, 0, 10, 0) };

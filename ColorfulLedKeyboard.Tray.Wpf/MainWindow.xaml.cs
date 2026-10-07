@@ -14,23 +14,26 @@ namespace ColorfulLedKeyboard.Tray.Wpf;
 /// </summary>
 public partial class MainWindow : Window
 {
-    private static readonly (string Title, string Glyph)[] NavItems =
+    // 标题为 AppStrings key，语言切换后重建导航时即时取新值
+    private static readonly (string Key, string Glyph)[] NavItems =
     [
-        ("当前状态", "\uE80F"),   // Home
-        ("灯效设置", "\uE791"),   // Lightbulb
-        ("音乐模式", "\uEC4F"),   // MusicNote
-        ("场景自动化", "\uE9D9"), // Flow
-        ("事件反馈", "\uE945"),   // LightningBolt
-        ("诊断与恢复", "\uE90F"), // Repair
-        ("软件设置", "\uE713"),   // Settings
-        ("关于", "\uE946"),       // Info
+        ("nav.overview", "\uE80F"),   // Home
+        ("nav.effect", "\uE791"),   // Lightbulb
+        ("nav.music", "\uEC4F"),   // MusicNote
+        ("nav.automation", "\uE9D9"), // Flow
+        ("nav.feedback", "\uE945"),   // LightningBolt
+        ("nav.diagnostics", "\uE90F"), // Repair
+        ("nav.settings", "\uE713"),   // Settings
+        ("nav.about", "\uE946"),       // Info
     ];
+
+    private static string NavTitle((string Key, string Glyph) item) => AppStrings.Get(item.Key);
 
     private readonly UiStateStore _uiStateStore = UiStateStore.Shared;
     private readonly SettingsStore _settingsStore = new();
     private readonly UiState _initialUiState;
     private readonly List<Control> _pages = [];
-    private const string BaseTitle = "ClevoLEDKeyboardControl 设置";
+    private static string BaseTitle => AppStrings.Get("title.base");
     private EffectPage? _effectPage;
     private MusicPage? _musicPage;
     private AutomationPage? _automationPage;
@@ -67,10 +70,12 @@ public partial class MainWindow : Window
         SourceInitialized += (_, _) => WpfThemeManager.ApplyTitleBarMode(this);
         Loaded += (_, _) => { _ready = true; UpdateStatusHeader(); };
         WpfThemeManager.ThemeChanged += OnThemeChanged;
+        AppStrings.LanguageChanged += OnLanguageChanged;
         Closed += (_, _) =>
         {
             _statusTimer.Stop();
             WpfThemeManager.ThemeChanged -= OnThemeChanged;
+            AppStrings.LanguageChanged -= OnLanguageChanged;
             _softwareSettingsPage?.UnsubscribeEvents();
         };
         Closing += (_, e) =>
@@ -139,8 +144,8 @@ public partial class MainWindow : Window
     public void UpdateNavigationBadge()
     {
         var badge = _softwareSettingsPage?.UpdateBadge;
-        var items = NavItems.Select(item => new NavItem(item.Title, item.Glyph,
-            item.Title == "软件设置" ? badge : null)).ToList();
+        var items = NavItems.Select(item => new NavItem(NavTitle(item), item.Glyph,
+            item.Key == "nav.settings" ? badge : null)).ToList();
         var selected = Navigation.SelectedIndex;
         Navigation.ItemsSource = items;
         Navigation.SelectedIndex = selected;
@@ -161,7 +166,7 @@ public partial class MainWindow : Window
 
     private void BuildNavigation()
     {
-        var items = NavItems.Select(item => new NavItem(item.Title, item.Glyph)).ToList();
+        var items = NavItems.Select(item => new NavItem(NavTitle(item), item.Glyph)).ToList();
         Navigation.ItemsSource = items;
     }
 
@@ -222,7 +227,7 @@ public partial class MainWindow : Window
         foreach (var page in _pages) page.Visibility = Visibility.Collapsed;
         _pages[index].Visibility = Visibility.Visible;
         PageHost.Content = _pages[index];
-        PageTitle.Text = NavItems[index].Title;
+        PageTitle.Text = NavTitle(NavItems[index]);
         _lastPage = index;
         if (_ready) _uiStateStore.Update(state => state.LastPage = index);
         if (_pages[index] is OverviewPage overview) UpdateOverview(overview);
@@ -294,12 +299,12 @@ public partial class MainWindow : Window
     {
         var dirty = HasAnyDirty;
         DirtyLabel.Text = _musicPage is { IsMusicPresetChanged: true }
-            ? "● 音乐预设尚未保存，请先点击音乐页内的“保存预设修改”"
-            : dirty ? "● 有尚未保存的修改" : "✓ 设置已保存";
+            ? AppStrings.Get("save.musicPresetDirty")
+            : dirty ? AppStrings.Get("save.dirty") : AppStrings.Get("save.clean");
         DirtyLabel.Foreground = (Brush)Application.Current.Resources[dirty ? "Brush.Warning" : "Brush.Success"];
         RevertButton.IsEnabled = dirty;
         ApplyButton.IsEnabled = dirty;
-        Title = dirty ? BaseTitle + " - 有未应用的更改" : BaseTitle;
+        Title = dirty ? BaseTitle + AppStrings.Get("title.dirty") : BaseTitle;
     }
 
     // ---- 状态头与总览（移植自 WinForms UpdateStatusHeader/UpdateOverviewRuntime）----
@@ -484,6 +489,17 @@ public partial class MainWindow : Window
         });
     }
 
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        // 与主题切换同一重建路径；有未保存修改时同样保留数据只重建
+        if (!HasAnyDirty)
+        {
+            try { RebuildPagesForTheme(); } catch (Exception ex) { System.Diagnostics.Trace.WriteLine($"RebuildForLanguage failed: {ex}"); }
+        }
+        UpdateSaveBar();
+        if (_pages.Count > 0) PageTitle.Text = NavTitle(NavItems[Math.Clamp(_lastPage, 0, NavItems.Length - 1)]);
+    }
+
     private void OnThemeChanged(object? sender, EventArgs e)
     {
         WpfThemeManager.ApplyTitleBarMode(this);
@@ -515,7 +531,7 @@ public partial class MainWindow : Window
         _softwareSettingsPage = null;
         var selected = Math.Clamp(_lastPage, 0, NavItems.Length - 1);
         BuildPages();
-        Navigation.ItemsSource = NavItems.Select(item => new NavItem(item.Title, item.Glyph)).ToList();
+        Navigation.ItemsSource = NavItems.Select(item => new NavItem(NavTitle(item), item.Glyph)).ToList();
         Navigation.SelectedIndex = selected;
         ApplySelectedPage(selected);
         UpdateSaveBar();

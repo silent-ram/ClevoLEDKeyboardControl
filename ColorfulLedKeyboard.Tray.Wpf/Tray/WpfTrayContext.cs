@@ -77,6 +77,7 @@ public sealed class WpfTrayContext : IDisposable
         _singleInstanceSignalTimer.Start();
         _usageTelemetryTimer.Tick += async (_, _) => await SyncUsageTelemetryAndScheduleAsync();
 
+        AppStrings.LanguageChanged += (_, _) => RefreshMenu();
         _audioStatusWatcher = new AudioSourceStatusWatcher(OnAudioStatusChanged);
         _audioStatusWatcher.RefreshNow();
 
@@ -125,7 +126,7 @@ public sealed class WpfTrayContext : IDisposable
         AddRuntimeStatusItems(menu);
         menu.Items.Add(new Separator { Style = (Style)Application.Current.Resources["UiMenuSeparator"] });
 
-        var enabled = MakeItem("启用灯效", isChecked: _settings.Enabled, onClick: () =>
+        var enabled = MakeItem(AppStrings.Get("menu.enableLighting"), isChecked: _settings.Enabled, onClick: () =>
         {
             if (TryUpdateSettings(settings => settings.Enabled = !settings.Enabled, rememberCurrent: false)) RefreshMenu();
         });
@@ -137,13 +138,13 @@ public sealed class WpfTrayContext : IDisposable
         menu.Items.Add(BuildBrightnessMenu());
         menu.Items.Add(new Separator { Style = (Style)Application.Current.Resources["UiMenuSeparator"] });
 
-        menu.Items.Add(MakeItem("设置...", onClick: OpenSettings));
+        menu.Items.Add(MakeItem(AppStrings.Get("menu.settings"), onClick: OpenSettings));
         menu.Items.Add(BuildServiceMenu());
 
         var updateAvailable = _availableUpdate?.Status == UpdateCheckStatus.Available;
         var update = MakeItem(updateAvailable
             ? $"发现新版本 v{_availableUpdate!.LatestVersion?.ToString(3)}（点击下载）"
-            : "检查更新", onClick: async () =>
+            : AppStrings.Get("menu.checkUpdate"), onClick: async () =>
         {
             if (_availableUpdate?.Status == UpdateCheckStatus.Available && !string.IsNullOrWhiteSpace(_availableUpdate.ReleaseUrl))
                 UpdateChecker.OpenUrl(_availableUpdate.ReleaseUrl);
@@ -152,9 +153,9 @@ public sealed class WpfTrayContext : IDisposable
         if (updateAvailable) update.Foreground = FindBrush("Brush.Error");
         menu.Items.Add(update);
 
-        menu.Items.Add(MakeItem("关于...", onClick: OpenAbout));
+        menu.Items.Add(MakeItem(AppStrings.Get("menu.about"), onClick: OpenAbout));
         menu.Items.Add(new Separator { Style = (Style)Application.Current.Resources["UiMenuSeparator"] });
-        menu.Items.Add(MakeItem("退出", onClick: ExitApplication));
+        menu.Items.Add(MakeItem(AppStrings.Get("menu.exit"), onClick: ExitApplication));
         return menu;
     }
 
@@ -176,8 +177,8 @@ public sealed class WpfTrayContext : IDisposable
         var current = !_settings.Enabled
             ? "当前：灯光已关闭"
             : fresh && !string.IsNullOrWhiteSpace(status!.ActiveMusicApplication)
-                ? $"当前：{status.ActiveMusicApplication} · 音乐模式"
-                : _settings.OperatingMode == OperatingMode.Music ? "当前：音乐模式" : $"当前：灯效模式 · {_settings.Effect.Type}";
+                ? AppStrings.Format("menu.now.musicApp", status.ActiveMusicApplication)
+                : _settings.OperatingMode == OperatingMode.Music ? AppStrings.Get("menu.now.music") : AppStrings.Format("menu.now.lighting", _settings.Effect.Type);
         menu.Items.Add(MakeItem(current, isEnabled: false));
         if (fresh && !string.IsNullOrWhiteSpace(status!.TrackTitle))
             menu.Items.Add(MakeItem($"歌曲：{status.TrackTitle}{(string.IsNullOrWhiteSpace(status.TrackArtist) ? "" : " - " + status.TrackArtist)}", isEnabled: false));
@@ -193,13 +194,13 @@ public sealed class WpfTrayContext : IDisposable
         parent.Items.Add(MakeItem("启用场景自动化", isChecked: _settings.Automation.Enabled,
             onClick: () => ApplyEffect(settings => settings.Automation.Enabled = !settings.Automation.Enabled)));
         parent.Items.Add(NewSeparator());
-        parent.Items.Add(BuildRuleToggleMenu("音乐程序", _settings.Automation.MusicApplications.Select(rule => (rule.Id, rule.Name, rule.Enabled)),
+        parent.Items.Add(BuildRuleToggleMenu(AppStrings.Get("menu.musicApps"), _settings.Automation.MusicApplications.Select(rule => (rule.Id, rule.Name, rule.Enabled)),
             (settings, id) =>
             {
                 var rule = settings.Automation.MusicApplications.FirstOrDefault(item => item.Id == id);
                 if (rule is not null) rule.Enabled = !rule.Enabled;
             }));
-        parent.Items.Add(BuildRuleToggleMenu("灯效程序", _settings.Automation.LightingApplications.Select(rule => (rule.Id, rule.Name, rule.Enabled)),
+        parent.Items.Add(BuildRuleToggleMenu(AppStrings.Get("menu.lightingApps"), _settings.Automation.LightingApplications.Select(rule => (rule.Id, rule.Name, rule.Enabled)),
             (settings, id) =>
             {
                 var rule = settings.Automation.LightingApplications.FirstOrDefault(item => item.Id == id);
@@ -212,7 +213,7 @@ public sealed class WpfTrayContext : IDisposable
                 if (rule is not null) rule.Enabled = !rule.Enabled;
             }));
         parent.Items.Add(NewSeparator());
-        parent.Items.Add(MakeItem("打开场景自动化设置...", onClick: OpenSettings));
+        parent.Items.Add(MakeItem(AppStrings.Get("menu.openAutomation"), onClick: OpenSettings));
         return parent;
     }
 
@@ -296,7 +297,7 @@ public sealed class WpfTrayContext : IDisposable
         parent.Items.Add(MakeItem("取消绑定", isEnabled: binding.Enabled,
             onClick: () => ApplyEffect(settings => settings.Effect.Music.PlayerBinding = new MusicPlayerBinding())));
         parent.Items.Add(NewSeparator());
-        parent.Items.Add(MakeItem("打开音乐设置...", onClick: OpenSettings));
+        parent.Items.Add(MakeItem(AppStrings.Get("menu.openMusic"), onClick: OpenSettings));
         return parent;
     }
 
@@ -329,13 +330,13 @@ public sealed class WpfTrayContext : IDisposable
         parent.Items.Add(MakeItem("通知闪烁", isChecked: _settings.NotificationFlash.Enabled,
             onClick: () => ApplyEffect(settings => settings.NotificationFlash.Enabled = !settings.NotificationFlash.Enabled)));
         parent.Items.Add(NewSeparator());
-        parent.Items.Add(MakeItem("打开事件反馈设置...", onClick: OpenSettings));
+        parent.Items.Add(MakeItem(AppStrings.Get("menu.openFeedback"), onClick: OpenSettings));
         return parent;
     }
 
     private MenuItem BuildEffectMenu()
     {
-        var effect = MakeItem("灯效模式", isChecked: _settings.OperatingMode == OperatingMode.Lighting);
+        var effect = MakeItem(AppStrings.Get("menu.lightingMode"), isChecked: _settings.OperatingMode == OperatingMode.Lighting);
         AddEffectPresetMenu(effect, EffectType.Static, "固定颜色");
         AddEffectPresetMenu(effect, EffectType.Rainbow, "RGB 循环");
         AddEffectPresetMenu(effect, EffectType.Breathing, "单色呼吸");
@@ -347,7 +348,7 @@ public sealed class WpfTrayContext : IDisposable
 
     private MenuItem BuildMusicModeMenu()
     {
-        var music = MakeItem("音乐模式", isChecked: _settings.OperatingMode == OperatingMode.Music);
+        var music = MakeItem(AppStrings.Get("menu.musicMode"), isChecked: _settings.OperatingMode == OperatingMode.Music);
         foreach (var preset in MusicSettings.BuiltInPresets.Concat(_settings.Effect.Music.CustomPresets))
         {
             var presetCopy = CloneMusicPreset(preset);
@@ -394,7 +395,7 @@ public sealed class WpfTrayContext : IDisposable
     {
         var musicMode = _settings.OperatingMode == OperatingMode.Music;
         var current = musicMode ? _settings.Effect.Music.PeakBrightness : _settings.Brightness;
-        var brightness = MakeItem(musicMode ? $"音乐峰值亮度 ({current}%)" : $"基础亮度 ({current}%)");
+        var brightness = MakeItem(musicMode ? AppStrings.Format("menu.brightness.peak", current) : AppStrings.Format("menu.brightness.base", current));
         foreach (var value in new[] { 25, 50, 75, 100 })
         {
             var captured = value;
@@ -415,7 +416,7 @@ public sealed class WpfTrayContext : IDisposable
     private MenuItem BuildServiceMenu()
     {
         var service = MakeItem("服务");
-        service.Items.Add(MakeItem("重启服务", onClick: RestartService));
+        service.Items.Add(MakeItem(AppStrings.Get("menu.restartService"), onClick: RestartService));
 
         var (trayRegistered, serviceAuto) = StartupManager.GetState();
         service.Items.Add(MakeItem("开机自动启动", isChecked: trayRegistered && serviceAuto, onClick: ToggleStartupAsync));

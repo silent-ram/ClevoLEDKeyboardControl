@@ -59,6 +59,7 @@ public partial class App : Application
         var uiState = UiStateStore.Shared.Load();
         var kind = Enum.TryParse<UiThemeKind>(themeArg, ignoreCase: true, out var parsed) ? parsed : uiState.Theme;
         WpfThemeManager.Initialize(kind);
+        AppStrings.Apply(uiState.Language);
         // 截图验收参数优先；正常启动应用 UiState 持久化的强调色（对照 WinForms Program.cs）。
         if (accentArg is not null && int.TryParse(accentArg, out var accentArgb))
             WpfThemeManager.AccentOverride = WpfThemeManager.ResolveAccent(accentArgb);
