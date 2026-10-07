@@ -111,9 +111,9 @@
                 <TextBlock x:Name="DirtyLabel" Text="✓ 设置已保存" VerticalAlignment="Center"
                            Foreground="{DynamicResource Brush.Success}" />
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button x:Name="RevertButton" Content="恢复修改" Style="{StaticResource UiButton}"
+                    <Button x:Name="RevertButton" Content="{DynamicResource str.save.revert}" Style="{StaticResource UiButton}"
                             Width="104" Margin="0,0,10,0" IsEnabled="False" />
-                    <Button x:Name="ApplyButton" Content="保存并应用" Style="{StaticResource UiButtonPrimary}"
+                    <Button x:Name="ApplyButton" Content="{DynamicResource str.save.apply}" Style="{StaticResource UiButtonPrimary}"
                             Width="120" IsEnabled="False" />
                 </StackPanel>
             </Grid>
