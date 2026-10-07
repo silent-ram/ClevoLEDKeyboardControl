@@ -44,10 +44,10 @@ public sealed class UiSequenceEditor : UserControl
         root.Children.Add(_list);
 
         _buttonColumn = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(10, 0, 0, 0) };
-        AddButton("删除选中", RemoveSelected);
-        AddButton("上移", () => Move(-1));
-        AddButton("下移", () => Move(+1));
-        AddButton("随机排序", Shuffle);
+        AddButton(AppStrings.Get("seq.delete"), RemoveSelected);
+        AddButton(AppStrings.Get("seq.up"), () => Move(-1));
+        AddButton(AppStrings.Get("seq.down"), () => Move(+1));
+        AddButton(AppStrings.Get("seq.shuffle"), Shuffle);
         Grid.SetColumn(_buttonColumn, 1);
         root.Children.Add(_buttonColumn);
         Content = root;

@@ -21,7 +21,7 @@ public sealed class AutomationRuleDialog : Window
         DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday,
         DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday
     ];
-    private static readonly string[] DayLabels = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+    private static string[] DayLabels => [AppStrings.Get("dlg.day.1"), AppStrings.Get("dlg.day.2"), AppStrings.Get("dlg.day.3"), AppStrings.Get("dlg.day.4"), AppStrings.Get("dlg.day.5"), AppStrings.Get("dlg.day.6"), AppStrings.Get("dlg.day.0")];
 
     private readonly RuleKind _kind;
     private readonly MusicApplicationRule? _musicRule;
@@ -31,22 +31,24 @@ public sealed class AutomationRuleDialog : Window
     private readonly List<MusicPreset> _musicPresets;
 
     private readonly System.Windows.Controls.TextBox _name = MakeTextBox();
-    private readonly System.Windows.Controls.CheckBox _enabled = MakeCheck("启用规则");
+    private readonly System.Windows.Controls.CheckBox _enabled = MakeCheck("dlg.rule.enable");
     private readonly System.Windows.Controls.TextBox _process = MakeTextBox();
-    private readonly System.Windows.Controls.CheckBox _includeChildren = MakeCheck("包含子进程");
-    private readonly System.Windows.Controls.CheckBox _timeEnabled = MakeCheck("限制时间");
+    private readonly System.Windows.Controls.CheckBox _includeChildren = MakeCheck("dlg.rule.children");
+    private readonly System.Windows.Controls.CheckBox _timeEnabled = MakeCheck("dlg.rule.timeEnabled");
     private readonly System.Windows.Controls.ComboBox _start = MakeTimeCombo();
     private readonly System.Windows.Controls.ComboBox _end = MakeTimeCombo();
     private readonly System.Windows.Controls.CheckBox[] _days;
     private readonly System.Windows.Controls.ComboBox _target = MakeCombo();
     private readonly System.Windows.Controls.ComboBox _effectType = MakeCombo();
     private readonly System.Windows.Controls.ComboBox _preset = MakeCombo();
-    private readonly System.Windows.Controls.ComboBox _colorSource = MakeCombo(["预设颜色", "封面主色", "封面配色"]);
+    private static readonly string[] ColorSourceKeys = ["dlg.color.preset", "ed.color.dominant", "ed.color.palette"];
+    private readonly System.Windows.Controls.ComboBox _colorSource = MakeCombo(ColorSourceKeys);
     private readonly System.Windows.Controls.ComboBox _mediaSession = MakeCombo();
-    private readonly System.Windows.Controls.CheckBox _brightnessEnabled = MakeCheck("限制最大亮度");
+    private readonly System.Windows.Controls.CheckBox _brightnessEnabled = MakeCheck("dlg.brightness.limit");
     private readonly System.Windows.Controls.TextBox _brightness = MakeTextBox();
-    private readonly System.Windows.Controls.ComboBox _typing = MakeCombo(["继承全局", "强制开启", "强制关闭"]);
-    private readonly System.Windows.Controls.ComboBox _notification = MakeCombo(["继承全局", "强制开启", "强制关闭"]);
+    private static readonly string[] PolicyKeys = ["dlg.policy.inherit", "dlg.policy.forceOn", "dlg.policy.forceOff"];
+    private readonly System.Windows.Controls.ComboBox _typing = MakeCombo(PolicyKeys);
+    private readonly System.Windows.Controls.ComboBox _notification = MakeCombo(PolicyKeys);
     private readonly List<UIElement> _musicOnly = [];
     private readonly List<UIElement> _notSchedule = [];
 
@@ -59,7 +61,7 @@ public sealed class AutomationRuleDialog : Window
         _effects = effects;
         _musicPresets = music.ToList();
 
-        Title = "编辑自动化规则";
+        Title = AppStrings.Get("dlg.rule.title");
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Width = 660;
         Height = 700;
@@ -70,19 +72,19 @@ public sealed class AutomationRuleDialog : Window
         SourceInitialized += (_, _) => WpfThemeManager.ApplyTitleBarMode(this);
 
         var stack = new StackPanel { Margin = new Thickness(14) };
-        stack.Children.Add(Row("名称", _name));
+        stack.Children.Add(Row("dlg.row.name", _name));
         stack.Children.Add(PlainRow(_enabled));
-        stack.Children.Add(Row("进程名", _process));
+        stack.Children.Add(Row("dlg.row.process", _process));
         _musicOnly.Add(PlainRow(_includeChildren));
         stack.Children.Add(_musicOnly[^1]);
-        stack.Children.Add(Row("时间条件", _timeEnabled));
+        stack.Children.Add(Row("dlg.row.time", _timeEnabled));
         var range = new StackPanel { Orientation = Orientation.Horizontal };
         _start.MinWidth = 100;
         _end.MinWidth = 100;
         range.Children.Add(_start);
-        range.Children.Add(new TextBlock { Text = "至", Margin = new Thickness(8, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center });
+        range.Children.Add(new TextBlock { Text = AppStrings.Get("dlg.to"), Margin = new Thickness(8, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center });
         range.Children.Add(_end);
-        stack.Children.Add(Row("时间段", range));
+        stack.Children.Add(Row("dlg.row.range", range));
         var daysRow = new StackPanel { Orientation = Orientation.Horizontal };
         _days = DayLabels.Select(label => MakeCheck(label)).ToArray();
         foreach (var day in _days)
@@ -90,31 +92,31 @@ public sealed class AutomationRuleDialog : Window
             day.Margin = new Thickness(0, 0, 6, 0);
             daysRow.Children.Add(day);
         }
-        stack.Children.Add(Row("星期（不选表示每天）", daysRow));
-        _target.Items.Add("灯效预设");
-        if (kind != RuleKind.Lighting) _target.Items.Add("音乐预设");
-        _target.Items.Add("关闭灯光");
+        stack.Children.Add(Row("dlg.row.days", daysRow));
+        _target.Items.Add(AppStrings.Get("dlg.target.lighting"));
+        if (kind != RuleKind.Lighting) _target.Items.Add(AppStrings.Get("dlg.target.music"));
+        _target.Items.Add(AppStrings.Get("dlg.target.off"));
         _target.SelectionChanged += (_, _) => RefreshPresets();
-        stack.Children.Add(Row("动作", _target));
+        stack.Children.Add(Row("dlg.row.action", _target));
         foreach (var label in EffectTypes.Select(EffectLabel)) _effectType.Items.Add(label);
         _effectType.SelectionChanged += (_, _) => RefreshPresets();
-        stack.Children.Add(Row("灯效类型", _effectType));
-        stack.Children.Add(Row("目标预设", _preset));
-        stack.Children.Add(Row("颜色来源", _colorSource));
+        stack.Children.Add(Row("dlg.row.effectType", _effectType));
+        stack.Children.Add(Row("dlg.row.targetPreset", _preset));
+        stack.Children.Add(Row("dlg.row.colorSource", _colorSource));
         _musicOnly.Add(stack.Children[^1]);
-        _mediaSession.Items.Add("自动匹配");
+        _mediaSession.Items.Add(AppStrings.Get("dlg.media.auto"));
         foreach (var session in MediaPlaybackState.Load()?.Sessions ?? []) _mediaSession.Items.Add(session.SourceId);
-        stack.Children.Add(Row("媒体会话", _mediaSession));
+        stack.Children.Add(Row("dlg.row.mediaSession", _mediaSession));
         _musicOnly.Add(stack.Children[^1]);
         var brightnessRow = new StackPanel { Orientation = Orientation.Horizontal };
         _brightness.Width = 80;
         brightnessRow.Children.Add(_brightnessEnabled);
         _brightness.Margin = new Thickness(12, 0, 0, 0);
         brightnessRow.Children.Add(_brightness);
-        stack.Children.Add(Row("亮度", brightnessRow));
-        stack.Children.Add(Row("打字反馈", _typing));
+        stack.Children.Add(Row("dlg.row.brightness", brightnessRow));
+        stack.Children.Add(Row("dlg.row.typing", _typing));
         _notSchedule.Add(stack.Children[^1]);
-        stack.Children.Add(Row("通知反馈", _notification));
+        stack.Children.Add(Row("dlg.row.notification", _notification));
         _notSchedule.Add(stack.Children[^1]);
 
         var buttons = new StackPanel
@@ -123,8 +125,8 @@ public sealed class AutomationRuleDialog : Window
             HorizontalAlignment = HorizontalAlignment.Right,
             Margin = new Thickness(0, 14, 0, 0)
         };
-        var ok = new Button { Content = "确定", Style = (Style)Application.Current.Resources["UiButtonPrimary"], MinWidth = 96 };
-        var cancel = new Button { Content = "取消", Style = (Style)Application.Current.Resources["UiButton"], MinWidth = 96, Margin = new Thickness(12, 0, 0, 0) };
+        var ok = new Button { Content = AppStrings.Get("common.confirm"), Style = (Style)Application.Current.Resources["UiButtonPrimary"], MinWidth = 96 };
+        var cancel = new Button { Content = AppStrings.Get("common.cancel"), Style = (Style)Application.Current.Resources["UiButton"], MinWidth = 96, Margin = new Thickness(12, 0, 0, 0) };
         ok.Click += (_, _) =>
         {
             // 必须设置 DialogResult：仅 Close() 会让 ShowDialog 返回 null，
@@ -202,7 +204,7 @@ public sealed class AutomationRuleDialog : Window
     {
         if (string.IsNullOrWhiteSpace(_name.Text))
         {
-            System.Windows.MessageBox.Show("请输入规则名称。", "ClevoLEDKeyboardControl", MessageBoxButton.OK, MessageBoxImage.Information);
+            System.Windows.MessageBox.Show(AppStrings.Get("dlg.rule.emptyName"), "ClevoLEDKeyboardControl", MessageBoxButton.OK, MessageBoxImage.Information);
             return false;
         }
 
@@ -256,7 +258,7 @@ public sealed class AutomationRuleDialog : Window
     private string? SelectedPresetId() => _preset.SelectedItem as string is { } name
         ? _kind == RuleKind.Music || CurrentTarget() == SceneTargetKind.MusicPreset
             ? _musicPresets.FirstOrDefault(item => string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase))?.Id ?? ""
-            : EffectPresetSettings.BuiltInId(EffectTypes[Math.Max(0, _effectType.SelectedIndex)]) is var builtinId && name == "软件默认配置"
+            : EffectPresetSettings.BuiltInId(EffectTypes[Math.Max(0, _effectType.SelectedIndex)]) is var builtinId && name == AppStrings.Get("eff.preset.default")
                 ? builtinId
                 : _effects.ForType(EffectTypes[Math.Max(0, _effectType.SelectedIndex)])
                     .FirstOrDefault(item => string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase))?.Id ?? ""
@@ -332,12 +334,12 @@ public sealed class AutomationRuleDialog : Window
 
     private static string EffectLabel(EffectType type) => type switch
     {
-        EffectType.Static => "固定颜色",
-        EffectType.Rainbow => "RGB 循环",
-        EffectType.Breathing => "单色呼吸",
-        EffectType.Sequence => "循环呼吸",
-        EffectType.Pulse => "脉冲",
-        EffectType.Heartbeat => "心跳",
+        EffectType.Static => AppStrings.Get("eff.type.static"),
+        EffectType.Rainbow => AppStrings.Get("eff.type.rainbow"),
+        EffectType.Breathing => AppStrings.Get("eff.type.breathing"),
+        EffectType.Sequence => AppStrings.Get("eff.type.sequence"),
+        EffectType.Pulse => AppStrings.Get("eff.type.pulse"),
+        EffectType.Heartbeat => AppStrings.Get("eff.type.heartbeat"),
         _ => type.ToString()
     };
 
@@ -402,7 +404,7 @@ public sealed class RunningAppsDialog : Window
 
     public RunningAppsDialog()
     {
-        Title = "选择应用进程";
+        Title = AppStrings.Get("dlg.picker.title");
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Width = 660;
         Height = 480;
@@ -414,9 +416,9 @@ public sealed class RunningAppsDialog : Window
         SourceInitialized += (_, _) => WpfThemeManager.ApplyTitleBarMode(this);
 
         var gridView = new GridView();
-        gridView.Columns.Add(Column("进程名", "ProcessName", 180));
-        gridView.Columns.Add(Column("窗口标题", "Title", 300));
-        gridView.Columns.Add(Column("图标色", "IconColor", 110));
+        gridView.Columns.Add(Column(AppStrings.Get("dlg.picker.process"), "ProcessName", 180));
+        gridView.Columns.Add(Column(AppStrings.Get("dlg.picker.titleCol"), "Title", 300));
+        gridView.Columns.Add(Column(AppStrings.Get("dlg.picker.iconColor"), "IconColor", 110));
         _list.View = gridView;
         ThemedListView.Apply(_list);
         System.Windows.Controls.ScrollViewer.SetHorizontalScrollBarVisibility(_list, ScrollBarVisibility.Disabled);
@@ -428,11 +430,11 @@ public sealed class RunningAppsDialog : Window
             HorizontalAlignment = HorizontalAlignment.Right,
             Margin = new Thickness(0, 12, 0, 0)
         };
-        var refresh = new Button { Content = "刷新", Style = (Style)Application.Current.Resources["UiButton"], MinWidth = 90 };
+        var refresh = new Button { Content = AppStrings.Get("dlg.picker.refresh"), Style = (Style)Application.Current.Resources["UiButton"], MinWidth = 90 };
         refresh.Click += (_, _) => LoadApps();
-        var ok = new Button { Content = "确定", Style = (Style)Application.Current.Resources["UiButtonPrimary"], MinWidth = 85, Margin = new Thickness(12, 0, 0, 0) };
+        var ok = new Button { Content = AppStrings.Get("dlg.picker.confirm"), Style = (Style)Application.Current.Resources["UiButtonPrimary"], MinWidth = 85, Margin = new Thickness(12, 0, 0, 0) };
         ok.Click += (_, _) => Confirm();
-        var cancel = new Button { Content = "取消", Style = (Style)Application.Current.Resources["UiButton"], MinWidth = 85, Margin = new Thickness(12, 0, 0, 0) };
+        var cancel = new Button { Content = AppStrings.Get("common.cancel"), Style = (Style)Application.Current.Resources["UiButton"], MinWidth = 85, Margin = new Thickness(12, 0, 0, 0) };
         cancel.Click += (_, _) => Close();
         buttons.Children.Add(refresh);
         buttons.Children.Add(ok);
@@ -494,7 +496,7 @@ public sealed class SceneSimulatorDialog : Window
 {
     public SceneSimulatorDialog(KeyboardSettings settings)
     {
-        Title = "场景模拟器";
+        Title = AppStrings.Get("dlg.sim.title");
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Width = 680;
         Height = 560;
@@ -511,10 +513,10 @@ public sealed class SceneSimulatorDialog : Window
         var audio = new System.Windows.Controls.ComboBox { Style = (Style)Application.Current.Resources["UiComboBox"], MinWidth = 260, IsEditable = true };
         foreach (var name in settings.Automation.MusicApplications.Select(rule => rule.ProcessName).Where(name => name.Length > 0).Distinct())
             audio.Items.Add(name);
-        var playing = MakeCheck("模拟该程序正在播放");
+        var playing = MakeCheck("dlg.sim.playing");
         var level = MakeBox();
         level.Text = "30";
-        var idle = MakeCheck("模拟已进入空闲状态");
+        var idle = MakeCheck("dlg.sim.idle");
         var output = new System.Windows.Controls.TextBox
         {
             Style = (Style)Application.Current.Resources["UiTextBox"],
@@ -524,14 +526,14 @@ public sealed class SceneSimulatorDialog : Window
             AcceptsReturn = true,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto
         };
-        var run = new Button { Content = "模拟", Style = (Style)Application.Current.Resources["UiButton"], MinWidth = 100 };
+        var run = new Button { Content = AppStrings.Get("dlg.sim.run"), Style = (Style)Application.Current.Resources["UiButton"], MinWidth = 100 };
 
         var stack = new StackPanel { Margin = new Thickness(14) };
-        stack.Children.Add(Row("本地时间", timeText));
-        stack.Children.Add(Row("前台程序", foreground));
-        stack.Children.Add(Row("播放程序", audio));
+        stack.Children.Add(Row("dlg.sim.time", timeText));
+        stack.Children.Add(Row("dlg.sim.foreground", foreground));
+        stack.Children.Add(Row("dlg.sim.audio", audio));
         stack.Children.Add(PlainRow(playing));
-        stack.Children.Add(Row("模拟音量（%）", level));
+        stack.Children.Add(Row("dlg.sim.volume", level));
         stack.Children.Add(PlainRow(idle));
         run.Margin = new Thickness(0, 10, 0, 10);
         stack.Children.Add(run);
@@ -556,15 +558,15 @@ public sealed class SceneSimulatorDialog : Window
                     : [];
                 var result = AutomationSimulator.Simulate(settings,
                     new AutomationSimulationInput(localTime, foreground.Text, states, idle.IsChecked == true));
-                var issues = result.Health.Count == 0 ? "无" : string.Join(Environment.NewLine,
+                var issues = result.Health.Count == 0 ? AppStrings.Get("dlg.sim.none") : string.Join(Environment.NewLine,
                     result.Health.Select(issue => $"[{issue.Severity}] {issue.RuleName}：{issue.Reason}"));
-                output.Text = $"优先级结果：{result.PriorityTrace}{Environment.NewLine}" +
-                    $"最终亮度上限：{result.FinalBrightnessLimit}%{Environment.NewLine}" +
-                    $"跳过提示：{result.Selection.InvalidReason ?? "无"}{Environment.NewLine}{Environment.NewLine}规则健康检查：{Environment.NewLine}{issues}";
+                output.Text = AppStrings.Format("dlg.sim.result", result.PriorityTrace) + Environment.NewLine +
+                    AppStrings.Format("dlg.sim.brightness", result.FinalBrightnessLimit) + Environment.NewLine +
+                    AppStrings.Format("dlg.sim.skipped", result.Selection.InvalidReason ?? AppStrings.Get("dlg.sim.none")) + Environment.NewLine + Environment.NewLine + AppStrings.Get("dlg.sim.health") + Environment.NewLine + issues;
             }
             catch (FormatException)
             {
-                output.Text = "本地时间格式无法解析，请使用 yyyy-MM-dd HH:mm。";
+                output.Text = AppStrings.Get("dlg.sim.timeFormat");
             }
         };
     }

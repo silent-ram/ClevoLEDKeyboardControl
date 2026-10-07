@@ -319,7 +319,7 @@ public partial class MainWindow : Window
         var serviceReady = serviceStatus == "运行中";
         var componentReady = driverStatus.StartsWith("已安装", StringComparison.OrdinalIgnoreCase);
 
-        HeaderStatus.Text = serviceReady && componentReady ? "● 服务与灯控正常" : "⚠ 需要检查运行状态";
+        HeaderStatus.Text = serviceReady && componentReady ? AppStrings.Get("head.ok") : AppStrings.Get("head.check");
         HeaderStatus.Foreground = FindBrush(serviceReady && componentReady ? "Brush.Success" : "Brush.Warning");
 
         if (_pages.Count == 0) return;

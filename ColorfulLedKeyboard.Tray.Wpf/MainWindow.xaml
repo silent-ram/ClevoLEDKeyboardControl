@@ -90,10 +90,10 @@
                 <Border Grid.Row="0" Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Border}"
                         BorderThickness="0,0,0,1">
                     <Grid>
-                        <TextBlock x:Name="PageTitle" Text="当前状态" FontSize="19" FontWeight="Bold"
+                        <TextBlock x:Name="PageTitle" Text="{DynamicResource str.nav.overview}" FontSize="19" FontWeight="Bold"
                                    Foreground="{DynamicResource Brush.Text}"
                                    HorizontalAlignment="Left" VerticalAlignment="Center" Margin="18,0,0,6" />
-                        <TextBlock x:Name="HeaderStatus" Text="● 服务与灯控正常"
+                        <TextBlock x:Name="HeaderStatus" Text="{DynamicResource str.head.ok}"
                                    Foreground="{DynamicResource Brush.Success}"
                                    HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,6" />
                         <!-- 签名元素：页头底缘 RGB 光谱条 -->
