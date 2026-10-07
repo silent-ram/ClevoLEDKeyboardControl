@@ -284,11 +284,11 @@ internal sealed class WizardWindow : Form
 
     private void ShowUninstallConfirm()
     {
+        // 底栏只放"取消"；执行用的警示色"卸载"按钮在内容区，避免出现两个同名按钮
         RenderChrome(
             InstallerStrings.Format("confirm.title", AppDisplayName),
             null,
-            MakeCancelButton(),
-            MakeUninstallButton());
+            MakeCancelButton());
 
         var text = InstallerTheme.MakeLabel(InstallerStrings.Get("confirm.text"));
         text.Location = new Point(28, 112);
