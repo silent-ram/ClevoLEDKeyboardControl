@@ -36,6 +36,8 @@ internal sealed class WizardWindow : Form
 
     private Panel _content = null!;
     private Panel _buttonBar = null!;
+    private Label _titleLabel;
+    private Label _subtitleLabel;
     private readonly List<(string Key, Label Marker)> _stepMarkers = [];
     private Label _statusLabel = new();
     private Operation? _currentOperation;
@@ -92,8 +94,11 @@ internal sealed class WizardWindow : Form
                 wizard.Result = WizardAction.Install;
                 wizard.ShowDone("progress.install");
                 break;
-            default:
+            case "lang":
                 wizard.ShowLanguagePage();
+                break;
+            default:
+                wizard.ShowActionPage();
                 break;
         }
         return wizard;
@@ -123,15 +128,15 @@ internal sealed class WizardWindow : Form
 
     private void RenderChrome(string title, string? subtitle, params Button[] buttons)
     {
-        var titleLabel = InstallerTheme.MakeLabel(title, InstallerTheme.TitleFont);
-        titleLabel.Location = new Point(28, 26);
+        _titleLabel = InstallerTheme.MakeLabel(title, InstallerTheme.TitleFont);
+        _titleLabel.Location = new Point(28, 26);
         _content.Controls.Clear();
-        _content.Controls.Add(titleLabel);
+        _content.Controls.Add(_titleLabel);
         if (subtitle is not null)
         {
-            var subtitleLabel = InstallerTheme.MakeLabel(subtitle, color: InstallerTheme.Muted);
-            subtitleLabel.Location = new Point(28, 64);
-            _content.Controls.Add(subtitleLabel);
+            _subtitleLabel = InstallerTheme.MakeLabel(subtitle, color: InstallerTheme.Muted);
+            _subtitleLabel.Location = new Point(28, 64);
+            _content.Controls.Add(_subtitleLabel);
         }
 
         _buttonBar.Controls.Clear();
@@ -264,6 +269,8 @@ internal sealed class WizardWindow : Form
 
     // ---- 操作选择页（已安装） ----
 
+    private Label _actionLangSwitch;
+
     private void ShowActionPage()
     {
         var (version, serviceStatus) = _ops.DescribeInstalledState();
@@ -274,7 +281,39 @@ internal sealed class WizardWindow : Form
 
         MakeActionCard(104, InstallerStrings.Get("action.repair"),
             InstallerStrings.Get("action.repairDesc"), primary: true, StartInstall);
-        // 卸载不在此处提供：统一走 Windows"设置 → 应用"、开始菜单卸载快捷方式或卸载器本体
+
+        // 语言切换小字：默认按系统语言，点击即切换（安装器实例内即时生效）
+        _actionLangSwitch = InstallerTheme.MakeLabel(LanguageSwitchText(), color: InstallerTheme.Faint);
+        _actionLangSwitch.Location = new Point(28, 196);
+        _actionLangSwitch.Cursor = System.Windows.Forms.Cursors.Hand;
+        _actionLangSwitch.Click += (_, _) =>
+        {
+            InstallerStrings.Set(InstallerStrings.IsEnglish ? InstallerStrings.ZhCn : InstallerStrings.EnUs);
+            _selectedLanguage = InstallerStrings.Current;
+            _actionLangSwitch.Text = LanguageSwitchText();
+            RefreshActionPageTexts();
+        };
+        _content.Controls.Add(_actionLangSwitch);
+    }
+
+    private string LanguageSwitchText()
+    {
+        // 双语并列展示，点击切换当前语言
+        var current = InstallerStrings.IsEnglish ? "English" : "中文";
+        var other = InstallerStrings.IsEnglish ? "中文" : "English";
+        return $"{current}  ·  点击切换为 {other} / switch to {other}";
+    }
+
+    private Label _actionCardTitle;
+
+    /// <summary>就地刷新操作页文案（语言切换后）。</summary>
+    private void RefreshActionPageTexts()
+    {
+        var (version, serviceStatus) = _ops.DescribeInstalledState();
+        _titleLabel.Text = InstallerStrings.Format("action.title", AppDisplayName);
+        _subtitleLabel.Text = InstallerStrings.Format("action.subtitle", version, serviceStatus);
+        _actionLangSwitch.Text = LanguageSwitchText();
+        if (_actionCardTitle is not null) _actionCardTitle.Text = InstallerStrings.Get("action.repair");
     }
 
     private void MakeActionCard(int y, string title, string description, bool primary, Action onClick)
@@ -288,6 +327,7 @@ internal sealed class WizardWindow : Form
         };
         var accent = new Panel { Location = new Point(0, 0), Size = new Size(4, 66), BackColor = primary ? InstallerTheme.Accent : InstallerTheme.Border };
         var titleLabel = InstallerTheme.MakeLabel(title, InstallerTheme.SectionFont);
+        if (primary) _actionCardTitle = titleLabel;
         titleLabel.Location = new Point(18, 12);
         var descLabel = InstallerTheme.MakeLabel(description, color: InstallerTheme.Muted);
         descLabel.Location = new Point(18, 38);
