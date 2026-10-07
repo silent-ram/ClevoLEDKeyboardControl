@@ -164,16 +164,42 @@ internal sealed class WizardWindow : Form
         RenderChrome(InstallerStrings.Get("wizard.title"), null,
             MakeCancelButton(), MakeContinueFromLanguageButton());
 
-        var heading = InstallerTheme.MakeLabel(InstallerStrings.Get("lang.title"), InstallerTheme.SectionFont);
-        heading.Location = new Point(28, 116);
-        _content.Controls.Add(heading);
+        _langHeading = InstallerTheme.MakeLabel(InstallerStrings.Get("lang.title"), InstallerTheme.SectionFont);
+        _langHeading.Location = new Point(28, 116);
+        _content.Controls.Add(_langHeading);
 
-        _content.Controls.Add(MakeLanguageOption(164, "中文（简体）", InstallerStrings.ZhCn));
-        _content.Controls.Add(MakeLanguageOption(232, "English", InstallerStrings.EnUs));
+        _langZh = MakeLanguageOption(164, "中文（简体）", InstallerStrings.ZhCn);
+        _langEn = MakeLanguageOption(232, "English", InstallerStrings.EnUs);
+        _content.Controls.Add(_langZh);
+        _content.Controls.Add(_langEn);
 
-        var hint = InstallerTheme.MakeLabel(InstallerStrings.Get("lang.hint"), color: InstallerTheme.Faint);
-        hint.Location = new Point(28, 306);
-        _content.Controls.Add(hint);
+        _langHint = InstallerTheme.MakeLabel(InstallerStrings.Get("lang.hint"), color: InstallerTheme.Faint);
+        _langHint.Location = new Point(28, 306);
+        _content.Controls.Add(_langHint);
+    }
+
+    private Label _langHeading;
+    private Label _langHint;
+    private RadioButton _langZh;
+    private RadioButton _langEn;
+    private Button _langContinue;
+
+    /// <summary>就地刷新语言页全部文案（含按钮），不重建控件树。</summary>
+    private void RefreshLanguagePageTexts()
+    {
+        _langHeading.Text = InstallerStrings.Get("lang.title");
+        _langHint.Text = InstallerStrings.Get("lang.hint");
+        _langZh.Text = "中文（简体）";
+        _langEn.Text = "English";
+        Text = InstallerStrings.Get("wizard.title");
+        if (_langContinue is not null) _langContinue.Text = InstallerStrings.Get("wizard.continue");
+        if (_langCancel is not null) _langCancel.Text = InstallerStrings.Get("wizard.cancel");
+        // 兜底：按钮栏里任何显示为取消翻译值的按钮都同步（防字段时序遗漏）
+        foreach (Control control in _buttonBar.Controls)
+        {
+            if (control is Button button && (button.Text == "取消" || button.Text == "Cancel" || button.Text == "common.cancel"))
+                button.Text = InstallerStrings.Get("wizard.cancel");
+        }
     }
 
     private RadioButton MakeLanguageOption(int y, string text, string language)
@@ -199,8 +225,9 @@ internal sealed class WizardWindow : Form
             if (!radio.Checked) return;
             InstallerStrings.Set(language);
             _selectedLanguage = language;
-            // 事件回调内重建控件树需要延迟一拍，避免在样式切换中途析构
-            BeginInvoke(ShowLanguagePage);
+            // 就地刷新本页文案；不重建控件树（重建会让 WinForms 单选组重置勾选，
+            // 表现为"选不中 English"）。页面控件极少，逐个更新文本即可。
+            RefreshLanguagePageTexts();
         };
         return radio;
     }
@@ -208,6 +235,7 @@ internal sealed class WizardWindow : Form
     private Button MakeContinueFromLanguageButton()
     {
         var button = InstallerTheme.MakeButton(InstallerStrings.Get("wizard.continue"), "primary");
+        _langContinue = button;
         button.Width = 120;
         button.Click += (_, _) =>
         {
@@ -223,9 +251,12 @@ internal sealed class WizardWindow : Form
         return button;
     }
 
+    private Button _langCancel;
+
     private Button MakeCancelButton()
     {
         var button = InstallerTheme.MakeButton(InstallerStrings.Get("wizard.cancel"), "ghost");
+        _langCancel = button;
         button.Width = 100;
         button.Click += (_, _) => Close();
         return button;
