@@ -829,7 +829,7 @@ public sealed class MusicPage : UserControl
         var stack = new StackPanel();
         var heading = new TextBlock
         {
-            Text = title,
+            Text = AppStrings.Get(title),
             FontSize = 13,
             FontWeight = FontWeights.Bold,
             Margin = new Thickness(0, 0, 0, 8)
@@ -849,7 +849,7 @@ public sealed class MusicPage : UserControl
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         var labelBlock = new TextBlock
         {
-            Text = label,
+            Text = AppStrings.Get(label),
             VerticalAlignment = VerticalAlignment.Center
         };
         labelBlock.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
@@ -909,11 +909,11 @@ public sealed class MusicPage : UserControl
         return panel;
     }
 
-    private static TextBlock Section(string text)
+    private static TextBlock Section(string key)
     {
         var block = new TextBlock
         {
-            Text = text,
+            Text = AppStrings.Get(key),
             FontWeight = FontWeights.Bold,
             Margin = new Thickness(0, 6, 0, 2)
         };

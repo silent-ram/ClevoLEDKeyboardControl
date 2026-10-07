@@ -221,7 +221,7 @@ public sealed class DiagnosticsPage : UserControl
         var stack = new StackPanel();
         var heading = new TextBlock
         {
-            Text = title,
+            Text = AppStrings.Get(title),
             FontSize = 13,
             FontWeight = FontWeights.Bold,
             Margin = new Thickness(0, 0, 0, 8)
@@ -239,7 +239,7 @@ public sealed class DiagnosticsPage : UserControl
         var grid = new Grid { MinHeight = 40, MaxWidth = UiMetrics.ContentWidth };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(130) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var labelBlock = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center };
+        var labelBlock = new TextBlock { Text = AppStrings.Get(label), VerticalAlignment = VerticalAlignment.Center };
         labelBlock.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
         grid.Children.Add(labelBlock);
         control.VerticalAlignment = VerticalAlignment.Center;

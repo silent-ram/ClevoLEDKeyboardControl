@@ -19,9 +19,9 @@
                     <TextBlock Text="{DynamicResource str.about.tagline}" FontSize="12"
                                Foreground="{DynamicResource Brush.MutedText}" Margin="0,4,0,0" />
                     <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
-                        <Button Content="打开 GitHub 仓库" Style="{DynamicResource UiButton}" Width="145" Margin="0,0,10,0"
+                        <Button Content="{DynamicResource str.about.repo}" Style="{DynamicResource UiButton}" Width="145" Margin="0,0,10,0"
                                 Click="OpenRepository" />
-                        <Button Content="反馈问题" Style="{DynamicResource UiButton}" Width="112"
+                        <Button Content="{DynamicResource str.about.issues}" Style="{DynamicResource UiButton}" Width="112"
                                 Click="OpenIssues" />
                     </StackPanel>
                 </StackPanel>

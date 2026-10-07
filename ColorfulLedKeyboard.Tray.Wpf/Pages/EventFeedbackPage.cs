@@ -137,7 +137,7 @@ public sealed class EventFeedbackPage : UserControl
         var stack = new StackPanel();
         var heading = new TextBlock
         {
-            Text = title,
+            Text = AppStrings.Get(title),
             FontSize = 13,
             FontWeight = FontWeights.Bold,
             Margin = new Thickness(0, 0, 0, 8)

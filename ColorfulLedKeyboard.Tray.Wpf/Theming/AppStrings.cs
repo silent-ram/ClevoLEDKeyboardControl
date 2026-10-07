@@ -323,6 +323,8 @@ internal static class AppStrings
         ["ov.status.ok"] = ("输出正常", "Output normal"),
         ["ov.status.check"] = ("需要检查", "Needs attention"),
         ["about.tagline"] = ("面向 Clevo 兼容机型的键盘背光灯效控制程序。", "Keyboard backlight control for Clevo-compatible laptops."),
+        ["about.repo"] = ("打开 GitHub 仓库", "Open GitHub repository"),
+        ["about.issues"] = ("反馈问题", "Report an issue"),
 
         // ---- 场景自动化编辑器 ----
         ["ed.state.active"] = ("生效中", "Active"),
