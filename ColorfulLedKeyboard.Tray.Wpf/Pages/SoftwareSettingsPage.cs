@@ -167,7 +167,7 @@ public sealed class SoftwareSettingsPage : UserControl
         var accentLabel = new TextBlock
         {
             Text = AppStrings.Get("set.row.accent"),
-            Width = 60,
+            MinWidth = 100,
             VerticalAlignment = VerticalAlignment.Center
         };
         accentLabel.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
@@ -291,7 +291,7 @@ public sealed class SoftwareSettingsPage : UserControl
         var accentLabel = new TextBlock
         {
             Text = AppStrings.Get("set.row.accent"),
-            Width = 60,
+            MinWidth = 100,
             VerticalAlignment = VerticalAlignment.Center
         };
         accentLabel.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
