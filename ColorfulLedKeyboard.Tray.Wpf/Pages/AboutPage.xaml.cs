@@ -16,7 +16,7 @@ public partial class AboutPage : UserControl
     public AboutPage()
     {
         InitializeComponent();
-        VersionText.Text = $"版本 v{ReadVersion()}";
+        VersionText.Text = AppStrings.Format("win.versionPrefix", ReadVersion());
         RuntimeText.Text = $".NET {Environment.Version}";
         Loaded += (_, _) =>
         {

@@ -14,29 +14,29 @@ public static class UpdateStatusDialog
 {
     public static void ShowUpToDate(string currentVersion)
     {
-        Show("当前已是最新版本",
-            $"当前版本 v{currentVersion}，如需手动获取安装包可前往 GitHub Releases。",
-            "关闭", secondaryText: null);
+        Show(AppStrings.Get("upd.upToDate.title"),
+            AppStrings.Format("upd.upToDate.body", currentVersion),
+            AppStrings.Get("common.close"), secondaryText: null);
     }
 
     public static void ShowAvailable(string latestVersion, string currentVersion)
     {
-        var confirmed = Show($"发现新版本 v{latestVersion}",
-            $"当前版本 v{currentVersion}。是否打开下载页面获取更新？",
-            "打开下载页面", secondaryText: "稍后再说");
+        var confirmed = Show(AppStrings.Format("upd.available.title", latestVersion),
+            AppStrings.Format("upd.available.body", currentVersion),
+            AppStrings.Get("upd.available.cta"), secondaryText: AppStrings.Get("upd.available.later"));
         if (confirmed) UpdateChecker.OpenReleases();
     }
 
     public static void ShowFailure(string detail)
     {
-        Show("检查更新失败", detail, "关闭", secondaryText: null);
+        Show(AppStrings.Get("upd.fail.title"), detail, AppStrings.Get("common.close"), secondaryText: null);
     }
 
     private static bool Show(string headline, string body, string primaryText, string? secondaryText)
     {
         var window = new Window
         {
-            Title = "检查更新 - ClevoLEDKeyboardControl",
+            Title = AppStrings.Get("upd.fail.title") + " - ClevoLEDKeyboardControl",
             SizeToContent = SizeToContent.Height,
             Width = 400,
             ResizeMode = ResizeMode.NoResize,

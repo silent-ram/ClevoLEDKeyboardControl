@@ -82,7 +82,7 @@ public partial class MainWindow : Window
         {
             PersistWindowState();
             if (!HasAnyDirty) return;
-            var choice = System.Windows.MessageBox.Show("存在尚未保存的修改，是否放弃这些修改？",
+            var choice = System.Windows.MessageBox.Show(AppStrings.Get("win.closeDirty"),
                 "ClevoLEDKeyboardControl", MessageBoxButton.YesNo, MessageBoxImage.Question);
             if (choice != MessageBoxResult.Yes) e.Cancel = true;
         };
@@ -273,7 +273,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex) when (ex is FormatException or IOException or UnauthorizedAccessException)
         {
-            System.Windows.MessageBox.Show($"无法保存设置：{ex.Message}", "ClevoLEDKeyboardControl",
+            System.Windows.MessageBox.Show(AppStrings.Format("win.saveFail", ex.Message), "ClevoLEDKeyboardControl",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
@@ -316,8 +316,8 @@ public partial class MainWindow : Window
         _automationPage?.UpdateStatusText(automationStatus);
         var serviceStatus = GetServiceStatusText();
         var driverStatus = GetDriverStatusText();
-        var serviceReady = serviceStatus == "运行中";
-        var componentReady = driverStatus.StartsWith("已安装", StringComparison.OrdinalIgnoreCase);
+        var serviceReady = serviceStatus == AppStrings.Get("diag.svc.running");
+        var componentReady = driverStatus.StartsWith(AppStrings.Get("win.driver.installed"), StringComparison.OrdinalIgnoreCase);
 
         HeaderStatus.Text = serviceReady && componentReady ? AppStrings.Get("head.ok") : AppStrings.Get("head.check");
         HeaderStatus.Foreground = FindBrush(serviceReady && componentReady ? "Brush.Success" : "Brush.Warning");
@@ -368,21 +368,21 @@ public partial class MainWindow : Window
             using var controller = new ServiceProcess.ServiceController(AppPaths.ServiceName);
             return controller.Status switch
             {
-                ServiceProcess.ServiceControllerStatus.Running => "运行中",
-                ServiceProcess.ServiceControllerStatus.Stopped => "已停止",
-                ServiceProcess.ServiceControllerStatus.Paused => "已暂停",
-                ServiceProcess.ServiceControllerStatus.StartPending => "正在启动",
-                ServiceProcess.ServiceControllerStatus.StopPending => "正在停止",
+                ServiceProcess.ServiceControllerStatus.Running => AppStrings.Get("diag.svc.running"),
+                ServiceProcess.ServiceControllerStatus.Stopped => AppStrings.Get("diag.svc.stopped"),
+                ServiceProcess.ServiceControllerStatus.Paused => AppStrings.Get("diag.svc.paused"),
+                ServiceProcess.ServiceControllerStatus.StartPending => AppStrings.Get("diag.svc.startPending"),
+                ServiceProcess.ServiceControllerStatus.StopPending => AppStrings.Get("diag.svc.stopPending"),
                 _ => controller.Status.ToString()
             };
         }
         catch (InvalidOperationException)
         {
-            return "未安装";
+            return AppStrings.Get("diag.svc.notInstalled");
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or UnauthorizedAccessException)
         {
-            return $"无法读取：{ex.Message}";
+            return AppStrings.Format("diag.svc.readFail", ex.Message);
         }
     }
 
@@ -395,12 +395,12 @@ public partial class MainWindow : Window
                 !string.IsNullOrWhiteSpace(state.InstalledPath) &&
                 File.Exists(state.InstalledPath))
             {
-                return $"已安装（来源：{state.Source ?? "未知"}）：{state.InstalledPath}";
+                return AppStrings.Format("diag.driver.installed", state.Source ?? AppStrings.Get("diag.driver.unknown"), state.InstalledPath);
             }
 
             if (string.Equals(state.Status, "Missing", StringComparison.OrdinalIgnoreCase))
             {
-                return "未找到（安装器最近检查未命中）";
+                return AppStrings.Get("diag.driver.notFound");
             }
         }
 
@@ -415,10 +415,10 @@ public partial class MainWindow : Window
             "ControlCenter",
             "InsydeDCHU.dll");
 
-        if (File.Exists(serviceDll)) return $"已安装（来源：托盘目录）：{serviceDll}";
-        if (File.Exists(installedServiceDll)) return $"已安装（来源：服务目录）：{installedServiceDll}";
-        if (File.Exists(controlCenterDll)) return "OEM Control Center 中存在，未复制到服务目录";
-        return "未找到";
+        if (File.Exists(serviceDll)) return AppStrings.Format("diag.driver.installed", AppStrings.Get("win.driver.trayDir"), serviceDll);
+        if (File.Exists(installedServiceDll)) return AppStrings.Format("diag.driver.installed", AppStrings.Get("win.driver.serviceDir"), installedServiceDll);
+        if (File.Exists(controlCenterDll)) return AppStrings.Get("win.driver.inCC");
+        return AppStrings.Get("win.driver.notFound");
     }
 
     private static DriverComponentState? LoadDriverComponentState()
