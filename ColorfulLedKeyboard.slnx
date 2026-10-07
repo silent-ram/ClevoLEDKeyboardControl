@@ -3,6 +3,5 @@
   <Project Path="ColorfulLedKeyboard.Installer/ColorfulLedKeyboard.Installer.csproj" />
   <Project Path="ColorfulLedKeyboard.Service/ColorfulLedKeyboard.Service.csproj" />
   <Project Path="ColorfulLedKeyboard.Tests/ColorfulLedKeyboard.Tests.csproj" />
-  <Project Path="ColorfulLedKeyboard.Tray/ColorfulLedKeyboard.Tray.csproj" />
   <Project Path="ColorfulLedKeyboard.Tray.Wpf/ColorfulLedKeyboard.Tray.Wpf.csproj" />
 </Solution>
