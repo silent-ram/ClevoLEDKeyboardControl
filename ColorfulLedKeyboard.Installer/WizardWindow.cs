@@ -274,8 +274,7 @@ internal sealed class WizardWindow : Form
 
         MakeActionCard(104, InstallerStrings.Get("action.repair"),
             InstallerStrings.Get("action.repairDesc"), primary: true, StartInstall);
-        MakeActionCard(186, InstallerStrings.Get("action.uninstall"),
-            InstallerStrings.Get("action.uninstallDesc"), primary: false, ShowUninstallConfirm);
+        // 卸载不在此处提供：统一走 Windows"设置 → 应用"、开始菜单卸载快捷方式或卸载器本体
     }
 
     private void MakeActionCard(int y, string title, string description, bool primary, Action onClick)

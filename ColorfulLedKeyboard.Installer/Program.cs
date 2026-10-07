@@ -50,6 +50,11 @@ internal static class Program
         "Programs",
         "ClevoLEDKeyboardControl.lnk");
 
+    private static readonly string StartMenuUninstallShortcutPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu),
+        "Programs",
+        "Uninstall ClevoLEDKeyboardControl.lnk");
+
     private static readonly string DesktopShortcutPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory),
         "ClevoLEDKeyboardControl.lnk");
@@ -945,12 +950,29 @@ internal static class Program
             }
         }
 
+        // 开始菜单：卸载入口（普通软件惯例：主程序 + 卸载 并列）
+        try
+        {
+            var dir = Path.GetDirectoryName(StartMenuUninstallShortcutPath);
+            if (!string.IsNullOrWhiteSpace(dir)) Directory.CreateDirectory(dir);
+            CreateShortcut(
+                StartMenuUninstallShortcutPath,
+                UninstallerExe,
+                "",
+                InstallDirectory,
+                "Uninstall ClevoLEDKeyboardControl");
+        }
+        catch (Exception ex) when (ex is COMException or InvalidOperationException or UnauthorizedAccessException or IOException)
+        {
+            // 卸载快捷方式创建失败不阻塞安装
+        }
+
         return success;
     }
 
     private static void RemoveUserShortcuts()
     {
-        foreach (var lnkPath in new[] { StartMenuShortcutPath, DesktopShortcutPath })
+        foreach (var lnkPath in new[] { StartMenuShortcutPath, StartMenuUninstallShortcutPath, DesktopShortcutPath })
         {
             try
             {
