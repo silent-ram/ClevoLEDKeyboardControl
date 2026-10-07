@@ -284,7 +284,12 @@ public sealed class MusicPage : UserControl
         settings.Effect.Music.PresetName = SelectedMusicPresetName();
         settings.Effect.Music.ResponseMode = MusicResponseMode.LevelColor;
         settings.Effect.Music.LevelColorEnabled = true;
-        settings.Effect.Music.Colors = NormalizedMusicColors();
+        // 内置预设且未被修改时，持久化内置清单本身：界面上的随机排序只是临时预览，
+        // 不应把乱序写进配置（历史 bug：Shuffle 后保存导致"通用"预设永久乱序）。
+        var builtInUnmodified = IsBuiltInMusicPreset(SelectedMusicPresetName()) && !_musicPresetChanged;
+        settings.Effect.Music.Colors = builtInUnmodified
+            ? FindSelectedMusicPreset()?.Colors ?? NormalizedMusicColors()
+            : NormalizedMusicColors();
         settings.Effect.Music.LowColor = settings.Effect.Music.Colors[0];
         settings.Effect.Music.HighColor = settings.Effect.Music.Colors[^1];
         settings.Effect.Music.Sensitivity = MusicSensitivityValues[ClampIndex(_sensitivity.SelectedIndex, MusicSensitivityValues.Length)];
