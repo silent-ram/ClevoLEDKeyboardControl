@@ -82,15 +82,10 @@ internal sealed class WizardWindow : Form
         Font = InstallerTheme.BaseFont;
         ShowInTaskbar = false;
 
-        // 顶部品牌横幅（上下结构：蓝底标题带 + 白底内容区 + 底部导航）
-        var banner = new Panel { Dock = DockStyle.Top, Height = BannerHeight };
-        banner.Paint += PaintBanner;
-
         _buttonBar = new Panel { Dock = DockStyle.Bottom, Height = 52, BackColor = InstallerTheme.Window };
         _content = new Panel { Dock = DockStyle.Fill, BackColor = InstallerTheme.Window };
         Controls.Add(_content);
         Controls.Add(_buttonBar);
-        Controls.Add(banner);
     }
 
     // ---- 工厂入口 ----
@@ -154,25 +149,6 @@ internal sealed class WizardWindow : Form
         var wizard = new WizardWindow(ops, installed: true, demo: false);
         wizard.ShowUninstallConfirm();
         return wizard;
-    }
-
-    // ---- 品牌横幅 ----
-
-    private void PaintBanner(object? sender, PaintEventArgs e)
-    {
-        var g = e.Graphics;
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-        var rect = new Rectangle(0, 0, ClientSize.Width, BannerHeight);
-        using (var bg = new LinearGradientBrush(rect, InstallerTheme.SidebarTop, InstallerTheme.SidebarBottom, 35f))
-        {
-            g.FillRectangle(bg, rect);
-        }
-
-        // 产品名一行 + 版本/定位一行；右侧留白呼吸，不放装饰物
-        TextRenderer.DrawText(g, AppDisplayName, new Font(Font.FontFamily, 13.5f, FontStyle.Bold),
-            new Point(24, 22), InstallerTheme.SidebarText);
-        TextRenderer.DrawText(g, "v" + _sidebarVersion + "   ·   键盘 RGB 灯控   ·   Keyboard RGB Control",
-            new Font(Font.FontFamily, 9f), new Point(25, 54), Color.FromArgb(198, 224, 250));
     }
 
     // ---- 页面骨架：两行页头 + 底部导航按钮 ----
@@ -575,23 +551,24 @@ internal sealed class WizardWindow : Form
     private void RunOperation(Operation operation)
     {
         _currentOperation = operation;
-        RenderChrome(InstallerStrings.Get(operation.TitleKey), null);
+        RenderChrome(InstallerStrings.Get(operation.TitleKey),
+            InstallerStrings.Format("welcome.subtitle", _sidebarVersion));
 
         // 连体圆角进度条（浅灰轨道 + 扁平绿）+ 状态行 + 分步清单
         _progress = new ModernProgressBar
         {
-            Location = new Point(ContentPad, 84),
+            Location = new Point(ContentPad, 96),
             Size = new Size(BodyWidth, 8),
             Percent = 0
         };
         _content.Controls.Add(_progress);
 
         _statusLabel = InstallerTheme.MakeLabel(_demo ? "demo…" : "", color: InstallerTheme.Faint);
-        _statusLabel.Location = new Point(ContentPad, 108);
+        _statusLabel.Location = new Point(ContentPad, 118);
         _content.Controls.Add(_statusLabel);
 
         _stepMarkers.Clear();
-        var y = 146;
+        var y = 152;
         foreach (var key in operation.StepKeys)
         {
             var marker = InstallerTheme.MakeLabel("○", color: InstallerTheme.Faint);
@@ -716,7 +693,7 @@ internal sealed class WizardWindow : Form
 
     private Button MakeFinishButton()
     {
-        var button = InstallerTheme.MakeButton(InstallerStrings.Get("wizard.finish"), "primary");
+        var button = InstallerTheme.MakeButton(InstallerStrings.Get("wizard.finish"));
         button.Width = 96;
         button.Click += (_, _) => Close();
         return button;
@@ -744,7 +721,7 @@ internal sealed class WizardWindow : Form
 
     private Button MakeRetryButton(Operation operation)
     {
-        var button = InstallerTheme.MakeButton(InstallerStrings.Get("wizard.retry"), "primary");
+        var button = InstallerTheme.MakeButton(InstallerStrings.Get("wizard.retry"));
         button.Width = 88;
         button.Click += (_, _) => RunOperation(operation);
         return button;
