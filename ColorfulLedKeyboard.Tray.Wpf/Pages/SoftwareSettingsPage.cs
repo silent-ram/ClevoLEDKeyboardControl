@@ -12,23 +12,25 @@ public sealed class SoftwareSettingsPage : UserControl
     private const int AccentDefault = UiState.AccentDefault;
     private const int AccentFollowKeyboard = UiState.AccentFollowKeyboard;
 
-    private readonly System.Windows.Controls.RadioButton _darkThemeRadio = MakeRadio("深色仪器风");
-    private readonly System.Windows.Controls.RadioButton _lightThemeRadio = MakeRadio("浅色工作台");
+    private readonly System.Windows.Controls.RadioButton _darkThemeRadio = MakeRadio("set.theme.dark");
+    private readonly System.Windows.Controls.RadioButton _lightThemeRadio = MakeRadio("set.theme.light");
     private readonly List<(Border Chip, int AccentArgb, string Name)> _accentSwatches = [];
     private List<int> _hiddenPresets = [];
     private Button? _customSwatch;
 
     /// <summary>内置强调色预设（默认色板之外）。</summary>
-    private static readonly (string Name, int Argb)[] PresetAccents =
+    private static readonly (string Key, int Argb)[] PresetAccents =
     [
-        ("红",   ArgbConst(229, 72, 77)),
-        ("橙",   ArgbConst(247, 107, 21)),
-        ("青",   ArgbConst(56, 200, 240)),
-        ("蓝",   ArgbConst(76, 125, 255)),
-        ("翠绿", ArgbConst(74, 222, 128)),
-        ("紫",   ArgbConst(154, 92, 232)),
-        ("玫红", ArgbConst(224, 92, 140)),
+        ("set.accent.red",   ArgbConst(229, 72, 77)),
+        ("set.accent.orange", ArgbConst(247, 107, 21)),
+        ("set.accent.cyan",  ArgbConst(56, 200, 240)),
+        ("set.accent.blue",  ArgbConst(76, 125, 255)),
+        ("set.accent.green", ArgbConst(74, 222, 128)),
+        ("set.accent.purple", ArgbConst(154, 92, 232)),
+        ("set.accent.rose",  ArgbConst(224, 92, 140)),
     ];
+
+    private static string AccentName(string key) => AppStrings.Get(key);
 
     private static int ArgbConst(byte r, byte g, byte b) =>
         unchecked((int)(0xFF000000u | ((uint)r << 16) | ((uint)g << 8) | b));
@@ -56,7 +58,8 @@ public sealed class SoftwareSettingsPage : UserControl
         foreach (var badge in _closeBadges) badge.Visibility = Visibility.Visible;
     }
 
-    private readonly System.Windows.Controls.ComboBox _updateInterval = MakeCombo(["从不", "每天", "每周", "每月"]);
+    private static readonly string[] UpdateIntervalKeys = ["set.update.never", "set.update.daily", "set.update.weekly", "set.update.monthly"];
+    private readonly System.Windows.Controls.ComboBox _updateInterval = MakeCombo(UpdateIntervalKeys);
     private readonly TextBlock _updateAvailable = new()
     {
         Cursor = System.Windows.Input.Cursors.Hand,
@@ -66,22 +69,22 @@ public sealed class SoftwareSettingsPage : UserControl
     private string? _updateReleaseUrl;
     private int _checkingUpdates;
 
-    private readonly System.Windows.Controls.CheckBox _userImprovementPlanEnabled = MakeCheck("参与用户改进计划");
+    private readonly System.Windows.Controls.CheckBox _userImprovementPlanEnabled = MakeCheck("set.telemetry.enable");
     // 注意必须是实例字段：静态 UI 元素在 RebuildPagesForTheme 重建页面时会被
     // 第二次加入逻辑树，WPF 抛"元素已是另一个元素的逻辑子元素"直接闪退。
     private readonly TextBlock _userPlanDescription = MakeMutedLabel(
-        "用于了解不同版本的实际使用情况，便于安排维护和更新。统计数据匿名且不含个人信息。");
+        AppStrings.Get("set.telemetry.desc"));
 
-    private readonly System.Windows.Controls.CheckBox _startupEnabled = MakeCheck("开机自启动托盘与灯控服务（切换后立即生效）");
+    private readonly System.Windows.Controls.CheckBox _startupEnabled = MakeCheck("set.startup.enable");
     private readonly TextBlock _startupState = MakeMutedLabel("");
     private bool _applyingStartup;
 
     private readonly TextBlock _configPath = MakeMutedLabel(AppPaths.SettingsPath);
-    private readonly Button _export = MakeButton("导出配置...", 140);
-    private readonly Button _import = MakeButton("导入配置...", 140);
-    private readonly Button _restoreBackup = MakeButton("恢复最近备份", 150);
-    private readonly Button _openFolder = MakeButton("打开配置目录", 150);
-    private readonly Button _reset = MakeButton("恢复默认设置", 150);
+    private readonly Button _export = MakeButton("set.config.export", 140);
+    private readonly Button _import = MakeButton("set.config.import", 140);
+    private readonly Button _restoreBackup = MakeButton("set.config.restore", 150);
+    private readonly Button _openFolder = MakeButton("set.config.openFolder", 150);
+    private readonly Button _reset = MakeButton("set.config.reset", 150);
 
     /// <summary>导入/恢复备份/恢复默认等外部配置变更，宿主应整体重载。</summary>
     public event EventHandler? SettingsChangedExternally;
@@ -125,7 +128,7 @@ public sealed class SoftwareSettingsPage : UserControl
         };
         _reset.Click += (_, _) =>
         {
-            if (System.Windows.MessageBox.Show("确定恢复默认设置？", "ClevoLEDKeyboardControl",
+            if (System.Windows.MessageBox.Show(AppStrings.Get("set.config.resetConfirm"), "ClevoLEDKeyboardControl",
                     MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
             new SettingsStore().Save(new KeyboardSettings());
             SettingsChangedExternally?.Invoke(this, EventArgs.Empty);
@@ -133,12 +136,12 @@ public sealed class SoftwareSettingsPage : UserControl
 
         var stack = new StackPanel { Margin = new Thickness(18, 18, 18, 28), MaxWidth = 832 };
         stack.Children.Add(BuildAppearanceCard());
-        stack.Children.Add(MakeCard("自动更新", Row("自动检查更新", _updateInterval), _updateAvailable));
-        stack.Children.Add(MakeCard("用户改进计划", PlainRow(_userImprovementPlanEnabled), PlainRow(_userPlanDescription)));
-        stack.Children.Add(MakeCard("开机自启动", PlainRow(_startupEnabled), PlainRow(_startupState)));
-        stack.Children.Add(MakeCard("配置管理",
+        stack.Children.Add(MakeCard("set.card.update", Row("set.row.autoCheck", _updateInterval), _updateAvailable));
+        stack.Children.Add(MakeCard("set.card.telemetry", PlainRow(_userImprovementPlanEnabled), PlainRow(_userPlanDescription)));
+        stack.Children.Add(MakeCard("set.card.startup", PlainRow(_startupEnabled), PlainRow(_startupState)));
+        stack.Children.Add(MakeCard("set.card.config",
             ButtonRow(_export, _import, _restoreBackup),
-            Row("配置文件", _configPath),
+            Row("set.row.configFile", _configPath),
             ButtonRow(_openFolder, _reset)));
 
         var scroll = new ScrollViewer
@@ -153,7 +156,7 @@ public sealed class SoftwareSettingsPage : UserControl
 
     private Border BuildAppearanceCard()
     {
-        var hint = MakeMutedLabel("主题立即生效并记住；强调色应用于按钮、导航选中态与链接。");
+        var hint = MakeMutedLabel(AppStrings.Get("set.hint.appearance"));
         _darkThemeRadio.Margin = new Thickness(0, 0, 24, 0);
 
         var themeRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 4) };
@@ -163,14 +166,15 @@ public sealed class SoftwareSettingsPage : UserControl
         var accentRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 4) };
         var accentLabel = new TextBlock
         {
-            Text = "强调色",
-            Width = 60,
+            Text = AppStrings.Get("set.row.accent"),
+            MinWidth = 100,
             VerticalAlignment = VerticalAlignment.Center
         };
         accentLabel.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
         accentRow.Children.Add(accentLabel);
         _accentRowHost.Content = BuildAccentRow();
-        return MakeCard("外观", hint, themeRow, _accentRowHost, _accentSummary);
+        var languageRow = BuildLanguageRow();
+        return MakeCard("set.card.appearance", hint, themeRow, languageRow, _accentRowHost, _accentSummary);
     }
 
     // ---- 载入 / 保存 ----
@@ -260,12 +264,12 @@ public sealed class SoftwareSettingsPage : UserControl
                 chip.SetResourceReference(Border.BorderBrushProperty, selected ? "Brush.Primary" : "Brush.Border");
                 chip.BorderThickness = new Thickness(selected ? 2 : 1);
             }
-            var presetName = PresetAccents.FirstOrDefault(p => p.Argb == _accentMode).Name;
-            _accentSummary.Text = $"当前强调色：{_accentMode switch
+            var presetKey = PresetAccents.FirstOrDefault(p => p.Argb == _accentMode).Key;
+            _accentSummary.Text = $"{AppStrings.Get("set.accent.current")}：{_accentMode switch
             {
-                AccentDefault => "默认",
-                _ when presetName is not null => presetName,
-                _ => $"#{_accentMode & 0xFFFFFF:X6}（自定义）"
+                AccentDefault => AppStrings.Get("set.accent.default"),
+                _ when presetKey is not null => AccentName(presetKey),
+                _ => AppStrings.Format("set.accent.custom", $"{_accentMode & 0xFFFFFF:X6}")
             }}";
         }
         finally
@@ -286,8 +290,8 @@ public sealed class SoftwareSettingsPage : UserControl
         var accentRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 4) };
         var accentLabel = new TextBlock
         {
-            Text = "强调色",
-            Width = 60,
+            Text = AppStrings.Get("set.row.accent"),
+            MinWidth = 100,
             VerticalAlignment = VerticalAlignment.Center
         };
         accentLabel.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
@@ -302,11 +306,11 @@ public sealed class SoftwareSettingsPage : UserControl
             BorderThickness = new Thickness(2),
             Margin = new Thickness(0, 0, 10, 0),
             IsHitTestVisible = false,
-            ToolTip = "当前强调色"
+            ToolTip = AppStrings.Get("set.accent.current")
         };
         _currentSwatch.SetResourceReference(Border.BorderBrushProperty, "Brush.Primary");
         accentRow.Children.Add(_currentSwatch);
-        AddAccentSwatch(accentRow, AccentDefault, "默认");
+        AddAccentSwatch(accentRow, AccentDefault, AppStrings.Get("set.accent.default"));
         foreach (var (name, argb) in PresetAccents)
         {
             if (_hiddenPresets.Contains(argb)) continue;
@@ -326,7 +330,7 @@ public sealed class SoftwareSettingsPage : UserControl
             Margin = new Thickness(0, 0, 10, 0),
             Content = "＋",
             FontSize = 15,
-            ToolTip = "自定义颜色..."
+            ToolTip = AppStrings.Get("set.tooltip.custom")
         };
         add.SetResourceReference(StyleProperty, "UiButton");
         add.SetResourceReference(Control.ForegroundProperty, "Brush.Text");
@@ -354,6 +358,51 @@ public sealed class SoftwareSettingsPage : UserControl
 
     /// <summary>色块芯片：纯色 Border（无按钮 chrome，悬停保持原色），
     /// 可删除的色块悬停时右上角浮现 ✕。</summary>
+    /// <summary>界面语言行：跟随系统 / 中文 / English，切换即写入 UiState 并触发全局刷新。</summary>
+    private UIElement BuildLanguageRow()
+    {
+        var combo = new System.Windows.Controls.ComboBox
+        {
+            Width = 280,
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Left
+        };
+        combo.SetResourceReference(StyleProperty, "UiComboBox");
+        var items = new[]
+        {
+            (AppStrings.Auto, "跟随系统", "Follow system"),
+            (AppStrings.ZhCn, "中文（简体）", "中文（简体）"),
+            (AppStrings.EnUs, "English", "English"),
+        };
+        foreach (var (_, zh, en) in items)
+        {
+            combo.Items.Add(AppStrings.IsEnglish ? en : zh);
+        }
+        var current = _uiStateStore.Load().Language;
+        combo.SelectedIndex = current switch
+        {
+            AppStrings.ZhCn => 1,
+            AppStrings.EnUs => 2,
+            _ => 0
+        };
+        var suppress = false;
+        combo.SelectionChanged += (_, _) =>
+        {
+            if (suppress) return;
+            var chosen = combo.SelectedIndex switch
+            {
+                1 => AppStrings.ZhCn,
+                2 => AppStrings.EnUs,
+                _ => AppStrings.Auto
+            };
+            if (chosen == _uiStateStore.Load().Language) return;
+            suppress = true;
+            try { combo.SelectedItem = combo.SelectedItem; } finally { suppress = false; }
+            _uiStateStore.Update(state => state.Language = chosen);
+            AppStrings.Apply(chosen);
+        };
+        return Row("set.row.language", combo);
+    }
+
     private (FrameworkElement Container, Border Chip) BuildColorChip(int accentArgb, string name, bool deletable, System.Action delete)
     {
         var container = new Grid { Width = 34, Height = 26, Margin = new Thickness(0, 0, 10, 0) };
@@ -402,7 +451,7 @@ public sealed class SoftwareSettingsPage : UserControl
             _closeBadges.Add(close);
             container.MouseEnter += (_, _) => close.Visibility = Visibility.Visible;
             container.MouseLeave += (_, _) => close.Visibility = Visibility.Hidden;
-            container.ToolTip = $"{name}（悬停右上角 ✕ 删除）";
+            container.ToolTip = AppStrings.Format("set.tooltip.remove", name);
         }
         return (container, chip);
     }
@@ -488,7 +537,7 @@ public sealed class SoftwareSettingsPage : UserControl
             var available = result?.Status == UpdateCheckStatus.Available && result!.LatestVersion is not null;
             _updateReleaseUrl = available ? result!.ReleaseUrl : null;
             _updateAvailable.Text = available
-                ? $"发现新版本 v{result!.LatestVersion!.ToString(3)}，点击打开下载页面"
+                ? AppStrings.Format("set.update.badge", result!.LatestVersion!.ToString(3))
                 : "";
             _updateAvailable.Visibility = available ? Visibility.Visible : Visibility.Collapsed;
             NavigationBadgeChanged?.Invoke(this, EventArgs.Empty);
@@ -496,7 +545,7 @@ public sealed class SoftwareSettingsPage : UserControl
     }
 
     /// <summary>导航徽标文本（供宿主设置页签上的"新版本"提示）。</summary>
-    public string? UpdateBadge => _updateAvailable.Visibility == Visibility.Visible ? "新版本" : null;
+    public string? UpdateBadge => _updateAvailable.Visibility == Visibility.Visible ? AppStrings.Get("set.update.badgeShort") : null;
 
     // ---- 开机自启动（即时生效）----
 
@@ -514,7 +563,7 @@ public sealed class SoftwareSettingsPage : UserControl
             });
             if (!ok)
             {
-                System.Windows.MessageBox.Show($"无法修改开机自启动：{error}", "ClevoLEDKeyboardControl",
+                System.Windows.MessageBox.Show(AppStrings.Format("set.startup.fail", error), "ClevoLEDKeyboardControl",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
@@ -541,8 +590,10 @@ public sealed class SoftwareSettingsPage : UserControl
             _applyingStartup = false;
         }
         var consistent = trayRegistered == serviceAuto;
-        _startupState.Text = $"托盘自启：{(trayRegistered ? "已注册" : "未注册")} · 灯效服务：{(serviceAuto ? "自动" : "手动")}" +
-            (consistent ? "" : "（状态不一致，切换开关即可修复）");
+        _startupState.Text = AppStrings.Format("set.startup.state",
+            trayRegistered ? AppStrings.Get("set.startup.registered") : AppStrings.Get("set.startup.unregistered"),
+            serviceAuto ? AppStrings.Get("set.startup.auto") : AppStrings.Get("set.startup.manual")) +
+            (consistent ? "" : AppStrings.Get("set.startup.mismatch"));
     }
 
     // ---- 配置管理 ----
@@ -551,7 +602,7 @@ public sealed class SoftwareSettingsPage : UserControl
     {
         var dialog = new Microsoft.Win32.SaveFileDialog
         {
-            Filter = "JSON 配置|*.json",
+            Filter = AppStrings.Get("set.config.filter"),
             FileName = $"ClevoLEDKeyboardControl-{DateTime.Now:yyyyMMdd-HHmmss}.json"
         };
         if (dialog.ShowDialog(Window.GetWindow(this)) != true) return;
@@ -563,14 +614,14 @@ public sealed class SoftwareSettingsPage : UserControl
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
         {
-            System.Windows.MessageBox.Show($"无法写入所选位置：{ex.Message}", "导出配置",
+            System.Windows.MessageBox.Show(AppStrings.Format("set.config.exportFail", ex.Message), AppStrings.Get("set.config.exportTitle"),
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
     private void ImportConfiguration()
     {
-        var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "JSON 配置|*.json", CheckFileExists = true };
+        var dialog = new Microsoft.Win32.OpenFileDialog { Filter = AppStrings.Get("set.config.filter"), CheckFileExists = true };
         if (dialog.ShowDialog(Window.GetWindow(this)) != true) return;
         string json;
         try
@@ -579,19 +630,19 @@ public sealed class SoftwareSettingsPage : UserControl
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            System.Windows.MessageBox.Show($"无法读取所选文件：{ex.Message}", "导入配置",
+            System.Windows.MessageBox.Show(AppStrings.Format("set.config.readFail", ex.Message), AppStrings.Get("set.config.importTitle"),
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         if (!SettingsStore.TryParse(json, out var settings, out var error))
         {
-            System.Windows.MessageBox.Show($"配置验证失败，当前设置未改变：{error}", "导入配置",
+            System.Windows.MessageBox.Show(AppStrings.Format("set.config.importFail", error), AppStrings.Get("set.config.importTitle"),
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         new SettingsStore().Save(settings);
         SettingsChangedExternally?.Invoke(this, EventArgs.Empty);
-        System.Windows.MessageBox.Show("配置已验证并导入。", "导入配置", MessageBoxButton.OK, MessageBoxImage.Information);
+        System.Windows.MessageBox.Show(AppStrings.Get("set.config.importOk"), AppStrings.Get("set.config.importTitle"), MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     private void RestoreLastGood()
@@ -602,7 +653,7 @@ public sealed class SoftwareSettingsPage : UserControl
             SettingsChangedExternally?.Invoke(this, EventArgs.Empty);
         }
         System.Windows.MessageBox.Show(
-            result.Success ? "已恢复到最近的良好配置。" : $"恢复失败：{result.Message}",
+            result.Success ? AppStrings.Get("diag.restore.done") : AppStrings.Format("diag.restore.failed", result.Message),
             "ClevoLEDKeyboardControl", MessageBoxButton.OK,
             result.Success ? MessageBoxImage.Information : MessageBoxImage.Warning);
     }
@@ -632,7 +683,7 @@ public sealed class SoftwareSettingsPage : UserControl
         var stack = new StackPanel();
         var heading = new TextBlock
         {
-            Text = title,
+            Text = AppStrings.Get(title),
             FontSize = 13,
             FontWeight = FontWeights.Bold,
             Margin = new Thickness(0, 0, 0, 8)
@@ -650,7 +701,7 @@ public sealed class SoftwareSettingsPage : UserControl
         var grid = new Grid { MinHeight = 40, MaxWidth = UiMetrics.ContentWidth };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(130) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var labelBlock = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center };
+        var labelBlock = new TextBlock { Text = AppStrings.Get(label), VerticalAlignment = VerticalAlignment.Center };
         labelBlock.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
         grid.Children.Add(labelBlock);
         control.VerticalAlignment = VerticalAlignment.Center;
@@ -685,14 +736,14 @@ public sealed class SoftwareSettingsPage : UserControl
 
     private static System.Windows.Controls.RadioButton MakeRadio(string text)
     {
-        var radio = new System.Windows.Controls.RadioButton { Content = text, GroupName = "UiTheme" };
+        var radio = new System.Windows.Controls.RadioButton { Content = AppStrings.Get(text), GroupName = "UiTheme" };
         radio.SetResourceReference(StyleProperty, "UiRadioButton");
         return radio;
     }
 
     private static System.Windows.Controls.CheckBox MakeCheck(string text)
     {
-        var check = new System.Windows.Controls.CheckBox { Content = text };
+        var check = new System.Windows.Controls.CheckBox { Content = AppStrings.Get(text) };
         check.SetResourceReference(StyleProperty, "UiCheckBox");
         return check;
     }
@@ -705,13 +756,13 @@ public sealed class SoftwareSettingsPage : UserControl
             HorizontalAlignment = HorizontalAlignment.Left
         };
         combo.SetResourceReference(StyleProperty, "UiComboBox");
-        foreach (var item in items) combo.Items.Add(item);
+        foreach (var item in items) combo.Items.Add(AppStrings.Get(item));
         return combo;
     }
 
     private static Button MakeButton(string text, double minWidth = 112)
     {
-        var button = new Button { Content = text, MinWidth = minWidth };
+        var button = new Button { Content = AppStrings.Get(text), MinWidth = minWidth };
         button.SetResourceReference(StyleProperty, "UiButton");
         return button;
     }

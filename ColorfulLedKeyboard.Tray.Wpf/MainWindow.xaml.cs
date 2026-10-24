@@ -14,23 +14,26 @@ namespace ColorfulLedKeyboard.Tray.Wpf;
 /// </summary>
 public partial class MainWindow : Window
 {
-    private static readonly (string Title, string Glyph)[] NavItems =
+    // 标题为 AppStrings key，语言切换后重建导航时即时取新值
+    private static readonly (string Key, string Glyph)[] NavItems =
     [
-        ("当前状态", "\uE80F"),   // Home
-        ("灯效设置", "\uE791"),   // Lightbulb
-        ("音乐模式", "\uEC4F"),   // MusicNote
-        ("场景自动化", "\uE9D9"), // Flow
-        ("事件反馈", "\uE945"),   // LightningBolt
-        ("诊断与恢复", "\uE90F"), // Repair
-        ("软件设置", "\uE713"),   // Settings
-        ("关于", "\uE946"),       // Info
+        ("nav.overview", "\uE80F"),   // Home
+        ("nav.effect", "\uE791"),   // Lightbulb
+        ("nav.music", "\uEC4F"),   // MusicNote
+        ("nav.automation", "\uE9D9"), // Flow
+        ("nav.feedback", "\uE945"),   // LightningBolt
+        ("nav.diagnostics", "\uE90F"), // Repair
+        ("nav.settings", "\uE713"),   // Settings
+        ("nav.about", "\uE946"),       // Info
     ];
+
+    private static string NavTitle((string Key, string Glyph) item) => AppStrings.Get(item.Key);
 
     private readonly UiStateStore _uiStateStore = UiStateStore.Shared;
     private readonly SettingsStore _settingsStore = new();
     private readonly UiState _initialUiState;
     private readonly List<Control> _pages = [];
-    private const string BaseTitle = "ClevoLEDKeyboardControl 设置";
+    private static string BaseTitle => AppStrings.Get("title.base");
     private EffectPage? _effectPage;
     private MusicPage? _musicPage;
     private AutomationPage? _automationPage;
@@ -67,17 +70,19 @@ public partial class MainWindow : Window
         SourceInitialized += (_, _) => WpfThemeManager.ApplyTitleBarMode(this);
         Loaded += (_, _) => { _ready = true; UpdateStatusHeader(); };
         WpfThemeManager.ThemeChanged += OnThemeChanged;
+        AppStrings.LanguageChanged += OnLanguageChanged;
         Closed += (_, _) =>
         {
             _statusTimer.Stop();
             WpfThemeManager.ThemeChanged -= OnThemeChanged;
+            AppStrings.LanguageChanged -= OnLanguageChanged;
             _softwareSettingsPage?.UnsubscribeEvents();
         };
         Closing += (_, e) =>
         {
             PersistWindowState();
             if (!HasAnyDirty) return;
-            var choice = System.Windows.MessageBox.Show("存在尚未保存的修改，是否放弃这些修改？",
+            var choice = System.Windows.MessageBox.Show(AppStrings.Get("win.closeDirty"),
                 "ClevoLEDKeyboardControl", MessageBoxButton.YesNo, MessageBoxImage.Question);
             if (choice != MessageBoxResult.Yes) e.Cancel = true;
         };
@@ -139,8 +144,8 @@ public partial class MainWindow : Window
     public void UpdateNavigationBadge()
     {
         var badge = _softwareSettingsPage?.UpdateBadge;
-        var items = NavItems.Select(item => new NavItem(item.Title, item.Glyph,
-            item.Title == "软件设置" ? badge : null)).ToList();
+        var items = NavItems.Select(item => new NavItem(NavTitle(item), item.Glyph,
+            item.Key == "nav.settings" ? badge : null)).ToList();
         var selected = Navigation.SelectedIndex;
         Navigation.ItemsSource = items;
         Navigation.SelectedIndex = selected;
@@ -161,7 +166,7 @@ public partial class MainWindow : Window
 
     private void BuildNavigation()
     {
-        var items = NavItems.Select(item => new NavItem(item.Title, item.Glyph)).ToList();
+        var items = NavItems.Select(item => new NavItem(NavTitle(item), item.Glyph)).ToList();
         Navigation.ItemsSource = items;
     }
 
@@ -221,7 +226,7 @@ public partial class MainWindow : Window
         foreach (var page in _pages) page.Visibility = Visibility.Collapsed;
         _pages[index].Visibility = Visibility.Visible;
         PageHost.Content = _pages[index];
-        PageTitle.Text = NavItems[index].Title;
+        PageTitle.Text = NavTitle(NavItems[index]);
         _lastPage = index;
         if (_ready) _uiStateStore.Update(state => state.LastPage = index);
         if (_pages[index] is OverviewPage overview) UpdateOverview(overview);
@@ -258,7 +263,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex) when (ex is FormatException or IOException or UnauthorizedAccessException)
         {
-            System.Windows.MessageBox.Show($"无法保存设置：{ex.Message}", "ClevoLEDKeyboardControl",
+            System.Windows.MessageBox.Show(AppStrings.Format("win.saveFail", ex.Message), "ClevoLEDKeyboardControl",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
@@ -284,12 +289,12 @@ public partial class MainWindow : Window
     {
         var dirty = HasAnyDirty;
         DirtyLabel.Text = _musicPage is { IsMusicPresetChanged: true }
-            ? "● 音乐预设参数已修改，点击“保存并应用”生效"
-            : dirty ? "● 有尚未保存的修改" : "✓ 设置已保存";
+            ? AppStrings.Get("save.musicPresetDirty")
+            : dirty ? AppStrings.Get("save.dirty") : AppStrings.Get("save.clean");
         DirtyLabel.Foreground = (Brush)Application.Current.Resources[dirty ? "Brush.Warning" : "Brush.Success"];
         RevertButton.IsEnabled = dirty;
         ApplyButton.IsEnabled = dirty;
-        Title = dirty ? BaseTitle + " - 有未应用的更改" : BaseTitle;
+        Title = dirty ? BaseTitle + AppStrings.Get("title.dirty") : BaseTitle;
     }
 
     // ---- 状态头与总览（移植自 WinForms UpdateStatusHeader/UpdateOverviewRuntime）----
@@ -301,10 +306,10 @@ public partial class MainWindow : Window
         _automationPage?.UpdateStatusText(automationStatus);
         var serviceStatus = GetServiceStatusText();
         var driverStatus = GetDriverStatusText();
-        var serviceReady = serviceStatus == "运行中";
-        var componentReady = driverStatus.StartsWith("已安装", StringComparison.OrdinalIgnoreCase);
+        var serviceReady = serviceStatus == AppStrings.Get("diag.svc.running");
+        var componentReady = driverStatus.StartsWith(AppStrings.Get("win.driver.installed"), StringComparison.OrdinalIgnoreCase);
 
-        HeaderStatus.Text = serviceReady && componentReady ? "● 服务与灯控正常" : "⚠ 需要检查运行状态";
+        HeaderStatus.Text = serviceReady && componentReady ? AppStrings.Get("head.ok") : AppStrings.Get("head.check");
         HeaderStatus.Foreground = FindBrush(serviceReady && componentReady ? "Brush.Success" : "Brush.Warning");
 
         if (_pages.Count == 0) return;
@@ -321,10 +326,10 @@ public partial class MainWindow : Window
         var status = AutomationStatus.Load();
         var fresh = status is not null && DateTimeOffset.UtcNow - status.UpdatedUtc <= TimeSpan.FromSeconds(10);
         var mode = !settings.Enabled || fresh && status!.FinalBrightnessLimit == 0
-            ? "灯光已关闭"
+            ? AppStrings.Get("ov.mode.off")
             : fresh && (!string.IsNullOrWhiteSpace(status!.ActiveMusicApplication) || status.TargetDescription.StartsWith("音乐：", StringComparison.Ordinal))
-                ? "音乐模式"
-                : settings.OperatingMode == OperatingMode.Music ? "音乐模式" : "灯效模式";
+                ? AppStrings.Get("ov.mode.music")
+                : settings.OperatingMode == OperatingMode.Music ? AppStrings.Get("ov.mode.music") : AppStrings.Get("ov.mode.lighting");
         var brightness = fresh && !string.IsNullOrWhiteSpace(status!.BrightnessDisplay)
             ? status.BrightnessDisplay
             : settings.OperatingMode == OperatingMode.Music
@@ -332,16 +337,16 @@ public partial class MainWindow : Window
                 : $"{settings.Brightness}%";
         var brightnessHint = fresh && !string.IsNullOrWhiteSpace(status!.BrightnessDescription)
             ? status.BrightnessDescription
-            : "等待服务计算最终输出";
+            : AppStrings.Get("ov.brightness.waiting");
         var rule = fresh && !string.IsNullOrWhiteSpace(status!.ActiveRuleName)
             ? $"{status.ActiveRuleName} → {status.TargetDescription}"
-            : settings.Automation.Enabled ? "当前使用基础设置" : "场景自动化未启用";
+            : settings.Automation.Enabled ? AppStrings.Get("ov.rule.base") : AppStrings.Get("ov.rule.disabled");
         var player = fresh && !string.IsNullOrWhiteSpace(status!.ActiveMusicApplication)
-            ? $"{status.ActiveMusicApplication} · {(string.IsNullOrWhiteSpace(status.TrackTitle) ? "检测到声音" : status.TrackTitle)}"
-            : "当前没有匹配的有声程序";
-        var typing = settings.TypingPulse.Enabled ? "打字开启" : "打字关闭";
-        var notification = settings.NotificationFlash.Enabled ? "通知开启" : "通知关闭";
-        var events = $"{typing} · {notification}{(fresh && status!.IdleOverrideActive ? " · 空闲覆盖中" : "")}";
+            ? $"{status.ActiveMusicApplication} · {(string.IsNullOrWhiteSpace(status.TrackTitle) ? AppStrings.Get("ov.player.sound") : status.TrackTitle)}"
+            : AppStrings.Get("ov.player.none");
+        var typing = settings.TypingPulse.Enabled ? AppStrings.Get("ov.typing.on") : AppStrings.Get("ov.typing.off");
+        var notification = settings.NotificationFlash.Enabled ? AppStrings.Get("ov.notify.on") : AppStrings.Get("ov.notify.off");
+        var events = $"{typing} · {notification}{(fresh && status!.IdleOverrideActive ? " · " + AppStrings.Get("ov.idle.active") : "")}";
 
         overview.SetRuntime(mode, brightness, brightnessHint, rule, player, events);
     }
@@ -353,21 +358,21 @@ public partial class MainWindow : Window
             using var controller = new ServiceProcess.ServiceController(AppPaths.ServiceName);
             return controller.Status switch
             {
-                ServiceProcess.ServiceControllerStatus.Running => "运行中",
-                ServiceProcess.ServiceControllerStatus.Stopped => "已停止",
-                ServiceProcess.ServiceControllerStatus.Paused => "已暂停",
-                ServiceProcess.ServiceControllerStatus.StartPending => "正在启动",
-                ServiceProcess.ServiceControllerStatus.StopPending => "正在停止",
+                ServiceProcess.ServiceControllerStatus.Running => AppStrings.Get("diag.svc.running"),
+                ServiceProcess.ServiceControllerStatus.Stopped => AppStrings.Get("diag.svc.stopped"),
+                ServiceProcess.ServiceControllerStatus.Paused => AppStrings.Get("diag.svc.paused"),
+                ServiceProcess.ServiceControllerStatus.StartPending => AppStrings.Get("diag.svc.startPending"),
+                ServiceProcess.ServiceControllerStatus.StopPending => AppStrings.Get("diag.svc.stopPending"),
                 _ => controller.Status.ToString()
             };
         }
         catch (InvalidOperationException)
         {
-            return "未安装";
+            return AppStrings.Get("diag.svc.notInstalled");
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or UnauthorizedAccessException)
         {
-            return $"无法读取：{ex.Message}";
+            return AppStrings.Format("diag.svc.readFail", ex.Message);
         }
     }
 
@@ -380,12 +385,12 @@ public partial class MainWindow : Window
                 !string.IsNullOrWhiteSpace(state.InstalledPath) &&
                 File.Exists(state.InstalledPath))
             {
-                return $"已安装（来源：{state.Source ?? "未知"}）：{state.InstalledPath}";
+                return AppStrings.Format("diag.driver.installed", state.Source ?? AppStrings.Get("diag.driver.unknown"), state.InstalledPath);
             }
 
             if (string.Equals(state.Status, "Missing", StringComparison.OrdinalIgnoreCase))
             {
-                return "未找到（安装器最近检查未命中）";
+                return AppStrings.Get("diag.driver.notFound");
             }
         }
 
@@ -400,10 +405,10 @@ public partial class MainWindow : Window
             "ControlCenter",
             "InsydeDCHU.dll");
 
-        if (File.Exists(serviceDll)) return $"已安装（来源：托盘目录）：{serviceDll}";
-        if (File.Exists(installedServiceDll)) return $"已安装（来源：服务目录）：{installedServiceDll}";
-        if (File.Exists(controlCenterDll)) return "OEM Control Center 中存在，未复制到服务目录";
-        return "未找到";
+        if (File.Exists(serviceDll)) return AppStrings.Format("diag.driver.installed", AppStrings.Get("win.driver.trayDir"), serviceDll);
+        if (File.Exists(installedServiceDll)) return AppStrings.Format("diag.driver.installed", AppStrings.Get("win.driver.serviceDir"), installedServiceDll);
+        if (File.Exists(controlCenterDll)) return AppStrings.Get("win.driver.inCC");
+        return AppStrings.Get("win.driver.notFound");
     }
 
     private static DriverComponentState? LoadDriverComponentState()
@@ -474,11 +479,44 @@ public partial class MainWindow : Window
         });
     }
 
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        // 与主题切换同一重建路径；有未保存修改时同样保留数据只重建
+        if (!HasAnyDirty)
+        {
+            try { RebuildPagesForTheme(); } catch (Exception ex) { System.Diagnostics.Trace.WriteLine($"RebuildForLanguage failed: {ex}"); }
+        }
+        UpdateSaveBar();
+        if (_pages.Count > 0) PageTitle.Text = NavTitle(NavItems[Math.Clamp(_lastPage, 0, NavItems.Length - 1)]);
+    }
+
     private void OnThemeChanged(object? sender, EventArgs e)
     {
         // 主题/强调色通过画刷原地改色生效（见 WpfThemeManager.Apply）：页面、弹窗
         // 构造期直接捕获的画刷实例即时跟随，无需重建页面，脏状态也不会残留旧主题。
+        // 语言切换仍需整页重建，见 OnLanguageChanged。
         WpfThemeManager.ApplyTitleBarMode(this);
+    }
+
+    private void RebuildPagesForTheme()
+    {
+        _softwareSettingsPage?.UnsubscribeEvents();
+        _pages.Clear();
+        _effectPage = null;
+        _musicPage = null;
+        _automationPage = null;
+        _eventFeedbackPage = null;
+        _diagnosticsPage = null;
+        _softwareSettingsPage = null;
+        var selected = Math.Clamp(_lastPage, 0, NavItems.Length - 1);
+        BuildPages();
+        Navigation.ItemsSource = NavItems.Select(item => new NavItem(NavTitle(item), item.Glyph)).ToList();
+        Navigation.SelectedIndex = selected;
+        ApplySelectedPage(selected);
+        UpdateSaveBar();
+        // 重建出的音乐页没有历史音频状态，标签会退回"检测中…"——状态文件稳态下不再变化，
+        // 监视器不会再补发事件，必须在这里用窗口缓存喂一次。
+        _musicPage?.UpdateAudioSourceLabel(_lastAudioStatus);
     }
 
     /// <summary>导航项数据。</summary>

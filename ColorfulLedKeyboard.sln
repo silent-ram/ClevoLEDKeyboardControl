@@ -7,8 +7,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ColorfulLedKeyboard.Core", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ColorfulLedKeyboard.Service", "ColorfulLedKeyboard.Service\ColorfulLedKeyboard.Service.csproj", "{78C3365F-E057-4615-A6A1-477D7AF76A10}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ColorfulLedKeyboard.Tray", "ColorfulLedKeyboard.Tray\ColorfulLedKeyboard.Tray.csproj", "{094E025E-0784-4593-ADB7-7485CA8E7F66}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ColorfulLedKeyboard.Installer", "ColorfulLedKeyboard.Installer\ColorfulLedKeyboard.Installer.csproj", "{DE0F2186-ACA4-406E-BDBE-65FAB05C47BA}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ColorfulLedKeyboard.Tests", "ColorfulLedKeyboard.Tests\ColorfulLedKeyboard.Tests.csproj", "{118640C8-0AF2-4B95-B148-615D8ED41473}"
@@ -32,10 +30,6 @@ Global
 		{78C3365F-E057-4615-A6A1-477D7AF76A10}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{78C3365F-E057-4615-A6A1-477D7AF76A10}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{78C3365F-E057-4615-A6A1-477D7AF76A10}.Release|Any CPU.Build.0 = Release|Any CPU
-		{094E025E-0784-4593-ADB7-7485CA8E7F66}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{094E025E-0784-4593-ADB7-7485CA8E7F66}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{094E025E-0784-4593-ADB7-7485CA8E7F66}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{094E025E-0784-4593-ADB7-7485CA8E7F66}.Release|Any CPU.Build.0 = Release|Any CPU
 		{DE0F2186-ACA4-406E-BDBE-65FAB05C47BA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{DE0F2186-ACA4-406E-BDBE-65FAB05C47BA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DE0F2186-ACA4-406E-BDBE-65FAB05C47BA}.Release|Any CPU.ActiveCfg = Release|Any CPU

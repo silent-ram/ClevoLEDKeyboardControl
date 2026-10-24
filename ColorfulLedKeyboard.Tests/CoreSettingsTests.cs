@@ -400,7 +400,7 @@ public sealed class CoreSettingsTests
     [Theory]
     [InlineData(false, 0)]
     [InlineData(true, 1)]
-    public void SettingsForm_MusicResponseIndex_MapsBeatDetection(bool enabled, int expectedIndex)
+    public void MusicResponseMapping_Index_MapsBeatDetection(bool enabled, int expectedIndex)
     {
         Assert.Equal(expectedIndex, MusicResponseMapping.Index(enabled));
         Assert.Equal(enabled, MusicResponseMapping.UsesBeatDetection(expectedIndex));

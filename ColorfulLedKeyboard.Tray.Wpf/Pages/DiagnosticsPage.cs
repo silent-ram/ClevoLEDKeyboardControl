@@ -11,8 +11,8 @@ namespace ColorfulLedKeyboard.Tray.Wpf.Pages;
 public sealed class DiagnosticsPage : UserControl
 {
     private readonly Dictionary<string, System.Windows.Controls.TextBox> _fields = new();
-    private readonly Button _refresh = MakeButton("刷新诊断信息", 130);
-    private readonly Button _restoreBackup = MakeButton("恢复最近备份", 130);
+    private readonly Button _refresh = MakeButton("diag.refresh", 130);
+    private readonly Button _restoreBackup = MakeButton("diag.restore", 130);
 
     public event EventHandler? Changed;
 
@@ -22,19 +22,19 @@ public sealed class DiagnosticsPage : UserControl
         _restoreBackup.Click += (_, _) => RestoreLastGood();
 
         var stack = new StackPanel { Margin = new Thickness(18, 18, 18, 28), MaxWidth = 832 };
-        stack.Children.Add(MakeCard("服务与硬件",
-            Row("服务状态", MakeDiagnosticBox("服务状态")),
-            Row("驱动 DLL", MakeDiagnosticBox("驱动 DLL")),
+        stack.Children.Add(MakeCard("diag.card.service",
+            Row("diag.row.service", MakeDiagnosticBox("diag.row.service")),
+            Row("diag.row.driver", MakeDiagnosticBox("diag.row.driver")),
             PlainRow(_refresh)));
-        stack.Children.Add(MakeCard("自动化与播放器",
-            Row("当前前台应用", MakeDiagnosticBox("当前前台应用")),
-            Row("命中应用场景", MakeDiagnosticBox("命中应用场景")),
-            Row("播放器监视", MakeDiagnosticBox("播放器监视"))));
-        stack.Children.Add(MakeCard("更新与配置恢复",
-            Row("更新检查", MakeDiagnosticBox("更新检查")),
-            Row("配置恢复", MakeDiagnosticBox("配置恢复")),
-            Row("配置目录", MakeDiagnosticBox("配置目录"))));
-        stack.Children.Add(MakeCard("配置恢复", PlainRow(_restoreBackup)));
+        stack.Children.Add(MakeCard("diag.card.apps",
+            Row("diag.row.foreground", MakeDiagnosticBox("diag.row.foreground")),
+            Row("diag.row.scene", MakeDiagnosticBox("diag.row.scene")),
+            Row("diag.row.monitor", MakeDiagnosticBox("diag.row.monitor"))));
+        stack.Children.Add(MakeCard("diag.card.update",
+            Row("diag.row.update", MakeDiagnosticBox("diag.row.update")),
+            Row("diag.row.recovery", MakeDiagnosticBox("diag.row.recovery")),
+            Row("diag.row.dir", MakeDiagnosticBox("diag.row.dir"))));
+        stack.Children.Add(MakeCard("diag.card.recovery", PlainRow(_restoreBackup)));
 
         var scroll = new ScrollViewer
         {
@@ -69,21 +69,21 @@ public sealed class DiagnosticsPage : UserControl
         var mediaState = MediaPlaybackState.Load();
         var recovery = SettingsRecoveryState.Load();
 
-        Set("服务状态", GetServiceStatusText());
-        Set("驱动 DLL", GetDriverStatusText());
-        Set("当前前台应用", foreground is null
-            ? "尚未记录"
-            : $"{foreground.ProcessName}（{Math.Max(0, (int)(DateTimeOffset.UtcNow - foreground.UpdatedUtc).TotalSeconds)} 秒前更新）");
-        Set("命中应用场景", !settings.Automation.Enabled ? "场景自动化未启用"
+        Set("diag.row.service", GetServiceStatusText());
+        Set("diag.row.driver", GetDriverStatusText());
+        Set("diag.row.foreground", foreground is null
+            ? AppStrings.Get("diag.foreground.none")
+            : AppStrings.Format("diag.foreground.updated", foreground.ProcessName, Math.Max(0, (int)(DateTimeOffset.UtcNow - foreground.UpdatedUtc).TotalSeconds)));
+        Set("diag.row.scene", !settings.Automation.Enabled ? AppStrings.Get("diag.scene.disabled")
             : automation is null || string.IsNullOrWhiteSpace(automation.ActiveRuleName)
-                ? $"基础设置{(string.IsNullOrWhiteSpace(automation?.InvalidReason) ? "" : $"；{automation!.InvalidReason}")}"
-                : $"{automation!.ActiveRuleName} → {automation.TargetDescription}{(automation.IdleOverrideActive ? "；空闲覆盖" : "")}");
-        Set("播放器监视", BuildMonitorStatus(audioState, mediaState));
-        Set("更新检查", GetUpdateStatusText(settings.Update.CheckInterval));
-        Set("配置恢复", recovery is null
-            ? "未发生配置恢复"
-            : $"{recovery.Result}，{FormatAge(DateTimeOffset.UtcNow - recovery.UpdatedUtc)}前");
-        Set("配置目录", AppPaths.ProgramDataDirectory);
+                ? AppStrings.Format("diag.scene.base", string.IsNullOrWhiteSpace(automation?.InvalidReason) ? "" : $"；{automation!.InvalidReason}")
+                : AppStrings.Format("diag.scene.rule", automation!.ActiveRuleName, automation.TargetDescription, automation.IdleOverrideActive ? AppStrings.Get("diag.scene.idleTag") : ""));
+        Set("diag.row.monitor", BuildMonitorStatus(audioState, mediaState));
+        Set("diag.row.update", GetUpdateStatusText(settings.Update.CheckInterval));
+        Set("diag.row.recovery", recovery is null
+            ? AppStrings.Get("diag.recovery.none")
+            : AppStrings.Format("diag.recovery.done", recovery.Result, FormatAge(DateTimeOffset.UtcNow - recovery.UpdatedUtc)));
+        Set("diag.row.dir", AppPaths.ProgramDataDirectory);
     }
 
     private static string BuildMonitorStatus(AudioApplicationsState? audio, MediaPlaybackState? media)
@@ -92,17 +92,17 @@ public sealed class DiagnosticsPage : UserControl
             .Where(value => !string.IsNullOrWhiteSpace(value)).ToList();
         if (errors.Count > 0) return string.Join("；", errors);
         if (audio is null || DateTimeOffset.UtcNow - audio.UpdatedUtc > TimeSpan.FromSeconds(10))
-            return "托盘未运行或音频检测状态过期";
-        var ipc = ServiceIpc.IsAvailable() ? "安全管道已连接" : "安全管道不可用，设置只读";
-        return $"{ipc}；音频程序 {audio.Applications.Count} 个；媒体会话 {media?.Sessions.Count ?? 0} 个";
+            return AppStrings.Get("diag.monitor.stale");
+        var ipc = ServiceIpc.IsAvailable() ? AppStrings.Get("diag.monitor.pipeOk") : AppStrings.Get("diag.monitor.pipeDown");
+        return AppStrings.Format("diag.monitor.summary", ipc, audio.Applications.Count, media?.Sessions.Count ?? 0);
     }
 
     private static string FormatAge(TimeSpan age)
     {
-        if (age.TotalMinutes < 1) return $"{age.Seconds} 秒";
-        if (age.TotalHours < 1) return $"{(int)age.TotalMinutes} 分钟";
-        if (age.TotalDays < 1) return $"{(int)age.TotalHours} 小时";
-        return $"{(int)age.TotalDays} 天";
+        if (age.TotalMinutes < 1) return AppStrings.Format("diag.time.seconds", age.Seconds);
+        if (age.TotalHours < 1) return AppStrings.Format("diag.time.minutes", (int)age.TotalMinutes);
+        if (age.TotalDays < 1) return AppStrings.Format("diag.time.hours", (int)age.TotalHours);
+        return AppStrings.Format("diag.time.days", (int)age.TotalDays);
     }
 
     private void Set(string key, string value)
@@ -118,7 +118,7 @@ public sealed class DiagnosticsPage : UserControl
             Changed?.Invoke(this, EventArgs.Empty);
         }
         System.Windows.MessageBox.Show(
-            result.Success ? "已恢复到最近的良好配置。" : $"恢复失败：{result.Message}",
+            result.Success ? AppStrings.Get("diag.restore.done") : AppStrings.Format("diag.restore.failed", result.Message),
             "ClevoLEDKeyboardControl",
             MessageBoxButton.OK,
             result.Success ? MessageBoxImage.Information : MessageBoxImage.Warning);
@@ -132,21 +132,21 @@ public sealed class DiagnosticsPage : UserControl
             using var controller = new ServiceProcess.ServiceController(AppPaths.ServiceName);
             return controller.Status switch
             {
-                ServiceProcess.ServiceControllerStatus.Running => "运行中",
-                ServiceProcess.ServiceControllerStatus.Stopped => "已停止",
-                ServiceProcess.ServiceControllerStatus.Paused => "已暂停",
-                ServiceProcess.ServiceControllerStatus.StartPending => "正在启动",
-                ServiceProcess.ServiceControllerStatus.StopPending => "正在停止",
+                ServiceProcess.ServiceControllerStatus.Running => AppStrings.Get("diag.svc.running"),
+                ServiceProcess.ServiceControllerStatus.Stopped => AppStrings.Get("diag.svc.stopped"),
+                ServiceProcess.ServiceControllerStatus.Paused => AppStrings.Get("diag.svc.paused"),
+                ServiceProcess.ServiceControllerStatus.StartPending => AppStrings.Get("diag.svc.startPending"),
+                ServiceProcess.ServiceControllerStatus.StopPending => AppStrings.Get("diag.svc.stopPending"),
                 _ => controller.Status.ToString()
             };
         }
         catch (InvalidOperationException)
         {
-            return "未安装";
+            return AppStrings.Get("diag.svc.notInstalled");
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or UnauthorizedAccessException)
         {
-            return $"无法读取：{ex.Message}";
+            return AppStrings.Format("diag.svc.readFail", ex.Message);
         }
     }
 
@@ -159,12 +159,12 @@ public sealed class DiagnosticsPage : UserControl
                 !string.IsNullOrWhiteSpace(state.InstalledPath) &&
                 File.Exists(state.InstalledPath))
             {
-                return $"已安装（来源：{state.Source ?? "未知"}）：{state.InstalledPath}";
+                return AppStrings.Format("diag.driver.installed", state.Source ?? AppStrings.Get("diag.driver.unknown"), state.InstalledPath);
             }
 
             if (string.Equals(state.Status, "Missing", StringComparison.OrdinalIgnoreCase))
             {
-                return "未找到（安装器最近检查未命中）";
+                return AppStrings.Get("diag.driver.notFound");
             }
         }
 
@@ -179,10 +179,10 @@ public sealed class DiagnosticsPage : UserControl
             "ControlCenter",
             "InsydeDCHU.dll");
 
-        if (File.Exists(serviceDll)) return $"已安装（来源：托盘目录）：{serviceDll}";
-        if (File.Exists(installedServiceDll)) return $"已安装（来源：服务目录）：{installedServiceDll}";
-        if (File.Exists(controlCenterDll)) return "OEM Control Center 中存在，未复制到服务目录";
-        return "未找到";
+        if (File.Exists(serviceDll)) return AppStrings.Format("diag.driver.installed", AppStrings.Get("diag.driver.trayDir"), serviceDll);
+        if (File.Exists(installedServiceDll)) return AppStrings.Format("diag.driver.installed", AppStrings.Get("diag.driver.serviceDir"), installedServiceDll);
+        if (File.Exists(controlCenterDll)) return AppStrings.Get("diag.driver.inControlCenter");
+        return AppStrings.Get("diag.driver.notFound2");
     }
 
     private static DriverComponentState? LoadDriverComponentState()
@@ -204,14 +204,14 @@ public sealed class DiagnosticsPage : UserControl
         var lastChecked = UpdateChecker.LoadLastCheckedUtc();
         var intervalText = interval switch
         {
-            UpdateCheckInterval.Never => "从不",
-            UpdateCheckInterval.Weekly => "每周",
-            UpdateCheckInterval.Monthly => "每月",
-            _ => "每天"
+            UpdateCheckInterval.Never => AppStrings.Get("diag.update.never"),
+            UpdateCheckInterval.Weekly => AppStrings.Get("diag.update.weekly"),
+            UpdateCheckInterval.Monthly => AppStrings.Get("diag.update.monthly"),
+            _ => AppStrings.Get("diag.update.daily")
         };
         return lastChecked is null
-            ? $"检查频率：{intervalText}，尚未检查"
-            : $"检查频率：{intervalText}，上次：{lastChecked.Value.ToLocalTime():yyyy-MM-dd HH:mm}";
+            ? AppStrings.Format("diag.update.neverChecked", intervalText)
+            : AppStrings.Format("diag.update.last", intervalText, lastChecked.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm"));
     }
 
     private sealed record DriverComponentState(string? Status, string? Source, string? InstalledPath);
@@ -221,7 +221,7 @@ public sealed class DiagnosticsPage : UserControl
         var stack = new StackPanel();
         var heading = new TextBlock
         {
-            Text = title,
+            Text = AppStrings.Get(title),
             FontSize = 13,
             FontWeight = FontWeights.Bold,
             Margin = new Thickness(0, 0, 0, 8)
@@ -239,7 +239,7 @@ public sealed class DiagnosticsPage : UserControl
         var grid = new Grid { MinHeight = 40, MaxWidth = UiMetrics.ContentWidth };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(130) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var labelBlock = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center };
+        var labelBlock = new TextBlock { Text = AppStrings.Get(label), VerticalAlignment = VerticalAlignment.Center };
         labelBlock.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
         grid.Children.Add(labelBlock);
         control.VerticalAlignment = VerticalAlignment.Center;
@@ -257,9 +257,9 @@ public sealed class DiagnosticsPage : UserControl
         return grid;
     }
 
-    private static Button MakeButton(string text, double minWidth = 112)
+    private static Button MakeButton(string key, double minWidth = 112)
     {
-        var button = new Button { Content = text, MinWidth = minWidth };
+        var button = new Button { Content = AppStrings.Get(key), MinWidth = minWidth };
         button.SetResourceReference(StyleProperty, "UiButton");
         return button;
     }

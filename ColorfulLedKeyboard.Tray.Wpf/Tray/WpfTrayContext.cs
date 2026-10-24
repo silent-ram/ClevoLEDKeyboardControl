@@ -77,6 +77,7 @@ public sealed class WpfTrayContext : IDisposable
         _singleInstanceSignalTimer.Start();
         _usageTelemetryTimer.Tick += async (_, _) => await SyncUsageTelemetryAndScheduleAsync();
 
+        AppStrings.LanguageChanged += (_, _) => RefreshMenu();
         _audioStatusWatcher = new AudioSourceStatusWatcher(OnAudioStatusChanged);
         _audioStatusWatcher.RefreshNow();
 
@@ -125,7 +126,7 @@ public sealed class WpfTrayContext : IDisposable
         AddRuntimeStatusItems(menu);
         menu.Items.Add(new Separator { Style = (Style)Application.Current.Resources["UiMenuSeparator"] });
 
-        var enabled = MakeItem("启用灯效", isChecked: _settings.Enabled, onClick: () =>
+        var enabled = MakeItem(AppStrings.Get("menu.enableLighting"), isChecked: _settings.Enabled, onClick: () =>
         {
             if (TryUpdateSettings(settings => settings.Enabled = !settings.Enabled, rememberCurrent: false)) RefreshMenu();
         });
@@ -137,13 +138,13 @@ public sealed class WpfTrayContext : IDisposable
         menu.Items.Add(BuildBrightnessMenu());
         menu.Items.Add(new Separator { Style = (Style)Application.Current.Resources["UiMenuSeparator"] });
 
-        menu.Items.Add(MakeItem("设置...", onClick: OpenSettings));
+        menu.Items.Add(MakeItem(AppStrings.Get("menu.settings"), onClick: OpenSettings));
         menu.Items.Add(BuildServiceMenu());
 
         var updateAvailable = _availableUpdate?.Status == UpdateCheckStatus.Available;
         var update = MakeItem(updateAvailable
-            ? $"发现新版本 v{_availableUpdate!.LatestVersion?.ToString(3)}（点击下载）"
-            : "检查更新", onClick: async () =>
+            ? AppStrings.Format("menu.updateFound", _availableUpdate!.LatestVersion?.ToString(3))
+            : AppStrings.Get("menu.checkUpdate"), onClick: async () =>
         {
             if (_availableUpdate?.Status == UpdateCheckStatus.Available && !string.IsNullOrWhiteSpace(_availableUpdate.ReleaseUrl))
                 UpdateChecker.OpenUrl(_availableUpdate.ReleaseUrl);
@@ -152,9 +153,9 @@ public sealed class WpfTrayContext : IDisposable
         if (updateAvailable) update.Foreground = FindBrush("Brush.Error");
         menu.Items.Add(update);
 
-        menu.Items.Add(MakeItem("关于...", onClick: OpenAbout));
+        menu.Items.Add(MakeItem(AppStrings.Get("menu.about"), onClick: OpenAbout));
         menu.Items.Add(new Separator { Style = (Style)Application.Current.Resources["UiMenuSeparator"] });
-        menu.Items.Add(MakeItem("退出", onClick: ExitApplication));
+        menu.Items.Add(MakeItem(AppStrings.Get("menu.exit"), onClick: ExitApplication));
         return menu;
     }
 
@@ -169,62 +170,62 @@ public sealed class WpfTrayContext : IDisposable
         return item;
     }
 
+    // 与灯效菜单标签同源，避免状态行直显英文枚举名（如 Rainbow）。
+    private static string EffectTypeLabel(EffectType type) => type switch
+    {
+        EffectType.Static => AppStrings.Get("eff.type.static"),
+        EffectType.Rainbow => AppStrings.Get("eff.type.rainbow"),
+        EffectType.Breathing => AppStrings.Get("eff.type.breathing"),
+        EffectType.Sequence => AppStrings.Get("eff.type.sequence"),
+        EffectType.Pulse => AppStrings.Get("eff.type.pulse"),
+        EffectType.Heartbeat => AppStrings.Get("eff.type.heartbeat"),
+        _ => type.ToString()
+    };
+
     private void AddRuntimeStatusItems(ContextMenu menu)
     {
         var status = AutomationStatus.Load();
         var fresh = status is not null && DateTimeOffset.UtcNow - status.UpdatedUtc <= TimeSpan.FromSeconds(10);
         var current = !_settings.Enabled
-            ? "当前：灯光已关闭"
+            ? AppStrings.Get("menu.now.lightOff")
             : fresh && !string.IsNullOrWhiteSpace(status!.ActiveMusicApplication)
-                ? $"当前：{status.ActiveMusicApplication} · 音乐模式"
-                : _settings.OperatingMode == OperatingMode.Music ? "当前：音乐模式" : $"当前：灯效模式 · {EffectTypeLabel(_settings.Effect.Type)}";
+                ? AppStrings.Format("menu.now.musicApp", status.ActiveMusicApplication)
+                : _settings.OperatingMode == OperatingMode.Music ? AppStrings.Get("menu.now.music") : AppStrings.Format("menu.now.lighting", EffectTypeLabel(_settings.Effect.Type));
         menu.Items.Add(MakeItem(current, isEnabled: false));
         if (fresh && !string.IsNullOrWhiteSpace(status!.TrackTitle))
-            menu.Items.Add(MakeItem($"歌曲：{status.TrackTitle}{(string.IsNullOrWhiteSpace(status.TrackArtist) ? "" : " - " + status.TrackArtist)}", isEnabled: false));
+            menu.Items.Add(MakeItem(AppStrings.Format("menu.track", status.TrackTitle + (string.IsNullOrWhiteSpace(status.TrackArtist) ? "" : " - " + status.TrackArtist)), isEnabled: false));
         if (fresh && !string.IsNullOrWhiteSpace(status!.ActiveRuleName))
-            menu.Items.Add(MakeItem($"场景：{status.ActiveRuleName}", isEnabled: false));
+            menu.Items.Add(MakeItem(AppStrings.Format("menu.scene", status.ActiveRuleName), isEnabled: false));
         if (fresh && !string.IsNullOrWhiteSpace(status!.AlbumColor))
-            menu.Items.Add(MakeItem($"封面：{status.AlbumColor} · {status.AudioCaptureMode}", isEnabled: false));
+            menu.Items.Add(MakeItem(AppStrings.Format("menu.cover", status.AlbumColor, status.AudioCaptureMode), isEnabled: false));
     }
-
-    // 与 BuildEffectMenu 的菜单标签保持一致的中文灯效名，避免状态行直显英文枚举。
-    private static string EffectTypeLabel(EffectType type) => type switch
-    {
-        EffectType.Static => "固定颜色",
-        EffectType.Rainbow => "RGB 循环",
-        EffectType.Breathing => "单色呼吸",
-        EffectType.Sequence => "循环呼吸",
-        EffectType.Pulse => "脉冲",
-        EffectType.Heartbeat => "心跳",
-        _ => type.ToString()
-    };
 
     private MenuItem BuildAutomationMenu()
     {
-        var parent = MakeItem("场景自动化", isChecked: _settings.Automation.Enabled);
-        parent.Items.Add(MakeItem("启用场景自动化", isChecked: _settings.Automation.Enabled,
+        var parent = MakeItem(AppStrings.Get("menu.automation"), isChecked: _settings.Automation.Enabled);
+        parent.Items.Add(MakeItem(AppStrings.Get("auto.enable"), isChecked: _settings.Automation.Enabled,
             onClick: () => ApplyEffect(settings => settings.Automation.Enabled = !settings.Automation.Enabled)));
         parent.Items.Add(NewSeparator());
-        parent.Items.Add(BuildRuleToggleMenu("音乐程序", _settings.Automation.MusicApplications.Select(rule => (rule.Id, rule.Name, rule.Enabled)),
+        parent.Items.Add(BuildRuleToggleMenu(AppStrings.Get("menu.musicApps"), _settings.Automation.MusicApplications.Select(rule => (rule.Id, rule.Name, rule.Enabled)),
             (settings, id) =>
             {
                 var rule = settings.Automation.MusicApplications.FirstOrDefault(item => item.Id == id);
                 if (rule is not null) rule.Enabled = !rule.Enabled;
             }));
-        parent.Items.Add(BuildRuleToggleMenu("灯效程序", _settings.Automation.LightingApplications.Select(rule => (rule.Id, rule.Name, rule.Enabled)),
+        parent.Items.Add(BuildRuleToggleMenu(AppStrings.Get("menu.lightingApps"), _settings.Automation.LightingApplications.Select(rule => (rule.Id, rule.Name, rule.Enabled)),
             (settings, id) =>
             {
                 var rule = settings.Automation.LightingApplications.FirstOrDefault(item => item.Id == id);
                 if (rule is not null) rule.Enabled = !rule.Enabled;
             }));
-        parent.Items.Add(BuildRuleToggleMenu("时间计划", _settings.Automation.ScheduleRules.Select(rule => (rule.Id, rule.Name, rule.Enabled)),
+        parent.Items.Add(BuildRuleToggleMenu(AppStrings.Get("menu.schedule"), _settings.Automation.ScheduleRules.Select(rule => (rule.Id, rule.Name, rule.Enabled)),
             (settings, id) =>
             {
                 var rule = settings.Automation.ScheduleRules.FirstOrDefault(item => item.Id == id);
                 if (rule is not null) rule.Enabled = !rule.Enabled;
             }));
         parent.Items.Add(NewSeparator());
-        parent.Items.Add(MakeItem("打开场景自动化设置...", onClick: OpenSettings));
+        parent.Items.Add(MakeItem(AppStrings.Get("menu.openAutomation"), onClick: OpenSettings));
         return parent;
     }
 
@@ -237,7 +238,7 @@ public sealed class WpfTrayContext : IDisposable
         var list = rules.ToList();
         if (list.Count == 0)
         {
-            parent.Items.Add(MakeItem("暂无规则", isEnabled: false));
+            parent.Items.Add(MakeItem(AppStrings.Get("menu.noRules"), isEnabled: false));
             return parent;
         }
         foreach (var rule in list)
@@ -251,10 +252,10 @@ public sealed class WpfTrayContext : IDisposable
 
     private MenuItem BuildBaseModeMenu()
     {
-        var parent = MakeItem("基础模式（无场景命中时）");
+        var parent = MakeItem(AppStrings.Get("menu.baseMode"));
         parent.Items.Add(BuildEffectMenu());
         parent.Items.Add(BuildMusicModeMenu());
-        parent.Items.Add(MakeItem("关闭灯光", isChecked: !_settings.Enabled,
+        parent.Items.Add(MakeItem(AppStrings.Get("dlg.target.off"), isChecked: !_settings.Enabled,
             onClick: () => ApplyEffect(settings => settings.Enabled = false)));
         return parent;
     }
@@ -262,14 +263,14 @@ public sealed class WpfTrayContext : IDisposable
     private MenuItem BuildPlayerBindingMenu()
     {
         var binding = _settings.Effect.Music.PlayerBinding;
-        var parent = MakeItem("播放器绑定");
-        parent.Items.Add(MakeItem(binding.Enabled ? $"当前绑定：{binding.ProcessName}" : "当前绑定：无", isEnabled: false));
-        var bind = MakeItem("绑定当前有声程序");
+        var parent = MakeItem(AppStrings.Get("menu.playerBinding"));
+        parent.Items.Add(MakeItem(binding.Enabled ? AppStrings.Format("menu.bound.current", binding.ProcessName) : AppStrings.Get("menu.bound.none"), isEnabled: false));
+        var bind = MakeItem(AppStrings.Get("menu.bindAudible"));
         var state = AudioApplicationsState.Load();
         var applications = state is not null && DateTimeOffset.UtcNow - state.UpdatedUtc <= TimeSpan.FromSeconds(3)
             ? state.Applications.OrderByDescending(item => item.IsPlaying).ThenByDescending(item => item.PeakLevel).ToList()
             : [];
-        if (applications.Count == 0) bind.Items.Add(MakeItem("未检测到有声程序", isEnabled: false));
+        if (applications.Count == 0) bind.Items.Add(MakeItem(AppStrings.Get("menu.noAudible"), isEnabled: false));
         foreach (var application in applications)
         {
             var copy = application;
@@ -290,34 +291,34 @@ public sealed class WpfTrayContext : IDisposable
                 })));
         }
         parent.Items.Add(bind);
-        var color = MakeItem("颜色来源");
+        var color = MakeItem(AppStrings.Get("menu.colorSource"));
         foreach (var source in Enum.GetValues<MusicColorSource>())
         {
             var sourceCopy = source;
             var label = source switch
             {
-                MusicColorSource.AlbumDominant => "封面主色",
-                MusicColorSource.AlbumPalette => "封面配色",
-                _ => "音乐预设颜色"
+                MusicColorSource.AlbumDominant => AppStrings.Get("ed.color.dominant"),
+                MusicColorSource.AlbumPalette => AppStrings.Get("ed.color.palette"),
+                _ => AppStrings.Get("menu.musicPresetColors")
             };
             color.Items.Add(MakeItem(label, isChecked: binding.ColorSource == source,
                 onClick: () => ApplyEffect(settings => settings.Effect.Music.PlayerBinding.ColorSource = sourceCopy)));
         }
         parent.Items.Add(color);
         parent.Items.Add(BuildMusicResponseMenu());
-        parent.Items.Add(MakeItem("取消绑定", isEnabled: binding.Enabled,
+        parent.Items.Add(MakeItem(AppStrings.Get("mus.unbind"), isEnabled: binding.Enabled,
             onClick: () => ApplyEffect(settings => settings.Effect.Music.PlayerBinding = new MusicPlayerBinding())));
         parent.Items.Add(NewSeparator());
-        parent.Items.Add(MakeItem("打开音乐设置...", onClick: OpenSettings));
+        parent.Items.Add(MakeItem(AppStrings.Get("menu.openMusic"), onClick: OpenSettings));
         return parent;
     }
 
     private MenuItem BuildMusicResponseMenu()
     {
         var beatDetectionEnabled = _settings.Effect.Music.EqEnabled;
-        var parent = MakeItem($"音乐响应（{(beatDetectionEnabled ? "鼓点响应" : "节奏律动")}）");
-        parent.Items.Add(MakeItem("节奏律动", isChecked: !beatDetectionEnabled, onClick: () => SetMusicResponse(beatDetection: false)));
-        parent.Items.Add(MakeItem("鼓点响应", isChecked: beatDetectionEnabled, onClick: () => SetMusicResponse(beatDetection: true)));
+        var parent = MakeItem(AppStrings.Format("menu.musicResponse", AppStrings.Get(beatDetectionEnabled ? "menu.beat.beat" : "menu.beat.rhythm")));
+        parent.Items.Add(MakeItem(AppStrings.Get("menu.beat.rhythm"), isChecked: !beatDetectionEnabled, onClick: () => SetMusicResponse(beatDetection: false)));
+        parent.Items.Add(MakeItem(AppStrings.Get("menu.beat.beat"), isChecked: beatDetectionEnabled, onClick: () => SetMusicResponse(beatDetection: true)));
         return parent;
     }
 
@@ -335,31 +336,31 @@ public sealed class WpfTrayContext : IDisposable
 
     private MenuItem BuildEventFeedbackMenu()
     {
-        var parent = MakeItem("事件反馈");
-        parent.Items.Add(MakeItem("敲字闪烁", isChecked: _settings.TypingPulse.Enabled,
+        var parent = MakeItem(AppStrings.Get("nav.feedback"));
+        parent.Items.Add(MakeItem(AppStrings.Get("fb.typing.enable"), isChecked: _settings.TypingPulse.Enabled,
             onClick: () => ApplyEffect(settings => settings.TypingPulse.Enabled = !settings.TypingPulse.Enabled)));
-        parent.Items.Add(MakeItem("通知闪烁", isChecked: _settings.NotificationFlash.Enabled,
+        parent.Items.Add(MakeItem(AppStrings.Get("fb.notify.enable"), isChecked: _settings.NotificationFlash.Enabled,
             onClick: () => ApplyEffect(settings => settings.NotificationFlash.Enabled = !settings.NotificationFlash.Enabled)));
         parent.Items.Add(NewSeparator());
-        parent.Items.Add(MakeItem("打开事件反馈设置...", onClick: OpenSettings));
+        parent.Items.Add(MakeItem(AppStrings.Get("menu.openFeedback"), onClick: OpenSettings));
         return parent;
     }
 
     private MenuItem BuildEffectMenu()
     {
-        var effect = MakeItem("灯效模式", isChecked: _settings.OperatingMode == OperatingMode.Lighting);
-        AddEffectPresetMenu(effect, EffectType.Static, "固定颜色");
-        AddEffectPresetMenu(effect, EffectType.Rainbow, "RGB 循环");
-        AddEffectPresetMenu(effect, EffectType.Breathing, "单色呼吸");
-        AddEffectPresetMenu(effect, EffectType.Sequence, "循环呼吸");
-        AddEffectPresetMenu(effect, EffectType.Pulse, "脉冲");
-        AddEffectPresetMenu(effect, EffectType.Heartbeat, "心跳");
+        var effect = MakeItem(AppStrings.Get("menu.lightingMode"), isChecked: _settings.OperatingMode == OperatingMode.Lighting);
+        AddEffectPresetMenu(effect, EffectType.Static, AppStrings.Get("eff.type.static"));
+        AddEffectPresetMenu(effect, EffectType.Rainbow, AppStrings.Get("eff.type.rainbow"));
+        AddEffectPresetMenu(effect, EffectType.Breathing, AppStrings.Get("eff.type.breathing"));
+        AddEffectPresetMenu(effect, EffectType.Sequence, AppStrings.Get("eff.type.sequence"));
+        AddEffectPresetMenu(effect, EffectType.Pulse, AppStrings.Get("eff.type.pulse"));
+        AddEffectPresetMenu(effect, EffectType.Heartbeat, AppStrings.Get("eff.type.heartbeat"));
         return effect;
     }
 
     private MenuItem BuildMusicModeMenu()
     {
-        var music = MakeItem("音乐模式", isChecked: _settings.OperatingMode == OperatingMode.Music);
+        var music = MakeItem(AppStrings.Get("menu.musicMode"), isChecked: _settings.OperatingMode == OperatingMode.Music);
         foreach (var preset in MusicSettings.BuiltInPresets.Concat(_settings.Effect.Music.CustomPresets))
         {
             var presetCopy = CloneMusicPreset(preset);
@@ -406,7 +407,7 @@ public sealed class WpfTrayContext : IDisposable
     {
         var musicMode = _settings.OperatingMode == OperatingMode.Music;
         var current = musicMode ? _settings.Effect.Music.PeakBrightness : _settings.Brightness;
-        var brightness = MakeItem(musicMode ? $"音乐峰值亮度 ({current}%)" : $"基础亮度 ({current}%)");
+        var brightness = MakeItem(musicMode ? AppStrings.Format("menu.brightness.peak", current) : AppStrings.Format("menu.brightness.base", current));
         foreach (var value in new[] { 25, 50, 75, 100 })
         {
             var captured = value;
@@ -426,13 +427,13 @@ public sealed class WpfTrayContext : IDisposable
 
     private MenuItem BuildServiceMenu()
     {
-        var service = MakeItem("服务");
-        service.Items.Add(MakeItem("重启服务", onClick: RestartService));
+        var service = MakeItem(AppStrings.Get("menu.service"));
+        service.Items.Add(MakeItem(AppStrings.Get("menu.restartService"), onClick: RestartService));
 
         var (trayRegistered, serviceAuto) = StartupManager.GetState();
-        service.Items.Add(MakeItem("开机自动启动", isChecked: trayRegistered && serviceAuto, onClick: ToggleStartupAsync));
+        service.Items.Add(MakeItem(AppStrings.Get("menu.autostart"), isChecked: trayRegistered && serviceAuto, onClick: ToggleStartupAsync));
 
-        service.Items.Add(MakeItem("打开配置目录", onClick: () =>
+        service.Items.Add(MakeItem(AppStrings.Get("menu.openConfig"), onClick: () =>
         {
             Directory.CreateDirectory(AppPaths.ProgramDataDirectory);
             Process.Start(new ProcessStartInfo("explorer.exe", AppPaths.ProgramDataDirectory) { UseShellExecute = true });
@@ -444,7 +445,7 @@ public sealed class WpfTrayContext : IDisposable
     {
         var enabled = !IsStartupEnabled();
         var choice = System.Windows.MessageBox.Show(
-            $"确定要将开机自启动切换为{(enabled ? "开启" : "关闭")}吗？该设置立即生效，可能需要管理员权限。",
+            AppStrings.Format("menu.autostart.confirm", AppStrings.Get(enabled ? "state.on" : "state.off")),
             "ClevoLEDKeyboardControl",
             MessageBoxButton.YesNo,
             MessageBoxImage.Question);
@@ -457,7 +458,7 @@ public sealed class WpfTrayContext : IDisposable
         if (!ok)
         {
             System.Windows.MessageBox.Show(
-                $"无法修改开机自启动：{error}",
+                AppStrings.Format("menu.autostart.fail", error),
                 "ClevoLEDKeyboardControl",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
@@ -510,7 +511,7 @@ public sealed class WpfTrayContext : IDisposable
         }
         var window = new Window
         {
-            Title = "关于 ClevoLEDKeyboardControl",
+            Title = "About ClevoLEDKeyboardControl",
             WindowStartupLocation = WindowStartupLocation.CenterScreen,
             Width = 440,
             SizeToContent = SizeToContent.Height,
@@ -569,7 +570,7 @@ public sealed class WpfTrayContext : IDisposable
         catch (IOException ex)
         {
             System.Windows.MessageBox.Show(
-                $"无法保存配置：{ex.Message}",
+                AppStrings.Format("save.fail.io", ex.Message),
                 "ClevoLEDKeyboardControl",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
@@ -628,22 +629,22 @@ public sealed class WpfTrayContext : IDisposable
         if (settings.OperatingMode != OperatingMode.Music || !settings.Enabled)
         {
             text = !settings.Enabled
-                ? "ClevoLEDKeyboardControl\n灯光已关闭"
+                ? "ClevoLEDKeyboardControl\n" + AppStrings.Get("tooltip.lightOff")
                 : fresh && !string.IsNullOrWhiteSpace(status!.ActiveRuleName)
-                    ? $"ClevoLEDKeyboardControl\n场景：{status.ActiveRuleName}"
-                    : "ClevoLEDKeyboardControl\n灯效模式";
+                    ? $"ClevoLEDKeyboardControl\n" + AppStrings.Format("tooltip.scene", status.ActiveRuleName)
+                    : "ClevoLEDKeyboardControl\n" + AppStrings.Get("tooltip.lighting");
         }
         else
         {
             var player = fresh && !string.IsNullOrWhiteSpace(status!.ActiveMusicApplication)
                 ? status.ActiveMusicApplication
-                : _lastAudioStatus?.DeviceFriendlyName ?? "检测中…";
+                : _lastAudioStatus?.DeviceFriendlyName ?? AppStrings.Get("mus.source.detecting");
             var track = fresh && !string.IsNullOrWhiteSpace(status!.TrackTitle) ? $"\n{status.TrackTitle}" : "";
-            text = $"ClevoLEDKeyboardControl\n音乐：{player}{track}";
+            text = $"ClevoLEDKeyboardControl\n" + AppStrings.Format("tooltip.music", player) + track;
         }
 
         if (_availableUpdate?.Status == UpdateCheckStatus.Available)
-            text += $"\n可更新：v{_availableUpdate.LatestVersion?.ToString(3)}";
+            text += "\n" + AppStrings.Format("tooltip.update", _availableUpdate.LatestVersion?.ToString(3));
 
         if (text.Length > 120) text = text[..120] + "…";
         _notifyIcon.Text = text;
@@ -725,13 +726,13 @@ public sealed class WpfTrayContext : IDisposable
             var detail = ex switch
             {
                 UpdateCheckException update => update.Message,
-                System.Threading.Tasks.TaskCanceledException => "连接 GitHub 超时，请稍后重试。",
+                System.Threading.Tasks.TaskCanceledException => AppStrings.Get("update.fail.timeout"),
                 System.Net.Http.HttpRequestException { StatusCode: System.Net.HttpStatusCode.Forbidden } =>
-                    "GitHub 暂时限制了更新检查请求，请稍后重试。",
+                    AppStrings.Get("update.fail.rate"),
                 System.Net.Http.HttpRequestException { StatusCode: not null } http =>
-                    $"GitHub 返回状态码 {(int)http.StatusCode.Value}，请稍后重试。",
-                InvalidOperationException => "无法识别 GitHub 最新版本信息，请稍后重试。",
-                _ => "暂时无法连接更新服务器，请稍后重试。"
+                    AppStrings.Format("update.fail.status", (int)http.StatusCode.Value),
+                InvalidOperationException => AppStrings.Get("update.fail.parse"),
+                _ => AppStrings.Get("update.fail.generic")
             };
             Dialogs.UpdateStatusDialog.ShowFailure(detail);
         }
@@ -739,7 +740,7 @@ public sealed class WpfTrayContext : IDisposable
 
     private void ShowUpdateAvailable(UpdateCheckResult result)
     {
-        var latest = result.LatestVersion?.ToString(3) ?? "未知";
+        var latest = result.LatestVersion?.ToString(3) ?? AppStrings.Get("state.unknown");
         Dialogs.UpdateStatusDialog.ShowAvailable(latest, result.CurrentVersion.ToString(3));
     }
 
@@ -869,7 +870,7 @@ public sealed class WpfTrayContext : IDisposable
         catch (Exception ex)
         {
             System.Windows.MessageBox.Show(
-                $"无法重启服务：{ex.Message}",
+                AppStrings.Format("service.restart.fail", ex.Message),
                 "ClevoLEDKeyboardControl",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
@@ -967,7 +968,7 @@ public sealed class WpfTrayContext : IDisposable
     private static void ShowSettingsAccessError()
     {
         System.Windows.MessageBox.Show(
-            $"无法保存配置，请重新安装新版程序以修复权限，或确认当前用户可写入：{AppPaths.SettingsPath}",
+            AppStrings.Format("save.permission", AppPaths.SettingsPath),
             "ClevoLEDKeyboardControl",
             MessageBoxButton.OK,
             MessageBoxImage.Warning);

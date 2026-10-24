@@ -20,7 +20,7 @@ public sealed class UiColorPickerRow : UserControl
         var row = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         var label = new TextBlock
         {
-            Text = "颜色",
+            Text = AppStrings.Get("picker.row.color"),
             Width = 130,
             VerticalAlignment = VerticalAlignment.Center
         };
@@ -37,7 +37,7 @@ public sealed class UiColorPickerRow : UserControl
 
         if (!compact)
         {
-            var pick = new Button { Content = "选择...", MinWidth = 76, Margin = new Thickness(10, 0, 0, 0) };
+            var pick = new Button { Content = AppStrings.Get("picker.choose"), MinWidth = 76, Margin = new Thickness(10, 0, 0, 0) };
             pick.SetResourceReference(StyleProperty, "UiButton");
             pick.Click += (_, _) => PickColorRequested?.Invoke(this, EventArgs.Empty);
             row.Children.Add(pick);

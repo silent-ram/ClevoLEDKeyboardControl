@@ -9,14 +9,14 @@ namespace ColorfulLedKeyboard.Tray.Wpf.Pages;
 /// <summary>事件反馈页：敲字闪烁、通知闪烁（WinForms BuildEventFeedbackPage 移植件）。</summary>
 public sealed class EventFeedbackPage : UserControl
 {
-    private readonly System.Windows.Controls.CheckBox _typingPulseEnabled = MakeCheck("启用敲字闪烁");
-    private readonly UiSliderRow _typingPulsePeakBrightness = new("触发亮度", 0, 100, "%");
-    private readonly UiSliderRow _typingPulseHold = new("保持时间", 20, 2000, " ms");
-    private readonly UiSliderRow _typingPulseFade = new("回落时间", 50, 5000, " ms");
-    private readonly System.Windows.Controls.CheckBox _notificationFlashEnabled = MakeCheck("收到 Windows 通知时闪烁键盘");
+    private readonly System.Windows.Controls.CheckBox _typingPulseEnabled = MakeCheck("fb.typing.enable");
+    private readonly UiSliderRow _typingPulsePeakBrightness = new("fb.typing.peak", 0, 100, "%", keyLabel: true);
+    private readonly UiSliderRow _typingPulseHold = new("fb.typing.hold", 20, 2000, " ms", keyLabel: true);
+    private readonly UiSliderRow _typingPulseFade = new("fb.typing.fade", 50, 5000, " ms", keyLabel: true);
+    private readonly System.Windows.Controls.CheckBox _notificationFlashEnabled = MakeCheck("fb.notify.enable");
     private readonly UiColorPickerRow _notificationFlashColor = new(compact: false);
-    private readonly UiSliderRow _notificationFlashPulses = new("闪烁次数", 1, 5, " 次");
-    private readonly UiSliderRow _notificationFlashCooldown = new("冷却时间", 1, 60, " 秒");
+    private readonly UiSliderRow _notificationFlashPulses = new("fb.notify.pulses", 1, 5, AppStrings.Get("common.times"));
+    private readonly UiSliderRow _notificationFlashCooldown = new("fb.notify.cooldown", 1, 60, AppStrings.Get("common.secondsUnit"));
 
     public event EventHandler? Changed;
 
@@ -51,15 +51,15 @@ public sealed class EventFeedbackPage : UserControl
         _notificationRows = notificationRows;
 
         var stack = new StackPanel { Margin = new Thickness(18, 18, 18, 28), MaxWidth = 832 };
-        stack.Children.Add(MakeCard("敲字反馈", typingRows));
-        stack.Children.Add(MakeCard("通知反馈", notificationRows));
+        stack.Children.Add(MakeCard("fb.card.typing", typingRows));
+        stack.Children.Add(MakeCard("fb.card.notify", notificationRows));
         var overrideNote = new TextBlock
         {
-            Text = "事件策略按“全局 → 音乐规则 → 前台灯效规则”覆盖；空闲关灯会抑制包括通知在内的全部输出。",
+            Text = AppStrings.Get("fb.override.note"),
             TextWrapping = TextWrapping.Wrap
         };
         overrideNote.SetResourceReference(TextBlock.ForegroundProperty, "Brush.MutedText");
-        stack.Children.Add(MakeCard("当前覆盖关系", overrideNote));
+        stack.Children.Add(MakeCard("fb.card.override", overrideNote));
 
         var scroll = new ScrollViewer
         {
@@ -137,7 +137,7 @@ public sealed class EventFeedbackPage : UserControl
         var stack = new StackPanel();
         var heading = new TextBlock
         {
-            Text = title,
+            Text = AppStrings.Get(title),
             FontSize = 13,
             FontWeight = FontWeights.Bold,
             Margin = new Thickness(0, 0, 0, 8)
@@ -167,9 +167,9 @@ public sealed class EventFeedbackPage : UserControl
         return grid;
     }
 
-    private static System.Windows.Controls.CheckBox MakeCheck(string text)
+    private static System.Windows.Controls.CheckBox MakeCheck(string key)
     {
-        var check = new System.Windows.Controls.CheckBox { Content = text };
+        var check = new System.Windows.Controls.CheckBox { Content = AppStrings.Get(key) };
         check.SetResourceReference(StyleProperty, "UiCheckBox");
         return check;
     }

@@ -76,7 +76,7 @@ public sealed class ColorSelectionDialog : Window
         _singleSelection = singleSelection;
         _choices = BuildChoices(selectedColors);
 
-        Title = "自定义颜色";
+        Title = AppStrings.Get("color.title");
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ResizeMode = ResizeMode.NoResize;
         ShowInTaskbar = false;
@@ -97,7 +97,7 @@ public sealed class ColorSelectionDialog : Window
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        var leftTitle = SectionText("基础颜色");
+        var leftTitle = SectionText(AppStrings.Get("color.basic"));
         Grid.SetRow(leftTitle, 0);
         grid.Children.Add(leftTitle);
 
@@ -109,7 +109,7 @@ public sealed class ColorSelectionDialog : Window
         grid.Children.Add(_grid);
         _grid.ItemsSource = _choices;
 
-        var rightTitle = SectionText("颜色参数");
+        var rightTitle = SectionText(AppStrings.Get("color.params"));
         Grid.SetRow(rightTitle, 0);
         Grid.SetColumn(rightTitle, 1);
         grid.Children.Add(rightTitle);
@@ -126,9 +126,9 @@ public sealed class ColorSelectionDialog : Window
             HorizontalAlignment = HorizontalAlignment.Right,
             Margin = new Thickness(0, 14, 0, 0)
         };
-        var cancel = new Button { Content = "取消", Style = ButtonStyle(), MinWidth = 96 };
+        var cancel = new Button { Content = AppStrings.Get("common.cancel"), Style = ButtonStyle(), MinWidth = 96 };
         cancel.Click += (_, _) => Close();
-        var ok = new Button { Content = "确定", Style = ButtonStyle(), MinWidth = 96, Margin = new Thickness(12, 0, 0, 0) };
+        var ok = new Button { Content = AppStrings.Get("common.confirm"), Style = ButtonStyle(), MinWidth = 96, Margin = new Thickness(12, 0, 0, 0) };
         ok.Click += (_, _) => Accept();
         buttons.Children.Add(cancel);
         buttons.Children.Add(ok);
@@ -264,7 +264,7 @@ public sealed class ColorSelectionDialog : Window
         Grid.SetColumnSpan(numericGrid, 2);
         grid.Children.Add(numericGrid);
 
-        var restore = new Button { Content = "恢复默认", Style = ButtonStyle(), MinWidth = 96 };
+        var restore = new Button { Content = AppStrings.Get("color.restore"), Style = ButtonStyle(), MinWidth = 96 };
         restore.Click += (_, _) => RestoreSelectedDefault();
         restore.Margin = new Thickness(0, 12, 0, 0);
         restore.HorizontalAlignment = HorizontalAlignment.Left;
@@ -504,14 +504,14 @@ public sealed class ColorSelectionDialog : Window
         var selectedCount = SelectedColors.Count;
         if (_singleSelection && selectedCount != 1)
         {
-            System.Windows.MessageBox.Show("请只选择 1 种颜色。", "ClevoLEDKeyboardControl",
+            System.Windows.MessageBox.Show(AppStrings.Get("color.singleOnly"), "ClevoLEDKeyboardControl",
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
         if (!_singleSelection && selectedCount < 2)
         {
-            System.Windows.MessageBox.Show("请至少选择 2 种颜色。", "ClevoLEDKeyboardControl",
+            System.Windows.MessageBox.Show(AppStrings.Get("color.minTwo"), "ClevoLEDKeyboardControl",
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }

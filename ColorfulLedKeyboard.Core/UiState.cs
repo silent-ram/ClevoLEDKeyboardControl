@@ -33,6 +33,10 @@ public sealed class UiState
     public int LastPage { get; set; }
     public bool MusicAdvancedExpanded { get; set; }
 
+    /// <summary>界面语言："auto" 跟随系统（默认）；"zh-CN" / "en-US" 手动指定。
+    /// 安装器在语言选择页写入初始值。</summary>
+    public string Language { get; set; } = "auto";
+
     /// <summary>外观卡用户添加的自定义强调色（ARGB）。</summary>
     public List<int> CustomAccents { get; set; } = [];
 
@@ -51,7 +55,8 @@ public sealed class UiState
         WindowWidth = WindowWidth,
         WindowHeight = WindowHeight,
         LastPage = LastPage,
-        MusicAdvancedExpanded = MusicAdvancedExpanded
+        MusicAdvancedExpanded = MusicAdvancedExpanded,
+        Language = Language
     };
 }
 
@@ -124,6 +129,7 @@ public sealed class UiStateStore
         state.WindowWidth = Math.Clamp(state.WindowWidth, 1040, 3840);
         state.WindowHeight = Math.Clamp(state.WindowHeight, 720, 2160);
         state.LastPage = Math.Clamp(state.LastPage, 0, 7);
+        if (state.Language is not ("auto" or "zh-CN" or "en-US")) state.Language = "auto";
         return state;
     }
 

@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
+using ColorfulLedKeyboard.Core;
 using Microsoft.Win32;
 
 namespace ColorfulLedKeyboard.Installer;
@@ -41,13 +42,18 @@ internal static class Program
         "ClevoLEDKeyboardControl");
     private static readonly string SettingsPath = Path.Combine(ProgramDataDirectory, "settings.json");
     private static readonly string UpgradeBackupDirectory = Path.Combine(ProgramDataDirectory, "Backups");
-    private static readonly string InstallerLogPath = Path.Combine(ProgramDataDirectory, "installer.log");
+    internal static readonly string InstallerLogPath = Path.Combine(ProgramDataDirectory, "installer.log");
     private static readonly string TempInstallerLogPath = Path.Combine(Path.GetTempPath(), "ClevoLEDKeyboardControl-installer.log");
 
     private static readonly string StartMenuShortcutPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu),
         "Programs",
         "ClevoLEDKeyboardControl.lnk");
+
+    private static readonly string StartMenuUninstallShortcutPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu),
+        "Programs",
+        "Uninstall ClevoLEDKeyboardControl.lnk");
 
     private static readonly string DesktopShortcutPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory),
@@ -57,39 +63,57 @@ internal static class Program
     private static int Main(string[] args)
     {
         Log($"Installer started. Args: {string.Join(' ', args)}");
+        Application.EnableVisualStyles();
+        InstallerStrings.Set(ResolveLanguagePreference());
+        var demo = HasArgument(args, "/preview");
         try
         {
-            if (!IsAdministrator())
+            // demo 只演示界面流转，无任何系统副作用，也不需要管理员权限
+            if (!IsAdministrator() && !demo)
             {
-                var message = "需要管理员权限才能安装 Windows 服务。请右键安装包，选择“以管理员身份运行”。";
+                var message = InstallerStrings.Get("admin.needed");
                 Log(message);
                 Show(BuildFailureMessage(message));
                 return 1;
             }
 
+            // 卸载器本体（安装目录内的副本）双击运行：展示卸载确认页，
+            // 确认后从 temp 重启可见的卸载进度向导（本进程 exe 位于待删除目录，不能自己删自己）。
             if (IsUninstallerProcess() && args.Length == 0)
             {
-                var keepSettings = AskKeepSettingsBeforeUninstall();
-                if (keepSettings is null)
+                using var confirm = WizardWindow.ForUninstallerConfirm(BuildWizardOps());
+                confirm.ShowDialog();
+                if (confirm.Result != WizardWindow.WizardAction.Uninstall)
                 {
                     return 0;
                 }
 
-                RelaunchUninstallFromTemp(keepSettings.Value);
+                RelaunchUninstallFromTemp(confirm.KeepSettings, wizardMode: true);
                 return 0;
             }
 
             if (HasArgument(args, "/uninstall"))
             {
                 var keepSettings = HasArgument(args, "/keep-settings");
+                var wizardMode = HasArgument(args, "/wizard");
                 if (!HasArgument(args, "/uninstall-from-temp") && IsRunningFromInstallDirectory())
                 {
-                    RelaunchUninstallFromTemp(keepSettings);
+                    RelaunchUninstallFromTemp(keepSettings, wizardMode);
                     return 0;
                 }
 
-                Uninstall(keepSettings);
-                Show(BuildUninstallSuccessMessage(keepSettings));
+                if (wizardMode)
+                {
+                    // 可见的卸载进度向导（宿主确认对话框已完成交互）
+                    using var wizard = WizardWindow.ForUninstallProgress(keepSettings, demo: false, BuildWizardOps());
+                    wizard.ShowDialog();
+                }
+                else
+                {
+                    Uninstall(keepSettings, progress: null);
+                    Show(BuildUninstallSuccessMessage(keepSettings));
+                }
+
                 if (HasArgument(args, "/uninstall-from-temp"))
                 {
                     ScheduleFileRemoval(Environment.ProcessPath!, "temp-uninstaller");
@@ -100,38 +124,27 @@ internal static class Program
 
             if (HasArgument(args, "/repair"))
             {
-                Install();
+                Install(progress: null);
                 Show(BuildInstallSuccessMessage());
                 StartTray();
                 return 0;
             }
 
-            if (IsInstalled())
+            // 交互安装/更新：单窗口向导
+            var installed = IsInstalled();
+            var previewPage = args.FirstOrDefault(arg => arg.StartsWith("/preview-page:", StringComparison.OrdinalIgnoreCase)) is { } pageArg
+                ? pageArg["/preview-page:".Length..]
+                : null;
+            using (var wizard = WizardWindow.ForSetup(installed, demo: HasArgument(args, "/preview"), BuildWizardOps(), previewPage))
             {
-                var choice = AskInstalledAction();
-
-                if (choice == InstalledAction.Cancel)
+                wizard.ShowDialog();
+                if (!demo && wizard.Result == WizardWindow.WizardAction.Install)
                 {
-                    return 0;
-                }
-
-                if (choice == InstalledAction.Uninstall)
-                {
-                    var keepSettings = AskKeepSettingsBeforeUninstall();
-                    if (keepSettings is null)
-                    {
-                        return 0;
-                    }
-
-                    Uninstall(keepSettings.Value);
-                    Show(BuildUninstallSuccessMessage(keepSettings.Value));
-                    return 0;
+                    UiStateStore.Shared.Update(state => state.Language = wizard.SelectedLanguage);
+                    StartTray();
                 }
             }
 
-            Install();
-            Show(BuildInstallSuccessMessage());
-            StartTray();
             return 0;
         }
         catch (Exception ex)
@@ -142,22 +155,67 @@ internal static class Program
         }
     }
 
-    private static void Install()
+    private static string ResolveLanguagePreference()
     {
+        try
+        {
+            return UiStateStore.Shared.Load().Language;
+        }
+        catch
+        {
+            return "auto";
+        }
+    }
+
+    private static WizardOps BuildWizardOps()
+    {
+        return new WizardOps(
+            Install: step => Install(step),
+            Uninstall: (keepSettings, step) => Uninstall(keepSettings, step),
+            InstallDoneText: BuildInstallSuccessMessage,
+            UninstallDoneText: BuildUninstallSuccessMessage,
+            DescribeInstalledState: DescribeInstalledStateForWizard);
+    }
+
+    private static (string Version, string ServiceStatus) DescribeInstalledStateForWizard()
+    {
+        var version = Registry.LocalMachine.OpenSubKey(UninstallKeyPath)?.GetValue("DisplayVersion") as string
+            ?? ReadVersion();
+        return (version, GetServiceStatusText());
+    }
+
+    private static string ReadVersion()
+    {
+        var informational = Assembly.GetExecutingAssembly()
+            .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+        if (!string.IsNullOrWhiteSpace(informational))
+        {
+            var plus = informational.IndexOf('+');
+            return plus > 0 ? informational[..plus] : informational;
+        }
+        return Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
+    }
+
+    private static void Install(Action<string>? progress = null)
+    {
+        progress?.Invoke("prereq");
         ValidatePrerequisites();
         Log("开始安装流程");
         // 覆盖安装必须先在停止旧服务前取得配置快照。之后任何安装步骤即使意外改写或
         // 删除 settings.json，也会在新服务启动前恢复，避免默认配置覆盖用户数据。
         var configurationGuard = new UpgradeConfigurationGuard(SettingsPath, UpgradeBackupDirectory);
         var serviceSettings = TryReadSettingsFromService();
+        progress?.Invoke("backup");
         var configurationSnapshot = serviceSettings is null
             ? CaptureSettingsWithLegacyAclRecovery(configurationGuard)
             : configurationGuard.Capture(serviceSettings);
 
+        progress?.Invoke("stop");
         StopAndDeleteServiceIfPresent(ServiceName);
         StopAndDeleteServiceIfPresent(LegacyServiceName);
         StopAndDeleteServiceIfPresent(LegacyServiceNameClevoRgb);
         KillTray();
+        progress?.Invoke("files");
         Directory.CreateDirectory(InstallDirectory);
         CleanPayloadDirectories();
         RemoveLegacyInstalledSetup();
@@ -165,6 +223,7 @@ internal static class Program
         Log($"程序文件已解压到：{InstallDirectory}");
         EnsureProgramDataPermissions();
         RestoreSettingsWithLegacyAclRecovery(configurationGuard, configurationSnapshot);
+        progress?.Invoke("driver");
         var driverInstalled = TryInstallDriverDll();
         Log(driverInstalled ? "厂商灯控组件已准备" : "未找到 InsydeDCHU.dll，服务将安装但暂时无法控制键盘灯");
 
@@ -173,6 +232,7 @@ internal static class Program
             throw new FileNotFoundException("Service executable is missing from installer payload.", ServiceExe);
         }
 
+        progress?.Invoke("service");
         Run("sc.exe", $"create {ServiceName} binPath= \"{ServiceExe}\" start= auto DisplayName= \"{DisplayName}\"");
         Run("sc.exe", $"description {ServiceName} \"Controls Clevo-compatible keyboard RGB lighting in the background.\"");
         Run("sc.exe", $"start {ServiceName}", allowFailure: true);
@@ -184,6 +244,7 @@ internal static class Program
         }
 
         Log("服务已运行，安全通信通道已就绪");
+        progress?.Invoke("finalize");
         AddTrayStartup();
         RegisterUninstaller();
         CreateUserShortcuts();  // 失败不抛，仅返回 false
@@ -363,12 +424,15 @@ internal static class Program
     {
         var destination = Path.Combine(ServiceDirectory, DriverDllName);
         var serviceStatus = GetServiceStatusText();
-        if (File.Exists(destination))
-        {
-            return $"{AppName} 已安装。\n\n服务：{serviceStatus}\n厂商灯控组件：已安装\n开机自启动：已启用\n\n设置窗口将自动打开。";
-        }
-
-        return $"{AppName} 已安装。\n\n服务：{serviceStatus}\n厂商灯控组件：未找到\n开机自启动：已启用\n\n安装包内没有包含厂商灯控组件，且本机未检测到 OEM Control Center。程序已安装，但暂时无法控制键盘灯。请安装 OEM Control Center 后重新运行安装器进行修复。\n\n设置窗口将自动打开。";
+        var driver = File.Exists(destination)
+            ? InstallerStrings.Get("driver.installed")
+            : InstallerStrings.Get("driver.missing");
+        var missingNote = File.Exists(destination) ? "" : "\n\n" + InstallerStrings.Get("done.driverMissing");
+        return $"{AppName} {InstallerStrings.Get("done.install")}。\n\n"
+            + string.Format(InstallerStrings.Get("action.subtitle"), ReadVersion(), serviceStatus) + "\n"
+            + $"{InstallerStrings.Get("driver.component")}：{driver}\n{InstallerStrings.Get("autostart")}：{InstallerStrings.Get("autostart.enabled")}"
+            + missingNote
+            + $"\n\n{InstallerStrings.Get("done.settingsOpen")}";
     }
 
     private static string GetServiceStatusText()
@@ -376,37 +440,40 @@ internal static class Program
         var query = Run("sc.exe", $"query {ServiceName}", allowFailure: true);
         if (query.ExitCode != 0)
         {
-            return "未安装";
+            return InstallerStrings.Get("state.notInstalled");
         }
 
         if (query.Output.Contains("RUNNING", StringComparison.OrdinalIgnoreCase))
         {
-            return "运行中";
+            return InstallerStrings.Get("state.running");
         }
 
         if (query.Output.Contains("START_PENDING", StringComparison.OrdinalIgnoreCase))
         {
-            return "正在启动";
+            return InstallerStrings.Get("state.starting");
         }
 
         if (query.Output.Contains("STOPPED", StringComparison.OrdinalIgnoreCase))
         {
-            return "已停止";
+            return InstallerStrings.Get("state.stopped");
         }
 
-        return "已安装";
+        return InstallerStrings.Get("state.installed");
     }
 
-    private static void Uninstall(bool keepSettings)
+    private static void Uninstall(bool keepSettings, Action<string>? progress = null)
     {
+        progress?.Invoke("stopOnly");
         StopAndDeleteServiceIfPresent(ServiceName);
         StopAndDeleteServiceIfPresent(LegacyServiceName);
         StopAndDeleteServiceIfPresent(LegacyServiceNameClevoRgb);
+        progress?.Invoke("removeStartup");
         RemoveTrayStartup();
         RemoveUserShortcuts();
         UnregisterUninstaller();
         KillTray();
 
+        progress?.Invoke("removeFiles");
         if (Directory.Exists(InstallDirectory))
         {
             TryDeleteInstallDirectory();
@@ -414,6 +481,7 @@ internal static class Program
 
         if (!keepSettings)
         {
+            progress?.Invoke("purge");
             TryDeleteProgramDataDirectory();
         }
     }
@@ -587,20 +655,21 @@ internal static class Program
         return string.Equals(processDirectory, installDirectory, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static void RelaunchUninstallFromTemp(bool keepSettings)
+    private static void RelaunchUninstallFromTemp(bool keepSettings, bool wizardMode)
     {
         var tempUninstaller = Path.Combine(Path.GetTempPath(), $"ClevoLEDKeyboardControl-uninstall-{Guid.NewGuid():N}.exe");
         File.Copy(Environment.ProcessPath!, tempUninstaller, overwrite: true);
 
-        var arguments = keepSettings
-            ? "/uninstall /uninstall-from-temp /keep-settings"
-            : "/uninstall /uninstall-from-temp";
+        var arguments = "/uninstall /uninstall-from-temp";
+        if (keepSettings) arguments += " /keep-settings";
+        if (wizardMode) arguments += " /wizard";
 
         Process.Start(new ProcessStartInfo(tempUninstaller, arguments)
         {
             CreateNoWindow = true,
             UseShellExecute = false,
-            WindowStyle = ProcessWindowStyle.Hidden
+            // 向导模式需要可见窗口展示卸载进度
+            WindowStyle = wizardMode ? ProcessWindowStyle.Normal : ProcessWindowStyle.Hidden
         });
     }
 
@@ -881,12 +950,29 @@ internal static class Program
             }
         }
 
+        // 开始菜单：卸载入口（普通软件惯例：主程序 + 卸载 并列）
+        try
+        {
+            var dir = Path.GetDirectoryName(StartMenuUninstallShortcutPath);
+            if (!string.IsNullOrWhiteSpace(dir)) Directory.CreateDirectory(dir);
+            CreateShortcut(
+                StartMenuUninstallShortcutPath,
+                UninstallerExe,
+                "",
+                InstallDirectory,
+                "Uninstall ClevoLEDKeyboardControl");
+        }
+        catch (Exception ex) when (ex is COMException or InvalidOperationException or UnauthorizedAccessException or IOException)
+        {
+            // 卸载快捷方式创建失败不阻塞安装
+        }
+
         return success;
     }
 
     private static void RemoveUserShortcuts()
     {
-        foreach (var lnkPath in new[] { StartMenuShortcutPath, DesktopShortcutPath })
+        foreach (var lnkPath in new[] { StartMenuShortcutPath, StartMenuUninstallShortcutPath, DesktopShortcutPath })
         {
             try
             {
@@ -1018,122 +1104,12 @@ internal static class Program
         MessageBox.Show(message, AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
-    private static bool? AskKeepSettingsBeforeUninstall()
-    {
-        using var form = new Form
-        {
-            Text = $"{AppName} 卸载",
-            StartPosition = FormStartPosition.CenterScreen,
-            FormBorderStyle = FormBorderStyle.FixedDialog,
-            MaximizeBox = false,
-            MinimizeBox = false,
-            ClientSize = new Size(420, 170)
-        };
-
-        var message = new Label
-        {
-            Text = "将卸载程序并默认删除本机配置。",
-            Location = new Point(22, 20),
-            Size = new Size(370, 26)
-        };
-
-        var keepSettings = new CheckBox
-        {
-            Text = "保留我的设置和配置文件",
-            Location = new Point(22, 58),
-            Size = new Size(260, 28)
-        };
-
-        var uninstall = new Button
-        {
-            Text = "卸载",
-            DialogResult = DialogResult.OK,
-            Location = new Point(220, 112),
-            Size = new Size(82, 30)
-        };
-
-        var cancel = new Button
-        {
-            Text = "取消",
-            DialogResult = DialogResult.Cancel,
-            Location = new Point(314, 112),
-            Size = new Size(82, 30)
-        };
-
-        form.Controls.Add(message);
-        form.Controls.Add(keepSettings);
-        form.Controls.Add(uninstall);
-        form.Controls.Add(cancel);
-        form.AcceptButton = uninstall;
-        form.CancelButton = cancel;
-
-        return form.ShowDialog() == DialogResult.OK
-            ? keepSettings.Checked
-            : null;
-    }
-
-    private static InstalledAction AskInstalledAction()
-    {
-        using var form = new Form
-        {
-            Text = AppName,
-            StartPosition = FormStartPosition.CenterScreen,
-            FormBorderStyle = FormBorderStyle.FixedDialog,
-            MaximizeBox = false,
-            MinimizeBox = false,
-            ClientSize = new Size(460, 178)
-        };
-
-        var message = new Label
-        {
-            Text = $"{AppName} 已安装。请选择要执行的操作。",
-            Location = new Point(22, 22),
-            Size = new Size(410, 28)
-        };
-
-        var repair = new Button
-        {
-            Text = "修复或更新",
-            DialogResult = DialogResult.Yes,
-            Location = new Point(108, 118),
-            Size = new Size(104, 32)
-        };
-
-        var uninstall = new Button
-        {
-            Text = "卸载",
-            DialogResult = DialogResult.No,
-            Location = new Point(224, 118),
-            Size = new Size(82, 32)
-        };
-
-        var cancel = new Button
-        {
-            Text = "取消",
-            DialogResult = DialogResult.Cancel,
-            Location = new Point(318, 118),
-            Size = new Size(82, 32)
-        };
-
-        form.Controls.Add(message);
-        form.Controls.Add(repair);
-        form.Controls.Add(uninstall);
-        form.Controls.Add(cancel);
-        form.AcceptButton = repair;
-        form.CancelButton = cancel;
-
-        return form.ShowDialog() switch
-        {
-            DialogResult.Yes => InstalledAction.RepairOrUpdate,
-            DialogResult.No => InstalledAction.Uninstall,
-            _ => InstalledAction.Cancel
-        };
-    }
-
     private static string BuildUninstallSuccessMessage(bool keepSettings)
     {
-        var configStatus = keepSettings ? "已保留" : "已删除或已安排删除";
-        return $"{AppName} 已卸载。\n\n配置文件：{configStatus}";
+        var configStatus = keepSettings
+            ? InstallerStrings.Get("done.keptSettings")
+            : InstallerStrings.Get("done.removedSettings");
+        return $"{AppName} {InstallerStrings.Get("done.uninstall")}。\n\n{configStatus}";
     }
 
     private static bool HasArgument(string[] args, string value) =>
@@ -1158,10 +1134,4 @@ internal static class Program
 
     private sealed record CommandResult(int ExitCode, string Output, string Error);
 
-    private enum InstalledAction
-    {
-        RepairOrUpdate,
-        Uninstall,
-        Cancel
-    }
 }

@@ -18,7 +18,7 @@ lighting effects · music reactivity · album-art colors · scene automation · 
 
 This project is actively maintained as a fork of [xuha233/ClevoRGBControl](https://github.com/xuha233/ClevoRGBControl). The architecture separates a Windows service (which drives the keyboard) from a tray application (which collects user-session data and provides the UI), talking to the low-level keyboard interface through the vendor `InsydeDCHU.dll` shipped with Control Center.
 
-Since v3.5.0 the tray app runs on WPF (the `ColorfulLedKeyboard.Tray.Wpf` project; the output binary is still `ColorfulLedKeyboard.Tray.exe`), with a dark "instrument panel" look by default, light/dark themes, and custom accent colors (default #0080FF). The legacy WinForms tray (the `ColorfulLedKeyboard.Tray` project) stays in the solution as a reference implementation and can still be produced via `scripts/publish.ps1 -TrayWinForms`.
+Since v3.5.0 the tray app runs on WPF (the `ColorfulLedKeyboard.Tray.Wpf` project; the output binary is still `ColorfulLedKeyboard.Tray.exe`), with a dark "instrument panel" look by default, light/dark themes, and custom accent colors (default #0080FF). The legacy WinForms tray was retired and removed in v3.6.0 (its headless components live on as shared sources compiled into the WPF app).
 
 ## Download & Install
 

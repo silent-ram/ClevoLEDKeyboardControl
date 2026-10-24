@@ -31,8 +31,8 @@ public partial class OverviewPage : UserControl
 
     public void SetServiceState(string serviceStatus, bool componentReady)
     {
-        var ready = serviceStatus == "运行中" && componentReady;
-        ServiceValue.Text = ready ? "输出正常" : "需要检查";
+        var ready = serviceStatus == AppStrings.Get("diag.svc.running") && componentReady;
+        ServiceValue.Text = ready ? AppStrings.Get("ov.status.ok") : AppStrings.Get("ov.status.check");
         ServiceValue.Foreground = (Brush)Application.Current.TryFindResource(
             ready ? "Brush.Success" : "Brush.Warning");
     }

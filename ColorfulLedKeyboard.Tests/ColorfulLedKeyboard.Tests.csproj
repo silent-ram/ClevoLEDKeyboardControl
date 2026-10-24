@@ -18,11 +18,17 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <!-- 与 WPF 托盘同款：按源文件共享（原 WinForms 项目已退役） -->
+  <ItemGroup>
+    <Compile Include="..\ColorfulLedKeyboard.Tray\UpdateChecker.cs" Link="Shared\UpdateChecker.cs" />
+    <Compile Include="..\ColorfulLedKeyboard.Tray\MediaSessionMonitor.cs" Link="Shared\MediaSessionMonitor.cs" />
+    <Compile Include="..\ColorfulLedKeyboard.Tray\UsageTelemetryClient.cs" Link="Shared\UsageTelemetryClient.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\ColorfulLedKeyboard.Core\ColorfulLedKeyboard.Core.csproj" />
     <ProjectReference Include="..\ColorfulLedKeyboard.Service\ColorfulLedKeyboard.Service.csproj" />
-    <ProjectReference Include="..\ColorfulLedKeyboard.Tray\ColorfulLedKeyboard.Tray.csproj" />
-    <ProjectReference Include="..\ColorfulLedKeyboard.Installer\ColorfulLedKeyboard.Installer.csproj" />
+      <ProjectReference Include="..\ColorfulLedKeyboard.Installer\ColorfulLedKeyboard.Installer.csproj" />
   </ItemGroup>
 
 </Project>

@@ -59,12 +59,15 @@ public partial class App : Application
         var uiState = UiStateStore.Shared.Load();
         var kind = Enum.TryParse<UiThemeKind>(themeArg, ignoreCase: true, out var parsed) ? parsed : uiState.Theme;
         WpfThemeManager.Initialize(kind);
+        AppStrings.Apply(uiState.Language);
+        PublishStringsToResources();
         // 截图验收参数优先；正常启动应用 UiState 持久化的强调色（对照 WinForms Program.cs）。
         if (accentArg is not null && int.TryParse(accentArg, out var accentArgb))
             WpfThemeManager.AccentOverride = WpfThemeManager.ResolveAccent(accentArgb);
         else
             WpfThemeManager.AccentOverride = WpfThemeManager.ResolveAccent(uiState.AccentArgb);
 
+        AppStrings.LanguageChanged += (_, _) => PublishStringsToResources();
         _trayContext = new WpfTrayContext(openSettingsOnStartup: openSettings && screenshotDir is null);
 
         if (screenshotDir is not null)
@@ -251,5 +254,14 @@ public partial class App : Application
         encoder.Frames.Add(BitmapFrame.Create(bitmap));
         using var stream = File.Create(path);
         encoder.Save(stream);
+    }
+
+    /// <summary>把 AppStrings 全表以 "str.<key>" 写入应用资源，供 XAML DynamicResource 消费。</summary>
+    private static void PublishStringsToResources()
+    {
+        foreach (var key in AppStrings.AllKeys)
+        {
+            Current.Resources["str." + key] = AppStrings.Get(key);
+        }
     }
 }

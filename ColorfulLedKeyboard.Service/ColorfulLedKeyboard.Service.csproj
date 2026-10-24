@@ -7,6 +7,22 @@
     <AssemblyName>ColorfulLedKeyboard.Service</AssemblyName>
     <RootNamespace>ColorfulLedKeyboard.Service</RootNamespace>
     <ApplicationIcon>..\assets\app.ico</ApplicationIcon>
+    <!-- 服务为无 UI 的后台 Worker：发布时部分裁剪以减小安装包体积（TrimMode=partial 只裁确认安全的程序集） -->
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>partial</TrimMode>
+  </PropertyGroup>
+
+  <!-- Core/Service 用反射 JSON 序列化（IL2026），整程序集保留根防止状态类型被裁掉 -->
+  <ItemGroup>
+    <TrimmerRootAssembly Include="ColorfulLedKeyboard.Core" />
+    <TrimmerRootAssembly Include="ColorfulLedKeyboard.Service" />
+  </ItemGroup>
+
+  <!-- NAudio WASAPI 依赖内置 COM；illink 裁剪默认禁用会导致 MMDeviceEnumerator 崩溃 -->
+  <PropertyGroup>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <!-- 服务用反射式 System.Text.Json（Core 状态文件/IPC）；裁剪默认禁用反射序列化，这里恢复 -->
+    <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
   </PropertyGroup>
 
   <ItemGroup>

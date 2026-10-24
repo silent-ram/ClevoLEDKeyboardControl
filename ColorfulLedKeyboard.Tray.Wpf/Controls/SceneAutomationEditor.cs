@@ -12,10 +12,10 @@ public sealed record AutomationRuleListItem(string Title, string Detail, Automat
 {
     public string StateText => State switch
     {
-        AutomationRuleVisualState.Active => "生效中",
-        AutomationRuleVisualState.Error => "需要处理",
-        AutomationRuleVisualState.Disabled => "已停用",
-        _ => "已启用"
+        AutomationRuleVisualState.Active => AppStrings.Get("ed.state.active"),
+        AutomationRuleVisualState.Error => AppStrings.Get("ed.state.error"),
+        AutomationRuleVisualState.Disabled => AppStrings.Get("ed.state.disabled"),
+        _ => AppStrings.Get("ed.state.normal")
     };
 
     public Brush StateBrush => FindBrush(State switch
@@ -37,7 +37,7 @@ public enum AutomationRuleVisualState { Normal, Active, Disabled, Error }
 /// </summary>
 public sealed class SceneAutomationEditor : UserControl
 {
-    private static readonly string[] TabTitles = ["音乐程序", "灯效程序", "时间计划"];
+    private static string[] TabTitles => [AppStrings.Get("ed.tab.music"), AppStrings.Get("ed.tab.lighting"), AppStrings.Get("ed.tab.schedule")];
 
     private AutomationSettings _automation = new();
     private EffectPresetSettings _effectPresets = new();
@@ -169,25 +169,25 @@ public sealed class SceneAutomationEditor : UserControl
         switch (index)
         {
             case 0:
-                Add("绑定有声程序", AddMusic);
-                Add("编辑", EditMusic);
-                Add("删除", RemoveMusic);
-                Add("上移", () => MoveMusic(-1));
-                Add("下移", () => MoveMusic(1));
+                Add(AppStrings.Get("ed.btn.bind"), AddMusic);
+                Add(AppStrings.Get("ed.btn.edit"), EditMusic);
+                Add(AppStrings.Get("ed.btn.delete"), RemoveMusic);
+                Add(AppStrings.Get("ed.btn.up"), () => MoveMusic(-1));
+                Add(AppStrings.Get("ed.btn.down"), () => MoveMusic(1));
                 break;
             case 1:
-                Add("添加", AddLighting);
-                Add("编辑", EditLighting);
-                Add("删除", RemoveLighting);
-                Add("上移", () => MoveLighting(-1));
-                Add("下移", () => MoveLighting(1));
+                Add(AppStrings.Get("ed.btn.add"), AddLighting);
+                Add(AppStrings.Get("ed.btn.edit"), EditLighting);
+                Add(AppStrings.Get("ed.btn.delete"), RemoveLighting);
+                Add(AppStrings.Get("ed.btn.up"), () => MoveLighting(-1));
+                Add(AppStrings.Get("ed.btn.down"), () => MoveLighting(1));
                 break;
             default:
-                Add("添加", AddSchedule);
-                Add("编辑", EditSchedule);
-                Add("删除", RemoveSchedule);
-                Add("上移", () => MoveSchedule(-1));
-                Add("下移", () => MoveSchedule(1));
+                Add(AppStrings.Get("ed.btn.add"), AddSchedule);
+                Add(AppStrings.Get("ed.btn.edit"), EditSchedule);
+                Add(AppStrings.Get("ed.btn.delete"), RemoveSchedule);
+                Add(AppStrings.Get("ed.btn.up"), () => MoveSchedule(-1));
+                Add(AppStrings.Get("ed.btn.down"), () => MoveSchedule(1));
                 break;
         }
 
@@ -341,7 +341,7 @@ public sealed class SceneAutomationEditor : UserControl
             var state = !rule.Enabled ? AutomationRuleVisualState.Disabled :
                 string.IsNullOrWhiteSpace(rule.ProcessName) || missingPreset ? AutomationRuleVisualState.Error :
                 rule.Id == activeRuleId ? AutomationRuleVisualState.Active : AutomationRuleVisualState.Normal;
-            var reason = string.IsNullOrWhiteSpace(rule.ProcessName) ? "未配置进程" : missingPreset ? "音乐预设不存在" :
+            var reason = string.IsNullOrWhiteSpace(rule.ProcessName) ? AppStrings.Get("ed.detail.noProcess") : missingPreset ? AppStrings.Get("ed.detail.presetMissing") :
                 $"{rule.ProcessName} · {ColorLabel(rule.ColorSource)} · {PresetName(rule.MusicPresetId, _musicPresets)}";
             _lists[0].Items.Add(new AutomationRuleListItem(rule.Name, reason, state));
         }
@@ -351,7 +351,7 @@ public sealed class SceneAutomationEditor : UserControl
             var invalid = rule.ProcessNames.Count == 0 || !ActionExists(rule.Action);
             var state = !rule.Enabled ? AutomationRuleVisualState.Disabled : invalid ? AutomationRuleVisualState.Error :
                 rule.Id == activeRuleId ? AutomationRuleVisualState.Active : AutomationRuleVisualState.Normal;
-            var process = rule.ProcessNames.Count == 0 ? "未配置前台进程" : string.Join("、", rule.ProcessNames);
+            var process = rule.ProcessNames.Count == 0 ? AppStrings.Get("ed.detail.noForeground") : string.Join("、", rule.ProcessNames);
             _lists[1].Items.Add(new AutomationRuleListItem(rule.Name, $"{process} · {ActionLabel(rule.Action)}", state));
         }
         _lists[2].Items.Clear();
@@ -359,7 +359,7 @@ public sealed class SceneAutomationEditor : UserControl
         {
             var state = !rule.Enabled ? AutomationRuleVisualState.Disabled : !ActionExists(rule.Action) ? AutomationRuleVisualState.Error :
                 rule.Id == activeRuleId ? AutomationRuleVisualState.Active : AutomationRuleVisualState.Normal;
-            var time = rule.TimeFilter.TimeEnabled ? $"{rule.TimeFilter.Start}–{rule.TimeFilter.End}" : "全天";
+            var time = rule.TimeFilter.TimeEnabled ? $"{rule.TimeFilter.Start}–{rule.TimeFilter.End}" : AppStrings.Get("ed.detail.allDay");
             _lists[2].Items.Add(new AutomationRuleListItem(rule.Name, $"{time} · {ActionLabel(rule.Action)}", state));
         }
         if (music >= 0 && music < _lists[0].Items.Count) _lists[0].SelectedIndex = music;
@@ -369,9 +369,9 @@ public sealed class SceneAutomationEditor : UserControl
 
     private static string ColorLabel(MusicColorSource source) => source switch
     {
-        MusicColorSource.AlbumDominant => "封面主色",
-        MusicColorSource.AlbumPalette => "封面配色",
-        _ => "预设颜色"
+        MusicColorSource.AlbumDominant => AppStrings.Get("ed.color.dominant"),
+        MusicColorSource.AlbumPalette => AppStrings.Get("ed.color.palette"),
+        _ => AppStrings.Get("ed.color.preset")
     };
 
     private bool ActionExists(SceneAction action) => action.Target switch
@@ -385,14 +385,14 @@ public sealed class SceneAutomationEditor : UserControl
 
     private string ActionLabel(SceneAction action) => action.Target switch
     {
-        SceneTargetKind.Off => "关闭灯光",
-        SceneTargetKind.MusicPreset => $"音乐：{PresetName(action.PresetId, _musicPresets)}",
-        SceneTargetKind.LightingPreset => $"灯效：{_effectPresets.ForType(action.LightingEffectType).FirstOrDefault(p => p.Id == action.PresetId)?.Name ?? action.LightingEffectType.ToString()}",
-        _ => "动作无效"
+        SceneTargetKind.Off => AppStrings.Get("ed.action.off"),
+        SceneTargetKind.MusicPreset => AppStrings.Format("ed.action.music", PresetName(action.PresetId, _musicPresets)),
+        SceneTargetKind.LightingPreset => AppStrings.Format("ed.action.lighting", _effectPresets.ForType(action.LightingEffectType).FirstOrDefault(p => p.Id == action.PresetId)?.Name ?? action.LightingEffectType.ToString()),
+        _ => AppStrings.Get("ed.action.invalid")
     };
 
     private static string PresetName(string id, IEnumerable<MusicPreset> presets) =>
-        presets.FirstOrDefault(preset => preset.Id == id)?.Name ?? "预设不存在";
+        presets.FirstOrDefault(preset => preset.Id == id)?.Name ?? AppStrings.Get("ed.preset.missing");
 
     private static T Clone<T>(T value) => System.Text.Json.JsonSerializer.Deserialize<T>(
         System.Text.Json.JsonSerializer.Serialize(value))!;

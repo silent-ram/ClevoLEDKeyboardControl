@@ -16,7 +16,7 @@ public sealed class AudioApplicationPickerDialog : Window
 
     public AudioApplicationPickerDialog(bool includeVisibleProcesses = false)
     {
-        Title = "绑定正在运行的音乐程序";
+        Title = AppStrings.Get("mus.bind");
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Width = 720;
         Height = 440;
@@ -67,10 +67,10 @@ public sealed class AudioApplicationPickerDialog : Window
             .ToList();
 
         var gridView = new GridView();
-        gridView.Columns.Add(MakeColumn("程序", "ProcessName", 180));
+        gridView.Columns.Add(MakeColumn(AppStrings.Get("picker.audio.process"), "ProcessName", 180));
         gridView.Columns.Add(MakeColumn("PID", "ProcessIdsText", 180));
-        gridView.Columns.Add(MakeColumn("电平", "PeakLevelText", 100));
-        gridView.Columns.Add(MakeColumn("状态", "StatusText", 100));
+        gridView.Columns.Add(MakeColumn(AppStrings.Get("picker.audio.level"), "PeakLevelText", 100));
+        gridView.Columns.Add(MakeColumn(AppStrings.Get("picker.audio.status"), "StatusText", 100));
         _list.View = gridView;
         _list.ItemsSource = _items.Select(item => new RowVm(item)).ToList();
         ThemedListView.Apply(_list);
@@ -79,7 +79,7 @@ public sealed class AudioApplicationPickerDialog : Window
 
         var bind = new Button
         {
-            Content = "绑定",
+            Content = AppStrings.Get("picker.audio.bind"),
             Style = (Style)Application.Current.Resources["UiButtonPrimary"],
             MinWidth = 120
         };
@@ -99,7 +99,7 @@ public sealed class AudioApplicationPickerDialog : Window
         public string ProcessName => App.ProcessName;
         public string ProcessIdsText => string.Join(",", App.ProcessIds);
         public string PeakLevelText => $"{App.PeakLevel:P1}";
-        public string StatusText => App.IsPlaying ? "正在播放" : App.PeakLevel > 0.001f ? "检测声音中" : "已静音";
+        public string StatusText => App.IsPlaying ? AppStrings.Get("picker.audio.playing") : App.PeakLevel > 0.001f ? AppStrings.Get("picker.audio.detecting") : AppStrings.Get("picker.audio.muted");
         public AudioApplicationStatus Source => App;
     }
 
