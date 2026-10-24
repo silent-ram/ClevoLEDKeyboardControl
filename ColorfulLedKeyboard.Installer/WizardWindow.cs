@@ -198,9 +198,10 @@ internal sealed class WizardWindow : Form
 
     private Button MakeNextButton(Action onNext, string? key = null)
     {
-        var button = InstallerTheme.MakeButton(InstallerStrings.Get(key ?? "wizard.next"), "primary");
+        var button = InstallerTheme.MakeButton(InstallerStrings.Get(key ?? "wizard.next"));
         button.Width = 88;
         button.Click += (_, _) => onNext();
+        AcceptButton = button;
         return button;
     }
 
@@ -294,9 +295,10 @@ internal sealed class WizardWindow : Form
 
     private Button MakeContinueFromLanguageButton()
     {
-        var button = InstallerTheme.MakeButton(InstallerStrings.Get("wizard.continue"), "primary");
+        var button = InstallerTheme.MakeButton(InstallerStrings.Get("wizard.continue"));
         _langContinue = button;
-        button.Width = 84;
+        button.Width = 88;
+        AcceptButton = button;
         button.Click += (_, _) =>
         {
             if (_installed)
@@ -701,6 +703,7 @@ internal sealed class WizardWindow : Form
         var button = InstallerTheme.MakeButton(InstallerStrings.Get("wizard.finish"));
         button.Width = 96;
         button.Click += (_, _) => Close();
+        AcceptButton = button;
         return button;
     }
 
