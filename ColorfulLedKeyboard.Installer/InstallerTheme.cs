@@ -18,8 +18,8 @@ internal static class InstallerTheme
     public static readonly Color Text = Color.FromArgb(31, 31, 31);
     public static readonly Color Muted = Color.FromArgb(95, 95, 95);
     public static readonly Color Faint = Color.FromArgb(138, 138, 138);
-    public static readonly Color Accent = Color.FromArgb(224, 224, 224);
-    public static readonly Color AccentHover = Color.FromArgb(210, 210, 210);
+    public static readonly Color Accent = Color.FromArgb(64, 64, 64);
+    public static readonly Color AccentHover = Color.FromArgb(88, 88, 88);
     public static readonly Color Danger = Color.FromArgb(196, 44, 28);
     public static readonly Color DangerHover = Color.FromArgb(216, 66, 50);
     public static readonly Color Success = Color.FromArgb(22, 133, 61);

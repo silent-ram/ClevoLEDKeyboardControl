@@ -404,8 +404,13 @@ internal sealed class WizardWindow : Form
             ForeColor = InstallerTheme.Text,
             BorderStyle = BorderStyle.FixedSingle,
             Location = new Point(ContentPad, 80),
-            Size = new Size(BodyWidth, 216)
+            Size = new Size(BodyWidth, 216),
+            TabStop = false,
+            HideSelection = true
         };
+        // ReadOnly 文本框获得首焦点时会出现整篇选中态（蓝色高亮），不取焦点即可避免；
+        // 兜底：万一被聚焦（点击）也立即清空选区。
+        licenseBox.GotFocus += (_, _) => licenseBox.BeginInvoke(() => licenseBox.Select(0, 0));
         _content.Controls.Add(licenseBox);
 
         var accept = new CheckBox
