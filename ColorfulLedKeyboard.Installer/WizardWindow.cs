@@ -32,8 +32,8 @@ internal sealed class WizardWindow : Form
 
     private const string AppDisplayName = "ClevoLEDKeyboardControl";
     private const int SidebarWidth = 164;
-    private const int ContentPad = 24;
-    private const int BodyWidth = 336 - ContentPad * 2 + 4; // 500 - 164(侧栏) - 24*2 + 4
+    private const int ContentPad = 28;
+    private const int BodyWidth = 396 - ContentPad * 2; // 560 - 164(侧栏) - 28*2
 
     private readonly WizardOps _ops;
     private readonly bool _installed;
@@ -47,7 +47,7 @@ internal sealed class WizardWindow : Form
     private Label _subtitleLabel = null!;
     private readonly List<(string Key, Label Marker)> _stepMarkers = [];
     private Label _statusLabel = new();
-    private ProgressBar _progress = null!;
+    private ModernProgressBar _progress = null!;
     private Operation? _currentOperation;
     private string _selectedLanguage = "auto";
 
@@ -77,7 +77,7 @@ internal sealed class WizardWindow : Form
         StartPosition = FormStartPosition.CenterScreen;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(500, 390);
+        ClientSize = new Size(560, 400);
         BackColor = InstallerTheme.Window;
         Font = InstallerTheme.BaseFont;
         ShowInTaskbar = false;
@@ -86,7 +86,7 @@ internal sealed class WizardWindow : Form
         var sidebar = new Panel { Dock = DockStyle.Left, Width = SidebarWidth };
         sidebar.Paint += PaintSidebar;
 
-        _buttonBar = new Panel { Dock = DockStyle.Bottom, Height = 46, BackColor = InstallerTheme.Window };
+        _buttonBar = new Panel { Dock = DockStyle.Bottom, Height = 52, BackColor = InstallerTheme.Window };
         _content = new Panel { Dock = DockStyle.Fill, BackColor = InstallerTheme.Window };
         Controls.Add(_content);
         Controls.Add(_buttonBar);
@@ -168,40 +168,40 @@ internal sealed class WizardWindow : Form
             g.FillRectangle(bg, rect);
         }
 
-        // 产品名（两行）
-        TextRenderer.DrawText(g, "ClevoLED", new Font(Font.FontFamily, 11.5f, FontStyle.Bold),
-            new Point(18, 20), InstallerTheme.SidebarText);
-        TextRenderer.DrawText(g, "KeyboardControl", new Font(Font.FontFamily, 11.5f, FontStyle.Bold),
-            new Point(18, 44), InstallerTheme.SidebarText);
-        TextRenderer.DrawText(g, $"v{_sidebarVersion}", new Font(Font.FontFamily, 8.5f),
-            new Point(18, 72), Color.FromArgb(190, 224, 255));
+        // 产品名（三行，现代字阶；164px 侧栏内 13f Bold 最长行 "KeyboardControl" 需缩到 11.5f）
+        TextRenderer.DrawText(g, "ClevoLED", new Font(Font.FontFamily, 12.5f, FontStyle.Bold),
+            new Point(20, 24), InstallerTheme.SidebarText);
+        TextRenderer.DrawText(g, "Keyboard", new Font(Font.FontFamily, 12.5f, FontStyle.Bold),
+            new Point(20, 52), InstallerTheme.SidebarText);
+        TextRenderer.DrawText(g, "Control", new Font(Font.FontFamily, 12.5f, FontStyle.Bold),
+            new Point(20, 80), InstallerTheme.SidebarText);
+        TextRenderer.DrawText(g, "v" + _sidebarVersion, new Font(Font.FontFamily, 9f),
+            new Point(21, 114), Color.FromArgb(185, 220, 252));
 
-        // 装饰键帽：三颗圆角键帽，白描边 + 顶部透光条
-        DrawKeycap(g, new Rectangle(18, 104, 26, 26), 235);
-        DrawKeycap(g, new Rectangle(50, 104, 26, 26), 205);
-        DrawKeycap(g, new Rectangle(82, 104, 26, 26), 175);
+        // 装饰键帽：三颗描边键帽（克制的线稿）
+        DrawKeycap(g, new Rectangle(20, 150, 24, 24), 150);
+        DrawKeycap(g, new Rectangle(52, 150, 24, 24), 110);
+        DrawKeycap(g, new Rectangle(84, 150, 24, 24), 80);
 
-        // 右下大键帽水印
-        DrawKeycap(g, new Rectangle(SidebarWidth - 88, ClientSize.Height - 118, 64, 64), 40);
+        // 右下大键帽水印（极淡线稿）
+        DrawKeycap(g, new Rectangle(SidebarWidth - 92, ClientSize.Height - 124, 72, 72), 26);
 
         // 底部 tagline
-        TextRenderer.DrawText(g, "键盘 RGB 灯控", new Font(Font.FontFamily, 8.5f),
-            new Point(18, ClientSize.Height - 52), Color.FromArgb(220, 235, 255));
-        TextRenderer.DrawText(g, "Keyboard RGB Control", new Font(Font.FontFamily, 8f),
-            new Point(18, ClientSize.Height - 34), Color.FromArgb(160, 205, 245));
+        TextRenderer.DrawText(g, "键盘 RGB 灯控", new Font(Font.FontFamily, 9f),
+            new Point(20, ClientSize.Height - 56), Color.FromArgb(222, 236, 252));
+        TextRenderer.DrawText(g, "Keyboard RGB Control", new Font(Font.FontFamily, 8.5f),
+            new Point(20, ClientSize.Height - 36), Color.FromArgb(158, 202, 244));
     }
 
     private static void DrawKeycap(Graphics g, Rectangle bounds, int alpha)
     {
-        var path = RoundedPath(bounds, 5);
-        using var cap = new SolidBrush(Color.FromArgb(alpha, Color.White));
-        using var pen = new Pen(Color.FromArgb(Math.Min(255, alpha + 40), Color.White), 1.4f);
-        g.FillPath(cap, path);
+        var path = RoundedPath(bounds, Math.Max(3, bounds.Width / 8));
+        using var pen = new Pen(Color.FromArgb(alpha, Color.White), 1.6f);
         g.DrawPath(pen, path);
-        // 顶部透光条
-        var glow = new Rectangle(bounds.X + 5, bounds.Y + 4, bounds.Width - 10, 3);
-        using var glowBrush = new SolidBrush(Color.FromArgb(Math.Min(255, alpha + 70), Color.White));
-        g.FillRectangle(glowBrush, glow);
+        // 键帽字符位：中部小横条
+        var glyph = new Rectangle(bounds.X + bounds.Width / 2 - 5, bounds.Y + bounds.Height / 2 - 1, 10, 2);
+        using var glyphBrush = new SolidBrush(Color.FromArgb((int)(alpha * 0.8), Color.White));
+        g.FillRectangle(glyphBrush, glyph);
     }
 
     private static GraphicsPath RoundedPath(Rectangle bounds, int radius)
@@ -220,13 +220,13 @@ internal sealed class WizardWindow : Form
     private void RenderChrome(string title, string? subtitle, params Button[] buttons)
     {
         _titleLabel = InstallerTheme.MakeLabel(title, InstallerTheme.TitleFont);
-        _titleLabel.Location = new Point(ContentPad, 16);
+        _titleLabel.Location = new Point(ContentPad, 18);
         _content.Controls.Clear();
         _content.Controls.Add(_titleLabel);
         if (subtitle is not null)
         {
             _subtitleLabel = InstallerTheme.MakeLabel(subtitle, color: InstallerTheme.Muted);
-            _subtitleLabel.Location = new Point(ContentPad, 46);
+            _subtitleLabel.Location = new Point(ContentPad, 52);
             _content.Controls.Add(_subtitleLabel);
         }
 
@@ -247,7 +247,7 @@ internal sealed class WizardWindow : Form
     {
         var button = InstallerTheme.MakeButton(InstallerStrings.Get("wizard.cancel"));
         _langCancel = button;
-        button.Width = 80;
+        button.Width = 84;
         button.Click += (_, _) => Close();
         return button;
     }
@@ -263,7 +263,7 @@ internal sealed class WizardWindow : Form
     private Button MakeNextButton(Action onNext, string? key = null)
     {
         var button = InstallerTheme.MakeButton(InstallerStrings.Get(key ?? "wizard.next"), "primary");
-        button.Width = 84;
+        button.Width = 88;
         button.Click += (_, _) => onNext();
         return button;
     }
@@ -271,7 +271,7 @@ internal sealed class WizardWindow : Form
     private Button MakeBackButton(Action onBack)
     {
         var button = InstallerTheme.MakeButton(InstallerStrings.Get("wizard.back"));
-        button.Width = 84;
+        button.Width = 88;
         button.Click += (_, _) => onBack();
         return button;
     }
@@ -387,10 +387,10 @@ internal sealed class WizardWindow : Form
             InstallerStrings.Format("action.subtitle", version, serviceStatus),
             MakeCancelButton());
 
-        MakeActionCard(92, InstallerStrings.Get("action.repair"),
+        MakeActionCard(96, InstallerStrings.Get("action.repair"),
             InstallerStrings.Get("action.repairDesc"), primary: true, StartInstall);
 
-        AddLanguageSwitch(180, ShowActionPage);
+        AddLanguageSwitch(188, ShowActionPage);
     }
 
     private void MakeActionCard(int y, string title, string description, bool primary, Action onClick)
@@ -440,13 +440,15 @@ internal sealed class WizardWindow : Form
             InstallerStrings.Get("welcome.title"),
             InstallerStrings.Format("welcome.subtitle", version),
             MakeCancelButton(), MakeNextButton(ShowLicensePage));
+        _titleLabel.Font = new Font(InstallerTheme.TitleFont.FontFamily, 12.5f, FontStyle.Bold);
+        _titleLabel.MaximumSize = new Size(BodyWidth, 0);
 
         var body = InstallerTheme.MakeLabel(InstallerStrings.Format("welcome.body", AppDisplayName), color: InstallerTheme.Muted);
-        body.Location = new Point(ContentPad, 88);
+        body.Location = new Point(ContentPad, 96);
         body.MaximumSize = new Size(BodyWidth, 0);
         _content.Controls.Add(body);
 
-        AddLanguageSwitch(290, ShowWelcomePage);
+        AddLanguageSwitch(300, ShowWelcomePage);
     }
 
     private void ShowLicensePage()
@@ -462,11 +464,11 @@ internal sealed class WizardWindow : Form
             ScrollBars = ScrollBars.Vertical,
             Text = LoadLicenseText(),
             Font = new Font("Consolas", 8.5F),
-            BackColor = InstallerTheme.Window,
+            BackColor = Color.FromArgb(250, 250, 250),
             ForeColor = InstallerTheme.Text,
             BorderStyle = BorderStyle.FixedSingle,
-            Location = new Point(ContentPad, 76),
-            Size = new Size(BodyWidth, 218)
+            Location = new Point(ContentPad, 80),
+            Size = new Size(BodyWidth, 216)
         };
         _content.Controls.Add(licenseBox);
 
@@ -615,23 +617,21 @@ internal sealed class WizardWindow : Form
         _currentOperation = operation;
         RenderChrome(InstallerStrings.Get(operation.TitleKey), null);
 
-        // 经典绿色进度条 + 状态行 + 分步清单
-        _progress = new ProgressBar
+        // 连体圆角进度条（浅灰轨道 + 扁平绿）+ 状态行 + 分步清单
+        _progress = new ModernProgressBar
         {
-            Location = new Point(ContentPad, 80),
-            Size = new Size(BodyWidth, 18),
-            Minimum = 0,
-            Maximum = 100 * operation.StepKeys.Length,
-            Value = 0
+            Location = new Point(ContentPad, 84),
+            Size = new Size(BodyWidth, 8),
+            Percent = 0
         };
         _content.Controls.Add(_progress);
 
         _statusLabel = InstallerTheme.MakeLabel(_demo ? "demo…" : "", color: InstallerTheme.Faint);
-        _statusLabel.Location = new Point(ContentPad, 106);
+        _statusLabel.Location = new Point(ContentPad, 110);
         _content.Controls.Add(_statusLabel);
 
         _stepMarkers.Clear();
-        var y = 138;
+        var y = 142;
         foreach (var key in operation.StepKeys)
         {
             var marker = InstallerTheme.MakeLabel("○", color: InstallerTheme.Faint);
@@ -707,7 +707,8 @@ internal sealed class WizardWindow : Form
             marker.ForeColor = InstallerTheme.Success;
             if (_progress is not null && _stepMarkers.Count > 0)
             {
-                _progress.Value = Math.Min(_progress.Maximum, _progress.Value + 100);
+                _progress.Percent = Math.Min(100, _progress.Percent + 100 / _stepMarkers.Count);
+                _progress.Invalidate();
             }
         }
     }
@@ -723,7 +724,7 @@ internal sealed class WizardWindow : Form
         RenderChrome("✓ " + InstallerStrings.Get(titleKey.Replace("progress.", "done.")), null, MakeFinishButton());
 
         var body = InstallerTheme.MakeLabel(message);
-        body.Location = new Point(ContentPad, 84);
+        body.Location = new Point(ContentPad, 92);
         body.MaximumSize = new Size(BodyWidth - 4, 0);
         _content.Controls.Add(body);
 
@@ -735,7 +736,7 @@ internal sealed class WizardWindow : Form
                 Text = InstallerStrings.Format("done.launch", AppDisplayName),
                 Checked = true,
                 ForeColor = InstallerTheme.Text,
-                Location = new Point(ContentPad, 176),
+                Location = new Point(ContentPad, 186),
                 AutoSize = true
             };
             launch.CheckedChanged += (_, _) => LaunchAfterInstall = launch.Checked;
@@ -746,7 +747,7 @@ internal sealed class WizardWindow : Form
     private Button MakeFinishButton()
     {
         var button = InstallerTheme.MakeButton(InstallerStrings.Get("wizard.finish"), "primary");
-        button.Width = 90;
+        button.Width = 96;
         button.Click += (_, _) => Close();
         return button;
     }
@@ -774,7 +775,7 @@ internal sealed class WizardWindow : Form
     private Button MakeRetryButton(Operation operation)
     {
         var button = InstallerTheme.MakeButton(InstallerStrings.Get("wizard.retry"), "primary");
-        button.Width = 84;
+        button.Width = 88;
         button.Click += (_, _) => RunOperation(operation);
         return button;
     }

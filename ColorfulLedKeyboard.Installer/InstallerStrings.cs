@@ -20,8 +20,8 @@ internal static class InstallerStrings
         ["wizard.next"] = ("下一步", "Next"),
         ["wizard.back"] = ("上一步", "Back"),
 
-        ["welcome.title"] = ("欢迎使用 ClevoLEDKeyboardControl 安装向导", "Welcome to the ClevoLEDKeyboardControl setup wizard"),
-        ["welcome.subtitle"] = ("版本 {0}", "Version {0}"),
+        ["welcome.title"] = ("欢迎使用安装向导", "Welcome to the setup wizard"),
+        ["welcome.subtitle"] = ("ClevoLEDKeyboardControl　版本 {0}", "ClevoLEDKeyboardControl　Version {0}"),
         ["welcome.body"] = ("本向导将安装 {0}。建议关闭其他应用程序后继续。", "This wizard will install {0}. Close other applications before continuing."),
 
         ["lic.title"] = ("许可协议", "License agreement"),
