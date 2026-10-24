@@ -507,7 +507,7 @@ public sealed class SceneSimulatorDialog : Window
         var timeText = MakeBox();
         timeText.Text = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
         var foreground = MakeBox();
-        foreground.Text = "";
+        foreground.Text = Tray.ForegroundWindowProcessName.GetName() ?? "";
         var audio = new System.Windows.Controls.ComboBox { Style = (Style)Application.Current.Resources["UiComboBox"], MinWidth = 260, IsEditable = true };
         foreach (var name in settings.Automation.MusicApplications.Select(rule => rule.ProcessName).Where(name => name.Length > 0).Distinct())
             audio.Items.Add(name);
@@ -527,6 +527,18 @@ public sealed class SceneSimulatorDialog : Window
         var run = new Button { Content = "模拟", Style = (Style)Application.Current.Resources["UiButton"], MinWidth = 100 };
 
         var stack = new StackPanel { Margin = new Thickness(14) };
+        // 前提状态提示：自动化未启用/无规则时引擎必然短路到手动模式，不提示会显得“模拟器坏了”。
+        var ruleCount = settings.Automation.MusicApplications.Count + settings.Automation.LightingApplications.Count +
+            settings.Automation.ScheduleRules.Count;
+        var statusHint = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 10) };
+        statusHint.Text = !settings.Automation.Enabled
+            ? "⚠ 场景自动化当前未启用：无论怎么模拟，结果都会是“用户手动基础模式”。请先在“场景自动化”页开启并配置规则。"
+            : ruleCount == 0
+                ? "⚠ 场景自动化已启用，但还没有配置任何规则：结果都会是“用户手动基础模式”。"
+                : "填入假想的电脑状态并点击“模拟”，查看规则引擎的裁决与原因（不影响真实灯光）。";
+        statusHint.Foreground = (Brush)Application.Current.Resources[
+            settings.Automation.Enabled && ruleCount > 0 ? "Brush.MutedText" : "Brush.Warning"];
+        stack.Children.Add(statusHint);
         stack.Children.Add(Row("本地时间", timeText));
         stack.Children.Add(Row("前台程序", foreground));
         stack.Children.Add(Row("播放程序", audio));
