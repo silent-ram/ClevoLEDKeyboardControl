@@ -64,13 +64,36 @@ public static class WpfThemeManager
     private static void Apply(UiThemeKind kind, Color? accent)
     {
         var resources = Application.Current.Resources;
-        if (resources.MergedDictionaries.Count > 0)
+        var next = new ResourceDictionary { Source = DictionaryUris[kind] };
+        if (resources.MergedDictionaries.Count == 0)
         {
-            resources.MergedDictionaries[0] = new ResourceDictionary { Source = DictionaryUris[kind] };
+            resources.MergedDictionaries.Add(next);
         }
         else
         {
-            resources.MergedDictionaries.Add(new ResourceDictionary { Source = DictionaryUris[kind] });
+            // 原地更新而非整字典替换：画刷实例保留、只改 Color（未冻结时可行），其余条目按新字典覆写。
+            // 这样构造期直接捕获画刷/样式实例的弹窗与页面全部即时换色——脏状态下不再出现
+            // 半新半旧的主题残留，强调色切换同理，页面无需重建。
+            var current = resources.MergedDictionaries[0];
+            foreach (var key in current.Keys.OfType<string>().ToList())
+            {
+                if (!next.Contains(key))
+                {
+                    current.Remove(key);
+                }
+                else if (current[key] is SolidColorBrush { IsFrozen: false } oldBrush && next[key] is SolidColorBrush newBrush)
+                {
+                    oldBrush.Color = newBrush.Color;
+                }
+                else
+                {
+                    current[key] = next[key];
+                }
+            }
+            foreach (var key in next.Keys.OfType<string>().ToList())
+            {
+                if (!current.Contains(key)) current[key] = next[key];
+            }
         }
         ApplyAccentBrushes();
         foreach (var window in Application.Current.Windows.OfType<Window>())
@@ -90,11 +113,22 @@ public static class WpfThemeManager
         if (baseColor is null) return;
 
         var accent = _accentOverride ?? baseColor.Value;
-        resources["Brush.Primary"] = new SolidColorBrush(accent);
-        resources["Brush.Secondary"] = new SolidColorBrush(Multiply(accent, 0.8f));
-        resources["Brush.PrimarySoft"] = new SolidColorBrush(Blend(accent, ReadColor(resources, "Brush.Surface") ?? accent, 0.16f));
-        resources["Brush.PrimaryText"] = new SolidColorBrush(
+        WriteBrush(resources, "Brush.Primary", accent);
+        WriteBrush(resources, "Brush.Secondary", Multiply(accent, 0.8f));
+        WriteBrush(resources, "Brush.PrimarySoft", Blend(accent, ReadColor(resources, "Brush.Surface") ?? accent, 0.16f));
+        WriteBrush(resources, "Brush.PrimaryText",
             Luminance(accent) > 0.22 ? Color.FromRgb(0x22, 0x1A, 0x08) : Colors.White);
+    }
+
+    /// <summary>已存在的未冻结画刷实例原地改色（直接引用者即时跟随），否则新建写入。</summary>
+    private static void WriteBrush(ResourceDictionary resources, string key, Color color)
+    {
+        if (resources[key] is SolidColorBrush { IsFrozen: false } brush)
+        {
+            brush.Color = color;
+            return;
+        }
+        resources[key] = new SolidColorBrush(color);
     }
 
     private static Color? ReadColor(ResourceDictionary resources, string key) =>

@@ -188,7 +188,6 @@ public partial class MainWindow : Window
 
         var automationPage = new AutomationPage();
         automationPage.Changed += (_, _) => UpdateSaveBar();
-        automationPage.SimulatorRequested += (_, _) => new Dialogs.SceneSimulatorDialog(new SettingsStore().Load()) { Owner = this }.ShowDialog();
         _automationPage = automationPage;
         _pages.Add(automationPage);
         automationPage.LoadFromStore(new SettingsStore().Load());
@@ -477,42 +476,9 @@ public partial class MainWindow : Window
 
     private void OnThemeChanged(object? sender, EventArgs e)
     {
+        // 主题/强调色通过画刷原地改色生效（见 WpfThemeManager.Apply）：页面、弹窗
+        // 构造期直接捕获的画刷实例即时跟随，无需重建页面，脏状态也不会残留旧主题。
         WpfThemeManager.ApplyTitleBarMode(this);
-        // 页面在构造期捕获了画刷实例，热切换会留旧色。无未保存修改时整体重建页面即可
-        // 全量刷新；有未保存修改时保留旧色（数据与功能不受影响，下次开窗即新主题）。
-        if (!HasAnyDirty)
-        {
-            try
-            {
-                RebuildPagesForTheme();
-            }
-            catch (Exception ex)
-            {
-                // 重建失败降级为"本次保持旧色残留"，绝不能让主题切换崩掉托盘。
-                System.Diagnostics.Trace.WriteLine($"RebuildPagesForTheme failed: {ex}");
-            }
-        }
-    }
-
-    private void RebuildPagesForTheme()
-    {
-        _softwareSettingsPage?.UnsubscribeEvents();
-        _pages.Clear();
-        _effectPage = null;
-        _musicPage = null;
-        _automationPage = null;
-        _eventFeedbackPage = null;
-        _diagnosticsPage = null;
-        _softwareSettingsPage = null;
-        var selected = Math.Clamp(_lastPage, 0, NavItems.Length - 1);
-        BuildPages();
-        Navigation.ItemsSource = NavItems.Select(item => new NavItem(item.Title, item.Glyph)).ToList();
-        Navigation.SelectedIndex = selected;
-        ApplySelectedPage(selected);
-        UpdateSaveBar();
-        // 重建出的音乐页没有历史音频状态，标签会退回"检测中…"——状态文件稳态下不再变化，
-        // 监视器不会再补发事件，必须在这里用窗口缓存喂一次。
-        _musicPage?.UpdateAudioSourceLabel(_lastAudioStatus);
     }
 
     /// <summary>导航项数据。</summary>

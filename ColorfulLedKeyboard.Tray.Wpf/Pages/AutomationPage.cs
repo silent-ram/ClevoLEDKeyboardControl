@@ -23,7 +23,6 @@ public sealed class AutomationPage : UserControl
     private readonly System.Windows.Controls.ComboBox _idleAfter = MakeCombo(["1 分钟", "3 分钟", "5 分钟", "10 分钟", "30 分钟"]);
     private readonly UiSliderRow _idleBrightness = new("空闲亮度", 0, 100, "%");
     private readonly System.Windows.Controls.CheckBox _idleTurnOff = MakeCheck("空闲后关闭灯效");
-    private readonly Button _simulator = MakeButton("场景模拟器...", 150);
 
     public event EventHandler? Changed;
 
@@ -31,8 +30,6 @@ public sealed class AutomationPage : UserControl
 
     /// <summary>保存成功后由宿主调用，复位脏状态。</summary>
     public void ResetDirty() => IsDirty = false;
-
-    public event EventHandler? SimulatorRequested;
 
     public AutomationPage()
     {
@@ -46,7 +43,6 @@ public sealed class AutomationPage : UserControl
         _idleTurnOff.Unchecked += (_, _) => MarkChanged();
         _idleAfter.SelectionChanged += (_, _) => MarkChanged();
         _idleBrightness.ValueChanged += (_, _) => MarkChanged();
-        _simulator.Click += (_, _) => SimulatorRequested?.Invoke(this, EventArgs.Empty);
 
         var priority = new TextBlock
         {
@@ -55,12 +51,9 @@ public sealed class AutomationPage : UserControl
             Margin = new Thickness(0, 4, 0, 0)
         };
         priority.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Primary");
-        var simulatorRow = new Grid { MinHeight = 40, MaxWidth = UiMetrics.ContentWidth };
-        _simulator.HorizontalAlignment = HorizontalAlignment.Left;
-        simulatorRow.Children.Add(_simulator);
 
         var stack = new StackPanel { Margin = new Thickness(18, 18, 18, 28), MaxWidth = 832 };
-        stack.Children.Add(MakeCard("运行状态", _statusText, priority, simulatorRow));
+        stack.Children.Add(MakeCard("运行状态", _statusText, priority));
         stack.Children.Add(MakeCard("场景规则", PlainRow(_automationEnabled), Indent(_editor)));
         stack.Children.Add(MakeCard("空闲最终覆盖", PlainRow(_idleEnabled), Row("空闲时间", _idleAfter),
             _idleBrightness, PlainRow(_idleTurnOff)));
