@@ -35,13 +35,13 @@ public sealed class MusicSettings : IMusicTunable
 
     public List<string> Colors { get; set; } = [];
 
-    public double Sensitivity { get; set; } = 2.0;
+    public double Sensitivity { get; set; } = 2.8;
 
-    public int AttackMs { get; set; } = 35;
+    public int AttackMs { get; set; } = 20;
 
     public int ReleaseMs { get; set; } = 80;
 
-    public int BaseBrightness { get; set; } = 25;
+    public int BaseBrightness { get; set; } = 30;
 
     public int PeakBrightness { get; set; } = 100;
 
@@ -58,9 +58,9 @@ public sealed class MusicSettings : IMusicTunable
     public bool EqEnabled { get; set; }
     public bool AllowSystemMixFallback { get; set; } = true;
 
-    public int EqLowHz { get; set; } = 30;
+    public int EqLowHz { get; set; } = 50;
 
-    public int EqHighHz { get; set; } = 5000;
+    public int EqHighHz { get; set; } = 5024;
 
 
     /// <summary>
@@ -189,7 +189,7 @@ public sealed class MusicSettings : IMusicTunable
             LowColor = DefaultColorValues[0],
             HighColor = DefaultColorValues[^1],
             Colors = [.. DefaultColorValues],
-            Sensitivity = 2.0,
+            Sensitivity = 2.8,
             AttackMs = 20,
             ReleaseMs = 80,
             BaseBrightness = 30,
@@ -200,7 +200,7 @@ public sealed class MusicSettings : IMusicTunable
             FollowSystemVolume = false,
             EqEnabled = false,
             EqLowHz = 50,
-            EqHighHz = 10999
+            EqHighHz = 5024
         }.Normalize()
     ];
 }

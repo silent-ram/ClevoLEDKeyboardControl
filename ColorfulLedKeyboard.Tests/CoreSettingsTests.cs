@@ -450,14 +450,14 @@ public sealed class CoreSettingsTests
         Assert.Equal(MusicResponseMode.LevelColor, universal.ResponseMode);
         Assert.Equal("#C0C0C0", universal.LowColor);
         Assert.Equal("#5C00B8", universal.HighColor);
-        Assert.Equal(2.0, universal.Sensitivity);
+        Assert.Equal(2.8, universal.Sensitivity);
         Assert.Equal(20, universal.AttackMs);
         Assert.Equal(80, universal.ReleaseMs);
         Assert.Equal(0, universal.NoiseGate);
         Assert.Equal(0.02, universal.BeatThreshold);
         Assert.False(universal.EqEnabled);
         Assert.Equal(50, universal.EqLowHz);
-        Assert.Equal(10999, universal.EqHighHz);
+        Assert.Equal(5024, universal.EqHighHz);
         Assert.False(universal.FollowSystemVolume);
         Assert.Equal(30, universal.BaseBrightness);
         Assert.Equal(100, universal.PeakBrightness);
