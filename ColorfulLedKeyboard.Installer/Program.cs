@@ -130,7 +130,7 @@ internal static class Program
                 return 0;
             }
 
-            // 交互安装/更新：单窗口向导
+            // 交互安装/更新：单窗口向导（新装走 欢迎→协议→选项→进度→完成 标准流程）
             var installed = IsInstalled();
             var previewPage = args.FirstOrDefault(arg => arg.StartsWith("/preview-page:", StringComparison.OrdinalIgnoreCase)) is { } pageArg
                 ? pageArg["/preview-page:".Length..]
@@ -141,7 +141,10 @@ internal static class Program
                 if (!demo && wizard.Result == WizardWindow.WizardAction.Install)
                 {
                     UiStateStore.Shared.Update(state => state.Language = wizard.SelectedLanguage);
-                    StartTray();
+                    if (wizard.LaunchAfterInstall)
+                    {
+                        StartTray();
+                    }
                 }
             }
 
@@ -170,7 +173,7 @@ internal static class Program
     private static WizardOps BuildWizardOps()
     {
         return new WizardOps(
-            Install: step => Install(step),
+            Install: (step, desktopShortcut, autostart) => Install(step, desktopShortcut, autostart),
             Uninstall: (keepSettings, step) => Uninstall(keepSettings, step),
             InstallDoneText: BuildInstallSuccessMessage,
             UninstallDoneText: BuildUninstallSuccessMessage,
@@ -196,7 +199,7 @@ internal static class Program
         return Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
     }
 
-    private static void Install(Action<string>? progress = null)
+    private static void Install(Action<string>? progress = null, bool desktopShortcut = true, bool autostart = true)
     {
         progress?.Invoke("prereq");
         ValidatePrerequisites();
@@ -245,9 +248,13 @@ internal static class Program
 
         Log("服务已运行，安全通信通道已就绪");
         progress?.Invoke("finalize");
-        AddTrayStartup();
+        // 标准安装流程的选项页可控；静默 /repair 与旧路径维持全默认（开始菜单项始终创建）
+        if (autostart)
+        {
+            AddTrayStartup();
+        }
         RegisterUninstaller();
-        CreateUserShortcuts();  // 失败不抛，仅返回 false
+        CreateUserShortcuts(createDesktopShortcut: desktopShortcut);  // 失败不抛，仅返回 false
     }
 
     private static void ValidatePrerequisites()
@@ -917,7 +924,7 @@ internal static class Program
         }
     }
 
-    private static bool CreateUserShortcuts()
+    private static bool CreateUserShortcuts(bool createDesktopShortcut = true)
     {
         if (!File.Exists(TrayExe))
         {
@@ -927,7 +934,11 @@ internal static class Program
         var workingDir = Path.GetDirectoryName(TrayExe) ?? InstallDirectory;
         var success = true;
 
-        foreach (var lnkPath in new[] { StartMenuShortcutPath, DesktopShortcutPath })
+        // 开始菜单项始终创建（也是卸载/更新的常规入口）；桌面快捷方式受安装选项控制
+        var shortcutTargets = createDesktopShortcut
+            ? new[] { StartMenuShortcutPath, DesktopShortcutPath }
+            : new[] { StartMenuShortcutPath };
+        foreach (var lnkPath in shortcutTargets)
         {
             try
             {

@@ -4,16 +4,18 @@ using System.Windows.Forms;
 
 namespace ColorfulLedKeyboard.Installer;
 
-/// <summary>引擎操作委托：由 Program 注入，向导只负责编排页面与展示。</summary>
+/// <summary>引擎操作委托：由 Program 注入，向导只负责编排页面与展示。
+/// Install 携带安装选项（桌面快捷方式/开机自启动），由标准流程的选项页或静默路径提供。</summary>
 internal sealed record WizardOps(
-    Action<Action<string>> Install,
+    Action<Action<string>, bool, bool> Install,
     Action<bool, Action<string>> Uninstall,
     Func<string> InstallDoneText,
     Func<bool, string> UninstallDoneText,
     Func<(string Version, string ServiceStatus)> DescribeInstalledState);
 
 /// <summary>
-/// 单窗口安装向导：语言选择 → 操作选择（已安装时）→ 卸载确认 → 进度 → 完成/失败。
+/// 单窗口安装向导。全新安装走标准流程：欢迎 → 许可协议 → 安装选项 → 进度 → 完成（“立即运行”勾选）；
+/// 已安装时一键“修复或更新”直达进度（正常程序的覆盖安装行为）。卸载：确认 → 进度 → 完成。
 /// 所有页面在同一窗体内切换，替代旧版的连环对话框与 MessageBox。
 /// demo 模式（/preview）只演示页面流转，不执行任何引擎操作。
 /// </summary>
@@ -46,6 +48,13 @@ internal sealed class WizardWindow : Form
     public WizardAction Result { get; private set; } = WizardAction.None;
     public bool KeepSettings { get; private set; }
 
+    /// <summary>完成页“立即运行”勾选（仅安装结果有意义，默认勾选）。</summary>
+    public bool LaunchAfterInstall { get; private set; } = true;
+
+    /// <summary>安装选项页的勾选结果；修复/更新与静默路径维持全默认。</summary>
+    private bool _desktopShortcut = true;
+    private bool _autostart = true;
+
     public string SelectedLanguage => _selectedLanguage;
 
     private WizardWindow(WizardOps ops, bool installed, bool demo,
@@ -76,8 +85,8 @@ internal sealed class WizardWindow : Form
         Shown += (_, _) => InstallerTheme.ApplyDarkTitleBar(this);
     }
 
-    /// <summary>安装向导（新装或已安装）：从语言选择页开始。
-    /// previewPage 供 /preview 截图验收直跳指定页："action" / "progress" / "done"。</summary>
+    /// <summary>安装向导：新装走 欢迎→协议→选项 标准流程；已装直接“修复或更新”。
+    /// previewPage 供 /preview 截图验收直跳指定页："action" / "welcome" / "license" / "options" / "progress" / "done" / "lang"。</summary>
     public static WizardWindow ForSetup(bool installed, bool demo, WizardOps ops, string? previewPage = null)
     {
         var wizard = new WizardWindow(ops, installed, demo);
@@ -86,6 +95,18 @@ internal sealed class WizardWindow : Form
             case "action":
                 wizard._selectedLanguage = InstallerStrings.Current;
                 wizard.ShowActionPage();
+                break;
+            case "welcome":
+                wizard._selectedLanguage = InstallerStrings.Current;
+                wizard.ShowWelcomePage();
+                break;
+            case "license":
+                wizard._selectedLanguage = InstallerStrings.Current;
+                wizard.ShowLicensePage();
+                break;
+            case "options":
+                wizard._selectedLanguage = InstallerStrings.Current;
+                wizard.ShowOptionsPage();
                 break;
             case "progress":
                 wizard.StartInstall();
@@ -98,7 +119,8 @@ internal sealed class WizardWindow : Form
                 wizard.ShowLanguagePage();
                 break;
             default:
-                wizard.ShowActionPage();
+                if (wizard._installed) wizard.ShowActionPage();
+                else wizard.ShowWelcomePage();
                 break;
         }
         return wizard;
@@ -282,18 +304,148 @@ internal sealed class WizardWindow : Form
         MakeActionCard(104, InstallerStrings.Get("action.repair"),
             InstallerStrings.Get("action.repairDesc"), primary: true, StartInstall);
 
-        // 语言切换小字：默认按系统语言，点击即切换（安装器实例内即时生效）
-        _actionLangSwitch = InstallerTheme.MakeLabel(LanguageSwitchText(), color: InstallerTheme.Faint);
-        _actionLangSwitch.Location = new Point(28, 196);
-        _actionLangSwitch.Cursor = System.Windows.Forms.Cursors.Hand;
-        _actionLangSwitch.Click += (_, _) =>
+        AddLanguageSwitch(196, ShowActionPage);
+    }
+
+    // ---- 全新安装：欢迎 → 许可协议 → 安装选项（标准安装流程） ----
+
+    private void ShowWelcomePage()
+    {
+        var (version, _) = _ops.DescribeInstalledState();
+        RenderChrome(
+            InstallerStrings.Get("welcome.title"),
+            InstallerStrings.Format("welcome.subtitle", version),
+            MakeCancelButton(), MakeNextButton(ShowLicensePage));
+
+        var body = InstallerTheme.MakeLabel(InstallerStrings.Format("welcome.body", AppDisplayName), color: InstallerTheme.Muted);
+        body.Location = new Point(28, 116);
+        body.MaximumSize = new Size(504, 0);
+        _content.Controls.Add(body);
+
+        AddLanguageSwitch(196, ShowWelcomePage);
+    }
+
+    private void ShowLicensePage()
+    {
+        var next = MakeNextButton(ShowOptionsPage);
+        RenderChrome(InstallerStrings.Get("lic.title"), null,
+            MakeBackButton(ShowWelcomePage), next);
+
+        var licenseBox = new TextBox
+        {
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.Vertical,
+            Text = LoadLicenseText(),
+            Font = new Font("Consolas", 9F),
+            BackColor = InstallerTheme.Card,
+            ForeColor = InstallerTheme.Text,
+            BorderStyle = BorderStyle.FixedSingle,
+            Location = new Point(28, 96),
+            Size = new Size(504, 240)
+        };
+        _content.Controls.Add(licenseBox);
+
+        var accept = new CheckBox
+        {
+            Text = InstallerStrings.Get("lic.accept"),
+            ForeColor = InstallerTheme.Text,
+            BackColor = InstallerTheme.Window,
+            Location = new Point(28, 350),
+            AutoSize = true
+        };
+        accept.CheckedChanged += (_, _) => next.Enabled = accept.Checked;
+        _content.Controls.Add(accept);
+        next.Enabled = false;
+    }
+
+    private void ShowOptionsPage()
+    {
+        // 勾选框先声明（局部函数捕获需要确定赋值），再挂到 RenderChrome 之后的页面内容里
+        var shortcut = new CheckBox
+        {
+            Text = InstallerStrings.Get("opts.shortcut"),
+            Checked = _desktopShortcut,
+            ForeColor = InstallerTheme.Text,
+            BackColor = InstallerTheme.Window,
+            Location = new Point(28, 108),
+            AutoSize = true
+        };
+
+        var autostart = new CheckBox
+        {
+            Text = InstallerStrings.Get("opts.autostart"),
+            Checked = _autostart,
+            ForeColor = InstallerTheme.Text,
+            BackColor = InstallerTheme.Window,
+            Location = new Point(28, 146),
+            AutoSize = true
+        };
+
+        RenderChrome(InstallerStrings.Get("opts.title"), null,
+            MakeBackButton(ShowLicensePage), MakeNextButton(StartFromOptions, "opts.install"));
+
+        _content.Controls.Add(shortcut);
+        _content.Controls.Add(autostart);
+
+        var note = InstallerTheme.MakeLabel(InstallerStrings.Get("opts.note"), color: InstallerTheme.Faint);
+        note.Location = new Point(28, 192);
+        note.MaximumSize = new Size(504, 0);
+        _content.Controls.Add(note);
+
+        void StartFromOptions()
+        {
+            _desktopShortcut = shortcut.Checked;
+            _autostart = autostart.Checked;
+            StartInstall();
+        }
+    }
+
+    private Button MakeNextButton(Action onNext, string? key = null)
+    {
+        var button = InstallerTheme.MakeButton(InstallerStrings.Get(key ?? "wizard.next"), "primary");
+        button.Width = 110;
+        button.Click += (_, _) => onNext();
+        return button;
+    }
+
+    private Button MakeBackButton(Action onBack)
+    {
+        var button = InstallerTheme.MakeButton(InstallerStrings.Get("wizard.back"), "ghost");
+        button.Width = 110;
+        button.Click += (_, _) => onBack();
+        return button;
+    }
+
+    /// <summary>语言切换小字（欢迎页与操作页共用；切换后整页重渲染）。</summary>
+    private void AddLanguageSwitch(int y, Action reRender)
+    {
+        var label = InstallerTheme.MakeLabel(LanguageSwitchText(), color: InstallerTheme.Faint);
+        label.Location = new Point(28, y);
+        label.Cursor = Cursors.Hand;
+        label.Click += (_, _) =>
         {
             InstallerStrings.Set(InstallerStrings.IsEnglish ? InstallerStrings.ZhCn : InstallerStrings.EnUs);
             _selectedLanguage = InstallerStrings.Current;
-            _actionLangSwitch.Text = LanguageSwitchText();
-            RefreshActionPageTexts();
+            reRender();
         };
-        _content.Controls.Add(_actionLangSwitch);
+        _content.Controls.Add(label);
+    }
+
+    private static string LoadLicenseText()
+    {
+        try
+        {
+            using var stream = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("ClevoLEDKeyboardControl.Installer.GplLicense");
+            if (stream is null) return "GPL-3.0";
+            using var reader = new StreamReader(stream);
+            return reader.ReadToEnd();
+        }
+        catch
+        {
+            return "GPL-3.0";
+        }
     }
 
     private string LanguageSwitchText()
@@ -305,16 +457,6 @@ internal sealed class WizardWindow : Form
     }
 
     private Label _actionCardTitle;
-
-    /// <summary>就地刷新操作页文案（语言切换后）。</summary>
-    private void RefreshActionPageTexts()
-    {
-        var (version, serviceStatus) = _ops.DescribeInstalledState();
-        _titleLabel.Text = InstallerStrings.Format("action.title", AppDisplayName);
-        _subtitleLabel.Text = InstallerStrings.Format("action.subtitle", version, serviceStatus);
-        _actionLangSwitch.Text = LanguageSwitchText();
-        if (_actionCardTitle is not null) _actionCardTitle.Text = InstallerStrings.Get("action.repair");
-    }
 
     private void MakeActionCard(int y, string title, string description, bool primary, Action onClick)
     {
@@ -400,7 +542,8 @@ internal sealed class WizardWindow : Form
     private void StartInstall()
     {
         Result = WizardAction.Install;
-        RunOperation(new Operation("progress.install", InstallStepKeys, report => _ops.Install(report)));
+        RunOperation(new Operation("progress.install", InstallStepKeys,
+            report => _ops.Install(report, _desktopShortcut, _autostart)));
     }
 
     private void StartUninstall()
@@ -518,6 +661,22 @@ internal sealed class WizardWindow : Form
         body.Location = new Point(28, 112);
         body.MaximumSize = new Size(504, 0);
         _content.Controls.Add(body);
+
+        if (Result == WizardAction.Install)
+        {
+            // 标准完成页：勾选“立即运行”（仅安装；卸载完成页不需要）
+            var launch = new CheckBox
+            {
+                Text = InstallerStrings.Format("done.launch", AppDisplayName),
+                Checked = true,
+                ForeColor = InstallerTheme.Text,
+                BackColor = InstallerTheme.Window,
+                Location = new Point(28, 216),
+                AutoSize = true
+            };
+            launch.CheckedChanged += (_, _) => LaunchAfterInstall = launch.Checked;
+            _content.Controls.Add(launch);
+        }
     }
 
     private Button MakeFinishButton()

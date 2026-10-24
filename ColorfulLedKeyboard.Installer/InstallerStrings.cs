@@ -17,6 +17,23 @@ internal static class InstallerStrings
         ["wizard.retry"] = ("重试", "Retry"),
         ["wizard.continue"] = ("继续", "Continue"),
         ["wizard.finish"] = ("完成", "Finish"),
+        ["wizard.next"] = ("下一步", "Next"),
+        ["wizard.back"] = ("上一步", "Back"),
+
+        ["welcome.title"] = ("欢迎使用 ClevoLEDKeyboardControl 安装向导", "Welcome to the ClevoLEDKeyboardControl setup wizard"),
+        ["welcome.subtitle"] = ("版本 {0}", "Version {0}"),
+        ["welcome.body"] = ("本向导将安装 {0}。建议关闭其他应用程序后继续。", "This wizard will install {0}. Close other applications before continuing."),
+
+        ["lic.title"] = ("许可协议", "License agreement"),
+        ["lic.accept"] = ("我已阅读并接受本协议（GPL-3.0）", "I have read and accept the agreement (GPL-3.0)"),
+
+        ["opts.title"] = ("安装选项", "Installation options"),
+        ["opts.shortcut"] = ("创建桌面快捷方式", "Create a desktop shortcut"),
+        ["opts.autostart"] = ("开机自动启动（托盘与灯控服务）", "Launch at startup (tray and lighting service)"),
+        ["opts.install"] = ("安装", "Install"),
+        ["opts.note"] = ("两个选项都可随时在软件“设置”中更改。", "Both options can be changed later in the app settings."),
+
+        ["done.launch"] = ("立即运行 {0}", "Run {0} now"),
 
         ["lang.title"] = ("选择安装语言", "Choose installation language"),
         ["lang.hint"] = ("稍后可在软件设置中更改。", "You can change this later in the app settings."),

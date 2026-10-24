@@ -16,6 +16,11 @@
     <EmbeddedResource Include="Payload\payload.zip" LogicalName="payload.zip" />
   </ItemGroup>
 
+  <!-- 许可协议全文（标准安装流程的协议页展示） -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\LICENSE" LogicalName="ClevoLEDKeyboardControl.Installer.GplLicense" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\ColorfulLedKeyboard.Core\ColorfulLedKeyboard.Core.csproj" />
   </ItemGroup>
