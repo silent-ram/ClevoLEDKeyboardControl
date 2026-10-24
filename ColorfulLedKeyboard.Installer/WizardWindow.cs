@@ -31,9 +31,11 @@ internal sealed class WizardWindow : Form
     private static readonly string[] UninstallStepKeys = ["stopOnly", "removeStartup", "removeFiles", "purge"];
 
     private const string AppDisplayName = "ClevoLEDKeyboardControl";
-    private const int BannerHeight = 92;
-    private const int ContentPad = 28;
-    private const int BodyWidth = 560 - ContentPad * 2;
+
+    // 布局统一显式 DPI 缩放：设计基准 96 DPI，PerMonitorV2 下动态添加的控件与静态部分同一比例
+    private int Dpi(int v) => Math.Max(1, v * DeviceDpi / 96);
+    private int Pad => Dpi(28);
+    private int BodyWidth => ClientSize.Width - Pad * 2;
 
     private readonly WizardOps _ops;
     private readonly bool _installed;
@@ -77,14 +79,12 @@ internal sealed class WizardWindow : Form
         StartPosition = FormStartPosition.CenterScreen;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(560, 400);
-        AutoScaleMode = AutoScaleMode.Dpi;
-        AutoScaleDimensions = new SizeF(96F, 96F);
+        ClientSize = new Size(Dpi(560), Dpi(400));
         BackColor = InstallerTheme.Window;
         Font = InstallerTheme.BaseFont;
         ShowInTaskbar = false;
 
-        _buttonBar = new Panel { Dock = DockStyle.Bottom, Height = 52, BackColor = InstallerTheme.Window };
+        _buttonBar = new Panel { Dock = DockStyle.Bottom, Height = Dpi(52), BackColor = InstallerTheme.Window };
         _content = new Panel { Dock = DockStyle.Fill, BackColor = InstallerTheme.Window };
         Controls.Add(_content);
         Controls.Add(_buttonBar);
@@ -158,13 +158,13 @@ internal sealed class WizardWindow : Form
     private void RenderChrome(string title, string? subtitle, params Button[] buttons)
     {
         _titleLabel = InstallerTheme.MakeLabel(title, InstallerTheme.TitleFont);
-        _titleLabel.Location = new Point(ContentPad, 18);
+        _titleLabel.Location = new Point(Pad, Dpi(20));
         _content.Controls.Clear();
         _content.Controls.Add(_titleLabel);
         if (subtitle is not null)
         {
             _subtitleLabel = InstallerTheme.MakeLabel(subtitle, color: InstallerTheme.Muted);
-            _subtitleLabel.Location = new Point(ContentPad, 52);
+            _subtitleLabel.Location = new Point(Pad, Dpi(54));
             _content.Controls.Add(_subtitleLabel);
         }
 
@@ -185,7 +185,7 @@ internal sealed class WizardWindow : Form
     {
         var button = InstallerTheme.MakeButton(InstallerStrings.Get("wizard.cancel"));
         _langCancel = button;
-        button.Width = 84;
+        button.Width = Dpi(84);
         button.Click += (_, _) => Close();
         CancelButton = button;
         return button;
@@ -194,7 +194,7 @@ internal sealed class WizardWindow : Form
     private Button MakeCloseButton()
     {
         var button = InstallerTheme.MakeButton(InstallerStrings.Get("wizard.close"));
-        button.Width = 80;
+        button.Width = Dpi(80);
         button.Click += (_, _) => System.Windows.Forms.Application.Exit();
         return button;
     }
@@ -202,7 +202,7 @@ internal sealed class WizardWindow : Form
     private Button MakeNextButton(Action onNext, string? key = null)
     {
         var button = InstallerTheme.MakeButton(InstallerStrings.Get(key ?? "wizard.next"));
-        button.Width = 88;
+        button.Width = Dpi(88);
         button.Click += (_, _) => onNext();
         AcceptButton = button;
         return button;
@@ -211,7 +211,7 @@ internal sealed class WizardWindow : Form
     private Button MakeBackButton(Action onBack)
     {
         var button = InstallerTheme.MakeButton(InstallerStrings.Get("wizard.back"));
-        button.Width = 88;
+        button.Width = Dpi(88);
         button.Click += (_, _) => onBack();
         return button;
     }
@@ -228,16 +228,16 @@ internal sealed class WizardWindow : Form
             MakeCancelButton(), MakeContinueFromLanguageButton());
 
         _langHeading = InstallerTheme.MakeLabel(InstallerStrings.Get("lang.title"), InstallerTheme.SectionFont);
-        _langHeading.Location = new Point(ContentPad, 84);
+        _langHeading.Location = new Point(Pad, Dpi(84));
         _content.Controls.Add(_langHeading);
 
-        _langZh = MakeLanguageOption(130, "中文（简体）", InstallerStrings.ZhCn);
-        _langEn = MakeLanguageOption(186, "English", InstallerStrings.EnUs);
+        _langZh = MakeLanguageOption(Dpi(130), "中文（简体）", InstallerStrings.ZhCn);
+        _langEn = MakeLanguageOption(Dpi(186), "English", InstallerStrings.EnUs);
         _content.Controls.Add(_langZh);
         _content.Controls.Add(_langEn);
 
         _langHint = InstallerTheme.MakeLabel(InstallerStrings.Get("lang.hint"), color: InstallerTheme.Faint);
-        _langHint.Location = new Point(ContentPad, 250);
+        _langHint.Location = new Point(Pad, Dpi(250));
         _content.Controls.Add(_langHint);
     }
 
@@ -275,8 +275,8 @@ internal sealed class WizardWindow : Form
             ForeColor = InstallerTheme.Text,
             BackColor = InstallerTheme.Window,
             FlatStyle = FlatStyle.Flat,
-            Location = new Point(ContentPad, y),
-            Size = new Size(BodyWidth, 44),
+            Location = new Point(Pad, y),
+            Size = new Size(BodyWidth, Dpi(44)),
             Padding = new Padding(10, 0, 0, 0),
             Cursor = Cursors.Hand,
             Checked = InstallerStrings.Current == language
@@ -300,7 +300,7 @@ internal sealed class WizardWindow : Form
     {
         var button = InstallerTheme.MakeButton(InstallerStrings.Get("wizard.continue"));
         _langContinue = button;
-        button.Width = 88;
+        button.Width = Dpi(88);
         AcceptButton = button;
         button.Click += (_, _) =>
         {
@@ -328,18 +328,18 @@ internal sealed class WizardWindow : Form
             InstallerStrings.Format("action.subtitle", version, serviceStatus),
             MakeCancelButton());
 
-        MakeActionCard(100, InstallerStrings.Get("action.repair"),
+        MakeActionCard(Dpi(100), InstallerStrings.Get("action.repair"),
             InstallerStrings.Get("action.repairDesc"), primary: true, StartInstall);
 
-        AddLanguageDots(196, ShowActionPage);
+        AddLanguageDots(Dpi(196), ShowActionPage);
     }
 
     private void MakeActionCard(int y, string title, string description, bool primary, Action onClick)
     {
         var card = new Panel
         {
-            Location = new Point(ContentPad, y),
-            Size = new Size(BodyWidth, 62),
+            Location = new Point(Pad, y),
+            Size = new Size(BodyWidth, Dpi(62)),
             BackColor = InstallerTheme.Card,
             Cursor = Cursors.Hand
         };
@@ -385,21 +385,21 @@ internal sealed class WizardWindow : Form
         {
             Text = AppDisplayName,
             Font = new Font(InstallerTheme.BaseFont.FontFamily, 12F, FontStyle.Bold),
-            Location = new Point(ContentPad, 58),
-            Size = new Size(BodyWidth, 30),
+            Location = new Point(Pad, Dpi(58)),
+            Size = new Size(BodyWidth, Dpi(30)),
             BackColor = Color.Transparent
         };
         _content.Controls.Add(brand);
         var versionLabel = InstallerTheme.MakeLabel(InstallerStrings.Format("welcome.version", version), color: InstallerTheme.Muted);
-        versionLabel.Location = new Point(ContentPad, 92);
+        versionLabel.Location = new Point(Pad, Dpi(92));
         _content.Controls.Add(versionLabel);
 
         var body = InstallerTheme.MakeLabel(InstallerStrings.Format("welcome.body", AppDisplayName), color: InstallerTheme.Muted);
-        body.Location = new Point(ContentPad, 130);
+        body.Location = new Point(Pad, Dpi(130));
         body.MaximumSize = new Size(BodyWidth, 0);
         _content.Controls.Add(body);
 
-        AddLanguageDots(316, ShowWelcomePage);
+        AddLanguageDots(Dpi(252), ShowWelcomePage);
     }
 
     /// <summary>圆点语言选择：实心圆点=当前语言，点击切换并重渲染本页。</summary>
@@ -407,7 +407,7 @@ internal sealed class WizardWindow : Form
     {
         var dots = new LanguageDots(InstallerStrings.IsEnglish ? 1 : 0)
         {
-            Location = new Point(ContentPad, y)
+            Location = new Point(Pad, y)
         };
         dots.LanguagePicked += _ =>
         {
@@ -433,8 +433,8 @@ internal sealed class WizardWindow : Form
             BackColor = Color.FromArgb(250, 250, 250),
             ForeColor = InstallerTheme.Text,
             BorderStyle = BorderStyle.FixedSingle,
-            Location = new Point(ContentPad, 80),
-            Size = new Size(BodyWidth, 216),
+            Location = new Point(Pad, Dpi(80)),
+            Size = new Size(BodyWidth, Dpi(216)),
             TabStop = false,
             HideSelection = true
         };
@@ -447,7 +447,7 @@ internal sealed class WizardWindow : Form
         {
             Text = InstallerStrings.Get("lic.accept"),
             ForeColor = InstallerTheme.Text,
-            Location = new Point(ContentPad, 302),
+            Location = new Point(Pad, Dpi(302)),
             AutoSize = true
         };
         accept.CheckedChanged += (_, _) => next.Enabled = accept.Checked;
@@ -463,7 +463,7 @@ internal sealed class WizardWindow : Form
             Text = InstallerStrings.Get("opts.shortcut"),
             Checked = _desktopShortcut,
             ForeColor = InstallerTheme.Text,
-            Location = new Point(ContentPad, 88),
+            Location = new Point(Pad, Dpi(88)),
             AutoSize = true
         };
 
@@ -472,7 +472,7 @@ internal sealed class WizardWindow : Form
             Text = InstallerStrings.Get("opts.autostart"),
             Checked = _autostart,
             ForeColor = InstallerTheme.Text,
-            Location = new Point(ContentPad, 118),
+            Location = new Point(Pad, Dpi(118)),
             AutoSize = true
         };
 
@@ -483,7 +483,7 @@ internal sealed class WizardWindow : Form
         _content.Controls.Add(autostart);
 
         var note = InstallerTheme.MakeLabel(InstallerStrings.Get("opts.note"), color: InstallerTheme.Faint);
-        note.Location = new Point(ContentPad, 156);
+        note.Location = new Point(Pad, Dpi(156));
         note.MaximumSize = new Size(BodyWidth, 0);
         _content.Controls.Add(note);
 
@@ -522,22 +522,22 @@ internal sealed class WizardWindow : Form
             MakeCancelButton());
 
         var text = InstallerTheme.MakeLabel(InstallerStrings.Get("confirm.text"));
-        text.Location = new Point(ContentPad, 100);
-        text.MaximumSize = new Size(BodyWidth - 4, 0);
+        text.Location = new Point(Pad, Dpi(100));
+        text.MaximumSize = new Size(BodyWidth - Dpi(6), 0);
         _content.Controls.Add(text);
 
         var keep = new CheckBox
         {
             Text = InstallerStrings.Get("confirm.keep"),
             ForeColor = InstallerTheme.Text,
-            Location = new Point(ContentPad, text.Bottom + 20),
+            Location = new Point(Pad, text.Bottom + Dpi(20)),
             AutoSize = true
         };
         _content.Controls.Add(keep);
 
         var uninstallButton = InstallerTheme.MakeButton(InstallerStrings.Get("action.uninstall"), "danger");
         uninstallButton.Width = 110;
-        uninstallButton.Location = new Point(ContentPad, keep.Bottom + 22);
+        uninstallButton.Location = new Point(Pad, keep.Bottom + Dpi(22));
         uninstallButton.Click += (_, _) =>
         {
             KeepSettings = keep.Checked;
@@ -577,29 +577,29 @@ internal sealed class WizardWindow : Form
         // 连体圆角进度条（浅灰轨道 + 扁平绿）+ 状态行 + 分步清单
         _progress = new ModernProgressBar
         {
-            Location = new Point(ContentPad, 96),
-            Size = new Size(BodyWidth, 8),
+            Location = new Point(Pad, Dpi(96)),
+            Size = new Size(BodyWidth, Dpi(8)),
             Percent = 0
         };
         _content.Controls.Add(_progress);
 
         _statusLabel = InstallerTheme.MakeLabel(_demo ? "demo…" : "", color: InstallerTheme.Faint);
-        _statusLabel.Location = new Point(ContentPad, 118);
+        _statusLabel.Location = new Point(Pad, Dpi(118));
         _content.Controls.Add(_statusLabel);
 
         _stepMarkers.Clear();
-        var y = 152;
+        var y = Dpi(156);
         foreach (var key in operation.StepKeys)
         {
             var marker = InstallerTheme.MakeLabel("○", color: InstallerTheme.Faint);
             marker.Font = new Font(InstallerTheme.BaseFont.FontFamily, 9.5f, FontStyle.Bold);
-            marker.Location = new Point(ContentPad, y);
+            marker.Location = new Point(Pad, y);
             var text = InstallerTheme.MakeLabel(InstallerStrings.Get("step." + key));
-            text.Location = new Point(ContentPad + 26, y + 1);
+            text.Location = new Point(Pad + Dpi(26), y + 1);
             _content.Controls.Add(marker);
             _content.Controls.Add(text);
             _stepMarkers.Add((key, marker));
-            y += 32;
+            y += Dpi(30);
         }
 
         _ = RunOperationAsync(operation);
@@ -681,16 +681,16 @@ internal sealed class WizardWindow : Form
         RenderChrome("✓ " + InstallerStrings.Get(titleKey.Replace("progress.", "done.")), null, MakeFinishButton());
 
         var body = InstallerTheme.MakeLabel(message, color: InstallerTheme.Muted);
-        body.Location = new Point(ContentPad, 96);
+        body.Location = new Point(Pad, Dpi(96));
         body.MaximumSize = new Size(BodyWidth, 0);
         _content.Controls.Add(body);
 
         // 分割线与操作区跟随正文实际高度（多行信息块高度不可硬编码）
-        var dividerY = body.Bottom + 18;
+        var dividerY = body.Bottom + Dpi(18);
         var divider = new Panel
         {
-            Location = new Point(ContentPad, dividerY),
-            Size = new Size(BodyWidth, 1),
+            Location = new Point(Pad, dividerY),
+            Size = new Size(BodyWidth, Dpi(1)),
             BackColor = InstallerTheme.CardBorder
         };
         _content.Controls.Add(divider);
@@ -703,7 +703,7 @@ internal sealed class WizardWindow : Form
                 Text = InstallerStrings.Format("done.launch", AppDisplayName),
                 Checked = true,
                 ForeColor = InstallerTheme.Text,
-                Location = new Point(ContentPad, dividerY + 22),
+                Location = new Point(Pad, dividerY + Dpi(22)),
                 AutoSize = true
             };
             launch.CheckedChanged += (_, _) => LaunchAfterInstall = launch.Checked;
@@ -714,7 +714,7 @@ internal sealed class WizardWindow : Form
     private Button MakeFinishButton()
     {
         var button = InstallerTheme.MakeButton(InstallerStrings.Get("wizard.finish"));
-        button.Width = 96;
+        button.Width = Dpi(96);
         button.Click += (_, _) => Close();
         AcceptButton = button;
         return button;
@@ -728,22 +728,22 @@ internal sealed class WizardWindow : Form
             MakeCancelButton(), MakeRetryButton(operation));
 
         var message = InstallerTheme.MakeLabel(ex.Message, color: InstallerTheme.Danger);
-        message.Location = new Point(ContentPad, 100);
-        message.MaximumSize = new Size(BodyWidth - 4, 0);
+        message.Location = new Point(Pad, Dpi(100));
+        message.MaximumSize = new Size(BodyWidth - Dpi(6), 0);
         _content.Controls.Add(message);
 
         var log = InstallerTheme.MakeLabel(
             InstallerStrings.Get("fail.log") + "\n" + Program.InstallerLogPath,
             color: InstallerTheme.Faint);
-        log.Location = new Point(ContentPad, 210);
-        log.MaximumSize = new Size(BodyWidth - 4, 0);
+        log.Location = new Point(Pad, Dpi(210));
+        log.MaximumSize = new Size(BodyWidth - Dpi(6), 0);
         _content.Controls.Add(log);
     }
 
     private Button MakeRetryButton(Operation operation)
     {
         var button = InstallerTheme.MakeButton(InstallerStrings.Get("wizard.retry"));
-        button.Width = 88;
+        button.Width = Dpi(88);
         button.Click += (_, _) => RunOperation(operation);
         return button;
     }
@@ -832,8 +832,9 @@ internal sealed class LanguageDots : Control
         TabStop = false;
         BackColor = Color.Transparent;
         Cursor = Cursors.Hand;
-        Width = 220;
-        Height = 26;
+        var u = Math.Max(1, DeviceDpi / 96);
+        Width = 220 * u;
+        Height = 26 * u;
     }
 
     protected override void OnPaint(PaintEventArgs e)
@@ -845,7 +846,8 @@ internal sealed class LanguageDots : Control
         for (var i = 0; i < Labels.Length; i++)
         {
             var active = i == _current;
-            var dotRect = new Rectangle(x, Height / 2 - 4, 8, 8);
+            var u = Math.Max(1, DeviceDpi / 96);
+            var dotRect = new Rectangle(x, Height / 2 - 4 * u, 8 * u, 8 * u);
             if (active)
             {
                 using var fill = new SolidBrush(InstallerTheme.Text);
@@ -858,20 +860,21 @@ internal sealed class LanguageDots : Control
             }
             using var font = new Font(Font.FontFamily, 9.5F, active ? FontStyle.Bold : FontStyle.Regular);
             TextRenderer.DrawText(g, Labels[i], font,
-                new Point(x + 14, Height / 2 - TextRenderer.MeasureText(Labels[i], font).Height / 2),
+                new Point(x + 14 * u, Height / 2 - TextRenderer.MeasureText(Labels[i], font).Height / 2),
                 active ? InstallerTheme.Text : InstallerTheme.Muted);
-            x += 14 + TextRenderer.MeasureText(Labels[i], font).Width + 26;
+            x += 14 * u + TextRenderer.MeasureText(Labels[i], font).Width + 26 * u;
         }
     }
 
     protected override void OnMouseDown(MouseEventArgs e)
     {
         base.OnMouseDown(e);
-        int x = 0;
+            var u = Math.Max(1, DeviceDpi / 96);
+            var x = 0;
         for (var i = 0; i < Labels.Length; i++)
         {
             using var font = new Font(Font.FontFamily, 9.5F, i == _current ? FontStyle.Bold : FontStyle.Regular);
-            var groupWidth = 14 + TextRenderer.MeasureText(Labels[i], font).Width + 26;
+            var groupWidth = 14 * u + TextRenderer.MeasureText(Labels[i], font).Width + 26 * u;
             if (e.X >= x && e.X < x + groupWidth)
             {
                 if (i != _current)
