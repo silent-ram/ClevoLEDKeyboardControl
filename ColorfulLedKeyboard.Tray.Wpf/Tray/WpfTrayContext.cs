@@ -444,7 +444,7 @@ public sealed class WpfTrayContext : IDisposable
     {
         var enabled = !IsStartupEnabled();
         var choice = System.Windows.MessageBox.Show(
-            $"确定要将开机自启动切换为{(enabled ? "开启" : "关闭")}吗?该设置立即生效,可能需要管理员权限。",
+            $"确定要将开机自启动切换为{(enabled ? "开启" : "关闭")}吗？该设置立即生效，可能需要管理员权限。",
             "ClevoLEDKeyboardControl",
             MessageBoxButton.YesNo,
             MessageBoxImage.Question);
@@ -457,7 +457,7 @@ public sealed class WpfTrayContext : IDisposable
         if (!ok)
         {
             System.Windows.MessageBox.Show(
-                $"无法修改开机自启动:{error}",
+                $"无法修改开机自启动：{error}",
                 "ClevoLEDKeyboardControl",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);

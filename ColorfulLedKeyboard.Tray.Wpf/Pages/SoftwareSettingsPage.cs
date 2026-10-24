@@ -72,7 +72,7 @@ public sealed class SoftwareSettingsPage : UserControl
     private readonly TextBlock _userPlanDescription = MakeMutedLabel(
         "用于了解不同版本的实际使用情况，便于安排维护和更新。统计数据匿名且不含个人信息。");
 
-    private readonly System.Windows.Controls.CheckBox _startupEnabled = MakeCheck("开机自启动托盘与灯控服务(切换后立即生效)");
+    private readonly System.Windows.Controls.CheckBox _startupEnabled = MakeCheck("开机自启动托盘与灯控服务（切换后立即生效）");
     private readonly TextBlock _startupState = MakeMutedLabel("");
     private bool _applyingStartup;
 
@@ -514,7 +514,7 @@ public sealed class SoftwareSettingsPage : UserControl
             });
             if (!ok)
             {
-                System.Windows.MessageBox.Show($"无法修改开机自启动:{error}", "ClevoLEDKeyboardControl",
+                System.Windows.MessageBox.Show($"无法修改开机自启动：{error}", "ClevoLEDKeyboardControl",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
@@ -541,8 +541,8 @@ public sealed class SoftwareSettingsPage : UserControl
             _applyingStartup = false;
         }
         var consistent = trayRegistered == serviceAuto;
-        _startupState.Text = $"托盘自启:{(trayRegistered ? "已注册" : "未注册")} · 灯效服务:{(serviceAuto ? "自动" : "手动")}" +
-            (consistent ? "" : "(状态不一致,切换开关即可修复)");
+        _startupState.Text = $"托盘自启：{(trayRegistered ? "已注册" : "未注册")} · 灯效服务：{(serviceAuto ? "自动" : "手动")}" +
+            (consistent ? "" : "（状态不一致，切换开关即可修复）");
     }
 
     // ---- 配置管理 ----
