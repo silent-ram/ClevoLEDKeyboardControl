@@ -36,13 +36,13 @@ public sealed class MusicPage : UserControl
     private readonly TextBlock _currentColorStatus = MakeMutedLabel("");
 
     private readonly System.Windows.Controls.ComboBox _preset = MakeCombo([]);
-    private readonly Button _savePreset = MakeButton("保存预设修改", 140);
-    private readonly Button _createPreset = MakeButton("新建/另存为", 112);
-    private readonly Button _deletePreset = MakeButton("删除预设", 112);
+    private readonly Button _savePreset = MakeButton("保存预设修改");
+    private readonly Button _createPreset = MakeButton("新建/另存为");
+    private readonly Button _deletePreset = MakeButton("删除预设");
     private readonly TextBlock _presetSaveHint = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(ControlLeft, 0, 0, 0) };
-    private readonly System.Windows.Controls.TextBox _presetName = MakeTextBox(220);
+    private readonly System.Windows.Controls.TextBox _presetName = MakeTextBox(280);
     private readonly System.Windows.Controls.ComboBox _responseMode = MakeCombo(["节奏律动", "鼓点响应"]);
-    private readonly Button _customColors = MakeButton("自定义颜色", 128);
+    private readonly Button _customColors = MakeButton("自定义颜色");
     private readonly UiSequenceEditor _sequence = new();
     private readonly UiSliderRow _baseBrightness = new("基础亮度", 0, 100, "%");
     private readonly UiSliderRow _peakBrightness = new("峰值亮度", 0, 100, "%");
@@ -221,13 +221,8 @@ public sealed class MusicPage : UserControl
     /// <summary>保存栏总脏状态：绑定变更、预设变更或已暂存的预设修改（暂存 ≠ 落盘）。</summary>
     public bool IsDirty => _generalChanged || _musicPresetChanged || _musicPresetChangesStaged;
 
-    /// <summary>SaveSettings 的硬拦截条件（WinForms 语义一致）。</summary>
+    /// <summary>SaveSettings 直接放行：自定义预设的修改随“保存并应用”一并写回预设；内置预设保持只读。</summary>
     public bool IsMusicPresetChanged => _musicPresetChanged;
-
-    public string MusicPresetBlockedMessage =>
-        IsBuiltInMusicPreset(SelectedMusicPresetName())
-            ? "当前内置音乐预设已被修改。请先使用“新建/另存为”保存为自定义预设。"
-            : "当前音乐预设有尚未保存的修改。请先点击“保存预设修改”。";
 
     // ---- 载入 / 保存（移植自 WinForms LoadSettings/SaveSettings 的音乐页字段）----
 
@@ -279,6 +274,23 @@ public sealed class MusicPage : UserControl
 
     public void ApplyTo(KeyboardSettings settings)
     {
+        // 两段式保存简化：自定义预设未暂存的修改直接随本次保存覆盖回预设（含改名）；
+        // 内置预设不落盘（保护默认配置），当前参数值照常应用。
+        if (_musicPresetChanged)
+        {
+            var originalName = SelectedMusicPresetName();
+            if (!IsBuiltInMusicPreset(originalName))
+            {
+                var newName = _presetName.Text.Trim();
+                if (string.IsNullOrWhiteSpace(newName)) newName = originalName;
+                if (UpsertMusicPreset(newName, originalName))
+                {
+                    RefreshMusicPresetList(newName);
+                    _musicPresetChanged = false;
+                    _musicPresetChangesStaged = true;
+                }
+            }
+        }
         settings.Effect.Music.PresetName = SelectedMusicPresetName();
         settings.Effect.Music.ResponseMode = MusicResponseMode.LevelColor;
         settings.Effect.Music.LevelColorEnabled = true;
@@ -750,12 +762,12 @@ public sealed class MusicPage : UserControl
         var builtIn = IsBuiltInMusicPreset(SelectedMusicPresetName());
         _presetSaveHint.Text = _musicPresetChanged
             ? builtIn
-                ? "内置预设不能直接修改，请使用“新建/另存为”。"
-                : "预设内容已修改，请先点击“保存预设修改”。"
+                ? "内置预设不会被改动；当前修改随“保存并应用”生效，如需保留请“新建/另存为”。"
+                : "修改将随“保存并应用”一并保存到当前预设。"
             : _musicPresetChangesStaged
                 ? "预设修改已暂存，点击底部“保存并应用”后生效。"
                 : "";
-        _presetSaveHint.SetResourceReference(TextBlock.ForegroundProperty, _musicPresetChanged ? "Brush.Warning" : "Brush.Success");
+        _presetSaveHint.SetResourceReference(TextBlock.ForegroundProperty, "Brush.MutedText");
         _presetSaveHintHost.Visibility = string.IsNullOrWhiteSpace(_presetSaveHint.Text)
             ? Visibility.Collapsed : Visibility.Visible;
         UpdateMusicPresetButtons();
@@ -819,7 +831,7 @@ public sealed class MusicPage : UserControl
 
     // ---- UI 辅助 ----
 
-    private const int ControlLeft = 165;
+    private const int ControlLeft = 130;
 
     private static Border MakeCard(string title, params UIElement[] children)
     {

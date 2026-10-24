@@ -2,16 +2,20 @@ namespace ColorfulLedKeyboard.Core;
 
 public sealed class MusicSettings : IMusicTunable
 {
+    /// <summary>默认色清单 = 内置“通用”预设的颜色（同一份数据两处共用，防漂移）。
+    /// 顺序取自作者实测清单（46 色），首装回填与“通用”预设展示完全一致。</summary>
     private static readonly string[] DefaultColorValues =
     [
-        "#FF0000", "#FF8000", "#FFFF00", "#80FF00", "#00FF00", "#00FF80",
-        "#00FFFF", "#0080FF", "#0000FF", "#8000FF", "#FF00FF", "#FF0080",
-        "#B80000", "#B85C00", "#B8B800", "#5CB800", "#00B800", "#00B85C",
-        "#00B8B8", "#005CB8", "#0000B8", "#5C00B8", "#B800B8", "#B8005C",
-        "#750000", "#753B00", "#757500", "#3B7500", "#007500", "#00753B",
-        "#007575", "#003B75", "#000075", "#3B0075", "#750075", "#75003B",
-        "#FFFFFF", "#E0E0E0", "#C0C0C0", "#A0A0A0", "#808080", "#606060",
-        "#FFD2A1", "#CFE8FF", "#FFB4DC", "#B4FFD2"
+        "#C0C0C0", "#FF0080", "#0080FF", "#757500", "#FF0000",
+        "#00753B", "#B8B800", "#FFB4DC", "#00B800", "#00FF80",
+        "#3B7500", "#007575", "#00B85C", "#B80000", "#E0E0E0",
+        "#FFD2A1", "#00FFFF", "#B800B8", "#8000FF", "#75003B",
+        "#0000B8", "#B85C00", "#B4FFD2", "#003B75", "#3B0075",
+        "#80FF00", "#5CB800", "#00B8B8", "#CFE8FF", "#A0A0A0",
+        "#FFFFFF", "#FF8000", "#00FF00", "#0000FF", "#606060",
+        "#FF00FF", "#007500", "#753B00", "#750000", "#B8005C",
+        "#750075", "#005CB8", "#FFFF00", "#808080", "#000075",
+        "#5C00B8"
     ];
     public const string DefaultPresetName = "通用";
     public const string BuiltInDefaultPresetId = "builtin:music:general";
@@ -182,23 +186,9 @@ public sealed class MusicSettings : IMusicTunable
             Id = BuiltInDefaultPresetId,
             Name = DefaultPresetName,
             ResponseMode = MusicResponseMode.LevelColor,
-            LowColor = "#FFD2A1",
-            HighColor = "#007500",
-            Colors =
-            [
-                "#FFD2A1", "#000075", "#0080FF", "#00FF00",
-                "#0000B8", "#E0E0E0", "#00B85C", "#606060",
-                "#757500", "#3B0075", "#B4FFD2", "#FF0000",
-                "#FF0080", "#FFB4DC", "#007575", "#FF00FF",
-                "#00B8B8", "#750000", "#00753B", "#003B75",
-                "#005CB8", "#75003B", "#B8B800", "#B85C00",
-                "#FFFF00", "#FFFFFF", "#80FF00", "#00B800",
-                "#753B00", "#750075", "#808080", "#B80000",
-                "#B800B8", "#00FF80", "#C0C0C0", "#0000FF",
-                "#A0A0A0", "#00FFFF", "#3B7500", "#CFE8FF",
-                "#B8005C", "#FF8000", "#5CB800", "#5C00B8",
-                "#007500"
-            ],
+            LowColor = DefaultColorValues[0],
+            HighColor = DefaultColorValues[^1],
+            Colors = [.. DefaultColorValues],
             Sensitivity = 2.0,
             AttackMs = 20,
             ReleaseMs = 80,

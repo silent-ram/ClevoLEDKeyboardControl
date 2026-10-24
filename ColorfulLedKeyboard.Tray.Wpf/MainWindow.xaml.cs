@@ -232,15 +232,6 @@ public partial class MainWindow : Window
 
     private void SaveSettings()
     {
-        // 音乐预设两段式保存的硬拦截（WinForms 语义一致）：预设未暂存时先去保存预设。
-        if (_musicPage is { IsMusicPresetChanged: true })
-        {
-            SelectPage(2);
-            System.Windows.MessageBox.Show(_musicPage.MusicPresetBlockedMessage, "ClevoLEDKeyboardControl",
-                MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-
         try
         {
             var settings = _settingsStore.Load();
@@ -294,7 +285,7 @@ public partial class MainWindow : Window
     {
         var dirty = HasAnyDirty;
         DirtyLabel.Text = _musicPage is { IsMusicPresetChanged: true }
-            ? "● 音乐预设尚未保存，请先点击音乐页内的“保存预设修改”"
+            ? "● 音乐预设修改将随本次“保存并应用”一并保存"
             : dirty ? "● 有尚未保存的修改" : "✓ 设置已保存";
         DirtyLabel.Foreground = (Brush)Application.Current.Resources[dirty ? "Brush.Warning" : "Brush.Success"];
         RevertButton.IsEnabled = dirty;

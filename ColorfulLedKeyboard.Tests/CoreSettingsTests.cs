@@ -430,8 +430,8 @@ public sealed class CoreSettingsTests
         Assert.Equal(46, settings.Colors.Count);
         Assert.DoesNotContain("#404040", settings.Colors);
         Assert.DoesNotContain("#000000", settings.Colors);
-        Assert.Equal("#FF0000", settings.LowColor);
-        Assert.Equal("#B4FFD2", settings.HighColor);
+        Assert.Equal("#C0C0C0", settings.LowColor);
+        Assert.Equal("#5C00B8", settings.HighColor);
     }
 
     [Fact]
@@ -448,8 +448,8 @@ public sealed class CoreSettingsTests
 
         var universal = MusicSettings.BuiltInPresets.Single();
         Assert.Equal(MusicResponseMode.LevelColor, universal.ResponseMode);
-        Assert.Equal("#FFD2A1", universal.LowColor);
-        Assert.Equal("#007500", universal.HighColor);
+        Assert.Equal("#C0C0C0", universal.LowColor);
+        Assert.Equal("#5C00B8", universal.HighColor);
         Assert.Equal(2.0, universal.Sensitivity);
         Assert.Equal(20, universal.AttackMs);
         Assert.Equal(80, universal.ReleaseMs);
@@ -461,9 +461,9 @@ public sealed class CoreSettingsTests
         Assert.False(universal.FollowSystemVolume);
         Assert.Equal(30, universal.BaseBrightness);
         Assert.Equal(100, universal.PeakBrightness);
-        Assert.Equal(45, universal.Colors.Count);
-        Assert.Equal("#FFD2A1", universal.Colors[0]);
-        Assert.Equal("#007500", universal.Colors[^1]);
+        Assert.Equal(46, universal.Colors.Count);
+        Assert.Equal("#C0C0C0", universal.Colors[0]);
+        Assert.Equal("#5C00B8", universal.Colors[^1]);
         Assert.DoesNotContain("#404040", universal.Colors);
         Assert.DoesNotContain("#000000", universal.Colors);
     }
