@@ -285,7 +285,7 @@ public partial class MainWindow : Window
     {
         var dirty = HasAnyDirty;
         DirtyLabel.Text = _musicPage is { IsMusicPresetChanged: true }
-            ? "● 音乐预设修改将随本次“保存并应用”一并保存"
+            ? "● 音乐预设参数已修改，点击“保存并应用”生效"
             : dirty ? "● 有尚未保存的修改" : "✓ 设置已保存";
         DirtyLabel.Foreground = (Brush)Application.Current.Resources[dirty ? "Brush.Warning" : "Brush.Success"];
         RevertButton.IsEnabled = dirty;
