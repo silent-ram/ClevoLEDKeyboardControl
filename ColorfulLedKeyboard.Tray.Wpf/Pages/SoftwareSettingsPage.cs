@@ -555,16 +555,34 @@ public sealed class SoftwareSettingsPage : UserControl
             FileName = $"ClevoLEDKeyboardControl-{DateTime.Now:yyyyMMdd-HHmmss}.json"
         };
         if (dialog.ShowDialog(Window.GetWindow(this)) != true) return;
-        var options = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
-        options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
-        File.WriteAllText(dialog.FileName, System.Text.Json.JsonSerializer.Serialize(new SettingsStore().Load(), options));
+        try
+        {
+            var options = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+            options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+            File.WriteAllText(dialog.FileName, System.Text.Json.JsonSerializer.Serialize(new SettingsStore().Load(), options));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            System.Windows.MessageBox.Show($"无法写入所选位置：{ex.Message}", "导出配置",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     private void ImportConfiguration()
     {
         var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "JSON 配置|*.json", CheckFileExists = true };
         if (dialog.ShowDialog(Window.GetWindow(this)) != true) return;
-        var json = File.ReadAllText(dialog.FileName);
+        string json;
+        try
+        {
+            json = File.ReadAllText(dialog.FileName);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            System.Windows.MessageBox.Show($"无法读取所选文件：{ex.Message}", "导入配置",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
         if (!SettingsStore.TryParse(json, out var settings, out var error))
         {
             System.Windows.MessageBox.Show($"配置验证失败，当前设置未改变：{error}", "导入配置",

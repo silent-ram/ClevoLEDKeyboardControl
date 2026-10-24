@@ -49,7 +49,9 @@ public sealed class AutomationRuleDialog : Window
     private readonly System.Windows.Controls.ComboBox _notification = MakeCombo(["继承全局", "强制开启", "强制关闭"]);
     private readonly List<UIElement> _musicOnly = [];
     private readonly List<UIElement> _notSchedule = [];
-    private readonly List<UIElement> _notMusic = [];
+    private UIElement _actionRow = null!;
+    private UIElement _effectTypeRow = null!;
+    private UIElement _presetRow = null!;
     private TextBlock _presetRowLabel = null!;
 
     private AutomationRuleDialog(RuleKind kind, object rule, EffectPresetSettings effects, IEnumerable<MusicPreset> music)
@@ -98,13 +100,13 @@ public sealed class AutomationRuleDialog : Window
         _target.Items.Add("关闭灯光");
         _target.SelectionChanged += (_, _) => RefreshPresets();
         stack.Children.Add(Row("动作", _target));
-        // 音乐规则固定切换音乐预设，“动作/灯效类型”是灯效侧概念，对音乐规则隐藏。
-        _notMusic.Add(stack.Children[^1]);
+        _actionRow = stack.Children[^1];
         foreach (var label in EffectTypes.Select(EffectLabel)) _effectType.Items.Add(label);
         _effectType.SelectionChanged += (_, _) => RefreshPresets();
         stack.Children.Add(Row("灯效类型", _effectType));
-        _notMusic.Add(stack.Children[^1]);
+        _effectTypeRow = stack.Children[^1];
         stack.Children.Add(Row("目标预设", _preset));
+        _presetRow = stack.Children[^1];
         _presetRowLabel = (TextBlock)((Grid)stack.Children[^1]).Children[0];
         stack.Children.Add(Row("颜色来源", _colorSource));
         _musicOnly.Add(stack.Children[^1]);
@@ -201,9 +203,8 @@ public sealed class AutomationRuleDialog : Window
         _colorSource.Visibility = _kind == RuleKind.Music ? Visibility.Visible : Visibility.Collapsed;
         foreach (var element in _musicOnly) element.Visibility = _kind == RuleKind.Music ? Visibility.Visible : Visibility.Collapsed;
         foreach (var element in _notSchedule) element.IsEnabled = _kind != RuleKind.Schedule;
-        foreach (var element in _notMusic) element.Visibility = _kind == RuleKind.Music ? Visibility.Collapsed : Visibility.Visible;
-        _presetRowLabel.Text = _kind == RuleKind.Music ? "音乐预设" : "目标预设";
         _target.IsEnabled = _kind != RuleKind.Music;
+        UpdateTargetVisibility();
     }
 
     private bool Save()
@@ -312,6 +313,21 @@ public sealed class AutomationRuleDialog : Window
             }
         }
         if (_preset.Items.Count > 0) _preset.SelectedIndex = index;
+        UpdateTargetVisibility();
+    }
+
+    /// <summary>目标相关行可见性联动：动作行仅音乐规则隐藏；灯效类型行只在“灯效预设”目标下有意义；
+    /// 目标预设行在灯效/音乐预设下显示（音乐规则固定音乐预设并改行标签），“关闭灯光”下两者都无意义。</summary>
+    private void UpdateTargetVisibility()
+    {
+        _actionRow.Visibility = _kind == RuleKind.Music ? Visibility.Collapsed : Visibility.Visible;
+        var target = CurrentTarget();
+        var lightingTarget = _kind != RuleKind.Music && target == SceneTargetKind.LightingPreset;
+        _effectTypeRow.Visibility = lightingTarget ? Visibility.Visible : Visibility.Collapsed;
+        _presetRow.Visibility = _kind == RuleKind.Music || target != SceneTargetKind.Off
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        _presetRowLabel.Text = _kind == RuleKind.Music ? "音乐预设" : "目标预设";
     }
 
     private void FindOrAddSession(string value)

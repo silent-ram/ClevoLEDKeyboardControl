@@ -177,7 +177,7 @@ public sealed class WpfTrayContext : IDisposable
             ? "当前：灯光已关闭"
             : fresh && !string.IsNullOrWhiteSpace(status!.ActiveMusicApplication)
                 ? $"当前：{status.ActiveMusicApplication} · 音乐模式"
-                : _settings.OperatingMode == OperatingMode.Music ? "当前：音乐模式" : $"当前：灯效模式 · {_settings.Effect.Type}";
+                : _settings.OperatingMode == OperatingMode.Music ? "当前：音乐模式" : $"当前：灯效模式 · {EffectTypeLabel(_settings.Effect.Type)}";
         menu.Items.Add(MakeItem(current, isEnabled: false));
         if (fresh && !string.IsNullOrWhiteSpace(status!.TrackTitle))
             menu.Items.Add(MakeItem($"歌曲：{status.TrackTitle}{(string.IsNullOrWhiteSpace(status.TrackArtist) ? "" : " - " + status.TrackArtist)}", isEnabled: false));
@@ -186,6 +186,18 @@ public sealed class WpfTrayContext : IDisposable
         if (fresh && !string.IsNullOrWhiteSpace(status!.AlbumColor))
             menu.Items.Add(MakeItem($"封面：{status.AlbumColor} · {status.AudioCaptureMode}", isEnabled: false));
     }
+
+    // 与 BuildEffectMenu 的菜单标签保持一致的中文灯效名，避免状态行直显英文枚举。
+    private static string EffectTypeLabel(EffectType type) => type switch
+    {
+        EffectType.Static => "固定颜色",
+        EffectType.Rainbow => "RGB 循环",
+        EffectType.Breathing => "单色呼吸",
+        EffectType.Sequence => "循环呼吸",
+        EffectType.Pulse => "脉冲",
+        EffectType.Heartbeat => "心跳",
+        _ => type.ToString()
+    };
 
     private MenuItem BuildAutomationMenu()
     {
