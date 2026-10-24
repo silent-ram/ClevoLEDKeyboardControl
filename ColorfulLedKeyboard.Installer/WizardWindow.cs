@@ -78,6 +78,8 @@ internal sealed class WizardWindow : Form
         MaximizeBox = false;
         MinimizeBox = false;
         ClientSize = new Size(560, 400);
+        AutoScaleMode = AutoScaleMode.Dpi;
+        AutoScaleDimensions = new SizeF(96F, 96F);
         BackColor = InstallerTheme.Window;
         Font = InstallerTheme.BaseFont;
         ShowInTaskbar = false;
@@ -185,6 +187,7 @@ internal sealed class WizardWindow : Form
         _langCancel = button;
         button.Width = 84;
         button.Click += (_, _) => Close();
+        CancelButton = button;
         return button;
     }
 
@@ -363,10 +366,8 @@ internal sealed class WizardWindow : Form
 
     private string LanguageSwitchText()
     {
-        // 双语并列展示，点击切换当前语言
-        var current = InstallerStrings.IsEnglish ? "English" : "中文";
-        var other = InstallerStrings.IsEnglish ? "中文" : "English";
-        return $"{current}  ·  点击切换为 {other} / switch to {other}";
+        // 以目标语言书写的一句可执行短语（安装器语言场景的标准做法）
+        return InstallerStrings.IsEnglish ? "切换到中文" : "Switch to English";
     }
 
     // ---- 全新安装：欢迎 → 许可协议 → 安装选项（标准安装流程） ----

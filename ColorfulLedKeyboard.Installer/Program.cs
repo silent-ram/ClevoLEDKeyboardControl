@@ -63,6 +63,8 @@ internal static class Program
     private static int Main(string[] args)
     {
         Log($"Installer started. Args: {string.Join(' ', args)}");
+        // DPI 感知：缺省时进程被系统位图拉伸，缩放显示下全部文字发虚
+        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         InstallerStrings.Set(ResolveLanguagePreference());
         var demo = HasArgument(args, "/preview");
