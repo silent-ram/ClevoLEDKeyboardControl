@@ -28,6 +28,18 @@ internal static class InstallerTheme
     public static readonly Color ButtonHoverFace = Color.FromArgb(238, 238, 238);
     public static readonly Color HoverBorder = Color.FromArgb(160, 160, 160);
 
+    // 光谱签名（托盘关于页同源七色）：用于流光品牌字
+    public static readonly Color[] Spectrum =
+    [
+        Color.FromArgb(255, 78, 66),
+        Color.FromArgb(255, 154, 60),
+        Color.FromArgb(255, 216, 74),
+        Color.FromArgb(74, 222, 128),
+        Color.FromArgb(56, 200, 240),
+        Color.FromArgb(110, 139, 255),
+        Color.FromArgb(224, 92, 232),
+    ];
+
     public static readonly Color Track = Color.FromArgb(230, 230, 230);
     public static readonly Color BarGreen = Color.FromArgb(112, 176, 92);
 

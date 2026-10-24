@@ -331,7 +331,7 @@ internal sealed class WizardWindow : Form
         MakeActionCard(100, InstallerStrings.Get("action.repair"),
             InstallerStrings.Get("action.repairDesc"), primary: true, StartInstall);
 
-        AddLanguageSwitch(196, ShowActionPage);
+        AddLanguageDots(196, ShowActionPage);
     }
 
     private void MakeActionCard(int y, string title, string description, bool primary, Action onClick)
@@ -375,19 +375,46 @@ internal sealed class WizardWindow : Form
     private void ShowWelcomePage()
     {
         var (version, _) = _ops.DescribeInstalledState();
-        RenderChrome(
-            InstallerStrings.Get("welcome.title"),
-            InstallerStrings.Format("welcome.subtitle", version),
+        RenderChrome(InstallerStrings.Get("welcome.title"), null,
             MakeCancelButton(), MakeNextButton(ShowLicensePage));
         _titleLabel.Font = new Font(InstallerTheme.TitleFont.FontFamily, 12.5f, FontStyle.Bold);
         _titleLabel.MaximumSize = new Size(BodyWidth, 0);
 
+        // 品牌行：光谱流光产品名（视觉签名）+ 灰字版本
+        var brand = new SpectrumTitle
+        {
+            Text = AppDisplayName,
+            Font = new Font(InstallerTheme.BaseFont.FontFamily, 12F, FontStyle.Bold),
+            Location = new Point(ContentPad, 58),
+            Size = new Size(BodyWidth, 30),
+            BackColor = Color.Transparent
+        };
+        _content.Controls.Add(brand);
+        var versionLabel = InstallerTheme.MakeLabel(InstallerStrings.Format("welcome.version", version), color: InstallerTheme.Muted);
+        versionLabel.Location = new Point(ContentPad, 92);
+        _content.Controls.Add(versionLabel);
+
         var body = InstallerTheme.MakeLabel(InstallerStrings.Format("welcome.body", AppDisplayName), color: InstallerTheme.Muted);
-        body.Location = new Point(ContentPad, 104);
+        body.Location = new Point(ContentPad, 130);
         body.MaximumSize = new Size(BodyWidth, 0);
         _content.Controls.Add(body);
 
-        AddLanguageSwitch(310, ShowWelcomePage);
+        AddLanguageDots(316, ShowWelcomePage);
+    }
+
+    /// <summary>圆点语言选择：实心圆点=当前语言，点击切换并重渲染本页。</summary>
+    private void AddLanguageDots(int y, Action reRender)
+    {
+        var dots = new LanguageDots(InstallerStrings.IsEnglish ? 1 : 0)
+        {
+            Location = new Point(ContentPad, y)
+        };
+        dots.LanguagePicked += _ =>
+        {
+            _selectedLanguage = InstallerStrings.Current;
+            reRender();
+        };
+        _content.Controls.Add(dots);
     }
 
     private void ShowLicensePage()
@@ -466,21 +493,6 @@ internal sealed class WizardWindow : Form
             _autostart = autostart.Checked;
             StartInstall();
         }
-    }
-
-    /// <summary>语言切换小字（欢迎页与操作页共用；切换后整页重渲染）。</summary>
-    private void AddLanguageSwitch(int y, Action reRender)
-    {
-        var label = InstallerTheme.MakeLabel(LanguageSwitchText(), color: InstallerTheme.Faint);
-        label.Location = new Point(ContentPad, y);
-        label.Cursor = Cursors.Hand;
-        label.Click += (_, _) =>
-        {
-            InstallerStrings.Set(InstallerStrings.IsEnglish ? InstallerStrings.ZhCn : InstallerStrings.EnUs);
-            _selectedLanguage = InstallerStrings.Current;
-            reRender();
-        };
-        _content.Controls.Add(label);
     }
 
     private static string LoadLicenseText()
@@ -746,5 +758,132 @@ internal sealed class WizardWindow : Form
         return ui.StartsWith("zh", StringComparison.OrdinalIgnoreCase)
             ? InstallerStrings.ZhCn
             : InstallerStrings.EnUs;
+    }
+}
+
+/// <summary>光谱流光品牌字：七色渐变填充文字，渐变随时间平移形成流光（产品视觉签名，与托盘关于页同源）。</summary>
+internal sealed class SpectrumTitle : Control
+{
+    private readonly System.Windows.Forms.Timer _timer = new() { Interval = 60 };
+    private float _offset;
+
+    public SpectrumTitle()
+    {
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer |
+                 ControlStyles.UserPaint | ControlStyles.SupportsTransparentBackColor | ControlStyles.ResizeRedraw, true);
+        TabStop = false;
+        _timer.Tick += (_, _) =>
+        {
+            // 单向平移；TileFlipXY 镜像平铺使颜色永远连续，无需回绕
+            _offset += 3f;
+            Invalidate();
+        };
+        _timer.Start();
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        if (string.IsNullOrEmpty(Text) || Width <= 0 || Height <= 0) return;
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+        using var path = new GraphicsPath();
+        var emSize = Font.Size * g.DpiY / 72f;
+        path.AddString(Text, Font.FontFamily, (int)Font.Style, emSize,
+            new PointF(0, 0), StringFormat.GenericDefault);
+        var bounds = new Rectangle(0, 0, Math.Max(1, Width), Math.Max(1, Height));
+        using var brush = new LinearGradientBrush(bounds, Color.Empty, Color.Empty, 0f)
+        {
+            WrapMode = WrapMode.TileFlipXY
+        };
+        var spectrum = InstallerTheme.Spectrum;
+        var blend = new ColorBlend(spectrum.Length)
+        {
+            Colors = spectrum,
+            Positions = Enumerable.Range(0, spectrum.Length)
+                .Select(i => (float)i / (spectrum.Length - 1)).ToArray()
+        };
+        brush.InterpolationColors = blend;
+        brush.TranslateTransform(_offset, 0);
+        g.FillPath(brush, path);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _timer.Dispose();
+        base.Dispose(disposing);
+    }
+}
+
+/// <summary>圆点语言选择：实心圆点=当前语言，空心=可切换；点击即切换并通知宿主重渲染。</summary>
+internal sealed class LanguageDots : Control
+{
+    private static readonly string[] Labels = ["中文", "English"];
+    private static readonly string[] Codes = [InstallerStrings.ZhCn, InstallerStrings.EnUs];
+    private int _current;
+
+    public event Action<int>? LanguagePicked;
+
+    public LanguageDots(int current)
+    {
+        _current = Math.Clamp(current, 0, 1);
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer |
+                 ControlStyles.UserPaint | ControlStyles.SupportsTransparentBackColor | ControlStyles.ResizeRedraw, true);
+        TabStop = false;
+        BackColor = Color.Transparent;
+        Cursor = Cursors.Hand;
+        Width = 220;
+        Height = 26;
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+        int x = 0;
+        for (var i = 0; i < Labels.Length; i++)
+        {
+            var active = i == _current;
+            var dotRect = new Rectangle(x, Height / 2 - 4, 8, 8);
+            if (active)
+            {
+                using var fill = new SolidBrush(InstallerTheme.Text);
+                g.FillEllipse(fill, dotRect);
+            }
+            else
+            {
+                using var pen = new Pen(InstallerTheme.Faint, 1.4f);
+                g.DrawEllipse(pen, dotRect);
+            }
+            using var font = new Font(Font.FontFamily, 9.5F, active ? FontStyle.Bold : FontStyle.Regular);
+            TextRenderer.DrawText(g, Labels[i], font,
+                new Point(x + 14, Height / 2 - TextRenderer.MeasureText(Labels[i], font).Height / 2),
+                active ? InstallerTheme.Text : InstallerTheme.Muted);
+            x += 14 + TextRenderer.MeasureText(Labels[i], font).Width + 26;
+        }
+    }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        base.OnMouseDown(e);
+        int x = 0;
+        for (var i = 0; i < Labels.Length; i++)
+        {
+            using var font = new Font(Font.FontFamily, 9.5F, i == _current ? FontStyle.Bold : FontStyle.Regular);
+            var groupWidth = 14 + TextRenderer.MeasureText(Labels[i], font).Width + 26;
+            if (e.X >= x && e.X < x + groupWidth)
+            {
+                if (i != _current)
+                {
+                    _current = i;
+                    InstallerStrings.Set(Codes[i]);
+                    Invalidate();
+                    LanguagePicked?.Invoke(i);
+                }
+                return;
+            }
+            x += groupWidth;
+        }
     }
 }

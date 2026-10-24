@@ -21,8 +21,9 @@ internal static class InstallerStrings
         ["wizard.back"] = ("上一步", "Back"),
 
         ["welcome.title"] = ("欢迎使用安装向导", "Welcome to the setup wizard"),
-        ["welcome.subtitle"] = ("ClevoLEDKeyboardControl　版本 {0}", "ClevoLEDKeyboardControl　Version {0}"),
-        ["welcome.body"] = ("本向导将安装 {0}。建议关闭其他应用程序后继续。", "This wizard will install {0}. Close other applications before continuing."),
+        ["welcome.subtitle"] = ("版本 {0}", "Version {0}"),
+        ["welcome.version"] = ("版本 {0}", "Version {0}"),
+        ["welcome.body"] = ("将安装到系统程序目录并注册后台灯控服务，点击“下一步”继续。", "Installs to the system programs folder and registers the background lighting service. Click “Next” to continue."),
 
         ["lic.title"] = ("许可协议", "License agreement"),
         ["lic.accept"] = ("我已阅读并接受本协议（GPL-3.0）", "I have read and accept the agreement (GPL-3.0)"),
