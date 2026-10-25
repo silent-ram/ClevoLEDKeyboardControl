@@ -343,13 +343,21 @@ internal sealed class WizardWindow : Form
             BackColor = InstallerTheme.Card,
             Cursor = Cursors.Hand
         };
-        var accent = new Panel { Location = new Point(0, 0), Size = new Size(4, 62), BackColor = primary ? InstallerTheme.Accent : InstallerTheme.CardBorder };
+        // 点击/悬停必须同时挂在子控件上：WinForms 事件不冒泡，只挂卡片时点在文字上会没反应
+        void Hook(Control control)
+        {
+            control.Click += (_, _) => onClick();
+            control.MouseEnter += (_, _) => card.BackColor = Color.FromArgb(238, 244, 252);
+            control.MouseLeave += (_, _) => card.BackColor = InstallerTheme.Card;
+        }
+
+        var accent = new Panel { Location = new Point(0, 0), Size = new Size(Dpi(4), Dpi(62)), BackColor = primary ? InstallerTheme.Accent : InstallerTheme.CardBorder };
         var titleLabel = InstallerTheme.MakeLabel(title, InstallerTheme.SectionFont);
         if (primary) _actionCardTitle = titleLabel;
-        titleLabel.Location = new Point(16, 10);
+        titleLabel.Location = new Point(Dpi(16), Dpi(10));
         var descLabel = InstallerTheme.MakeLabel(description, color: InstallerTheme.Muted);
-        descLabel.Location = new Point(16, 36);
-        descLabel.MaximumSize = new Size(BodyWidth - 28, 0);
+        descLabel.Location = new Point(Dpi(16), Dpi(36));
+        descLabel.MaximumSize = new Size(BodyWidth - Dpi(32), 0);
         card.Controls.Add(accent);
         card.Controls.Add(titleLabel);
         card.Controls.Add(descLabel);
@@ -358,9 +366,10 @@ internal sealed class WizardWindow : Form
             using var pen = new Pen(InstallerTheme.CardBorder);
             e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1);
         };
-        card.Click += (_, _) => onClick();
-        card.MouseEnter += (_, _) => card.BackColor = Color.FromArgb(238, 244, 252);
-        card.MouseLeave += (_, _) => card.BackColor = InstallerTheme.Card;
+        Hook(card);
+        Hook(accent);
+        Hook(titleLabel);
+        Hook(descLabel);
         _content.Controls.Add(card);
     }
 
