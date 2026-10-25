@@ -329,7 +329,7 @@ internal sealed class WizardWindow : Form
             MakeCancelButton());
 
         var repair = MakeActionCard(Dpi(100), InstallerStrings.Get("action.repair"),
-            InstallerStrings.Get("action.repairDesc"), primary: true, StartInstall);
+            InstallerStrings.Format("action.repairDesc", SetupVersion()), primary: true, StartInstall);
 
         // 卸载入口：调起已安装的卸载器（其自带确认页与“保留设置”勾选）
         var uninstallTop = Dpi(100) + repair.Height + Dpi(14);
@@ -338,6 +338,22 @@ internal sealed class WizardWindow : Form
         _ = uninstall;
 
         AddLanguageDots(uninstallTop + uninstall.Height + Dpi(20), ShowActionPage);
+    }
+
+    /// <summary>本安装包携带的版本（InformationalVersion 去哈希），用于“将安装版本”展示。</summary>
+    private static string SetupVersion()
+    {
+        var attributes = System.Reflection.Assembly.GetExecutingAssembly()
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false);
+        var informational = attributes.Length > 0
+            ? ((System.Reflection.AssemblyInformationalVersionAttribute)attributes[0]).InformationalVersion
+            : "";
+        if (!string.IsNullOrWhiteSpace(informational))
+        {
+            var plus = informational.IndexOf('+');
+            return plus > 0 ? informational[..plus] : informational;
+        }
+        return System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
     }
 
     private void LaunchUninstaller()
