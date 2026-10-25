@@ -899,3 +899,64 @@ internal sealed class LanguageDots : Control
         }
     }
 }
+
+/// <summary>可点击的行动卡片（自绘单一表面）：左侧色条 + 标题 + 描述 + 边框 + 悬停高亮。</summary>
+internal sealed class ActionCard : Control
+{
+    private readonly string _title;
+    private readonly string _description;
+    private readonly bool _primary;
+    private bool _hover;
+
+    public event Action? Activated;
+
+    public ActionCard(string title, string description, bool primary)
+    {
+        _title = title;
+        _description = description;
+        _primary = primary;
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer |
+                 ControlStyles.UserPaint | ControlStyles.SupportsTransparentBackColor | ControlStyles.ResizeRedraw, true);
+        BackColor = InstallerTheme.Card;
+        Cursor = Cursors.Hand;
+    }
+
+    protected override void OnMouseEnter(EventArgs e)
+    {
+        base.OnMouseEnter(e);
+        _hover = true;
+        Invalidate();
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        base.OnMouseLeave(e);
+        _hover = false;
+        Invalidate();
+    }
+
+    protected override void OnClick(EventArgs e)
+    {
+        base.OnClick(e);
+        Activated?.Invoke();
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.Clear(_hover ? Color.FromArgb(238, 244, 252) : InstallerTheme.Card);
+        var u = Math.Max(1, DeviceDpi / 96);
+        using (var accent = new SolidBrush(_primary ? InstallerTheme.Accent : InstallerTheme.CardBorder))
+        {
+            g.FillRectangle(accent, 0, 0, 4 * u, Height);
+        }
+        TextRenderer.DrawText(g, _title, new Font(Font.FontFamily, 10F, FontStyle.Bold),
+            new Point(16 * u, 10 * u), InstallerTheme.Text);
+        TextRenderer.DrawText(g, _description, Font,
+            new Rectangle(16 * u, 36 * u, Width - 32 * u, Height - 36 * u),
+            InstallerTheme.Muted, TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis);
+        using var pen = new Pen(InstallerTheme.CardBorder);
+        g.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
+    }
+}
