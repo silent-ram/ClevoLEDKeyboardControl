@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$Configuration = "Release",
     [string]$Version = ""
 )
@@ -8,14 +8,14 @@ $root = Split-Path -Parent $PSScriptRoot
 
 # 防呆：安装器 manifest 必须声明管理员提权（调试时可能临时改成 asInvoker 忘恢复，
 # 打出的包装不上且不易察觉）
-$manifestPath = Join-Path $root "ColorfulLedKeyboard.Installerpp.manifest"
+$manifestPath = Join-Path $root "ColorfulLedKeyboard.Installer/app.manifest"
 if (-not (Select-String -LiteralPath $manifestPath -Pattern 'requireAdministrator' -Quiet)) {
     throw "app.manifest 未声明 requireAdministrator（疑似调试遗留 asInvoker），拒绝打包。"
 }
 $publishRoot = Join-Path $root "publish"
 $servicePublish = Join-Path $publishRoot "Service"
 $trayPublish = Join-Path $publishRoot "Tray"
-$installerPayload = Join-Path $root "ColorfulLedKeyboard.Installer\Payload\payload.zip"
+$installerPayload = Join-Path $root "ColorfulLedKeyboard.Installer/Payload/payload.zip"
 $installerPublish = Join-Path $publishRoot "Setup"
 $driverDllName = "InsydeDCHU.dll"
 $versionArgs = @()
@@ -33,7 +33,7 @@ function Get-DriverCandidatePaths {
         $env:CLEVO_DRIVER_DLL
     }
 
-    Join-Path $root "assets\driver\$driverDllName"
+    Join-Path $root "assets/driver/$driverDllName"
 
     $programRoots = @(
         ${env:ProgramFiles(x86)},
@@ -64,7 +64,7 @@ if (Test-Path $publishRoot) {
 
 New-Item -ItemType Directory -Force -Path $servicePublish, $trayPublish, $installerPublish | Out-Null
 
-dotnet publish (Join-Path $root "ColorfulLedKeyboard.Service\ColorfulLedKeyboard.Service.csproj") `
+dotnet publish (Join-Path $root "ColorfulLedKeyboard.Service/ColorfulLedKeyboard.Service.csproj") `
     -c $Configuration `
     -r win-x64 `
     --self-contained true `
@@ -75,7 +75,7 @@ dotnet publish (Join-Path $root "ColorfulLedKeyboard.Service\ColorfulLedKeyboard
 
 if ($LASTEXITCODE -ne 0) { throw "Service publish failed (exit $LASTEXITCODE)." }
 
-$trayProject = Join-Path $root "ColorfulLedKeyboard.Tray.Wpf\ColorfulLedKeyboard.Tray.Wpf.csproj"
+$trayProject = Join-Path $root "ColorfulLedKeyboard.Tray.Wpf/ColorfulLedKeyboard.Tray.Wpf.csproj"
 dotnet publish $trayProject `
     -c $Configuration `
     -r win-x64 `
@@ -104,7 +104,7 @@ Copy-Item -Path (Join-Path $trayPublish "*") -Destination (Join-Path $payloadSta
 
 $driverSource = Get-FirstExistingDriver
 if ($driverSource) {
-    Copy-Item -LiteralPath $driverSource -Destination (Join-Path $payloadStage "Service\$driverDllName") -Force
+    Copy-Item -LiteralPath $driverSource -Destination (Join-Path $payloadStage "Service/$driverDllName") -Force
     Write-Host "Bundled $driverDllName from $driverSource"
 }
 else {
@@ -115,7 +115,7 @@ if ($trayStageCount -eq 0) { throw "Payload staging has no Tray files; refusing 
 
 Compress-Archive -Path (Join-Path $payloadStage "*") -DestinationPath $installerPayload -Force
 
-dotnet publish (Join-Path $root "ColorfulLedKeyboard.Installer\ColorfulLedKeyboard.Installer.csproj") `
+dotnet publish (Join-Path $root "ColorfulLedKeyboard.Installer/ColorfulLedKeyboard.Installer.csproj") `
     -c $Configuration `
     -r win-x64 `
     --self-contained true `
@@ -123,6 +123,8 @@ dotnet publish (Join-Path $root "ColorfulLedKeyboard.Installer\ColorfulLedKeyboa
     -p:EnableCompressionInSingleFile=true `
     -o $installerPublish `
     @versionArgs
+
+if ($LASTEXITCODE -ne 0) { throw "Installer publish failed (exit $LASTEXITCODE)." }
 
 Copy-Item -LiteralPath (Join-Path $installerPublish "ClevoLEDKeyboardControlSetup.exe") -Destination (Join-Path $publishRoot "ClevoLEDKeyboardControlSetup.exe") -Force
 

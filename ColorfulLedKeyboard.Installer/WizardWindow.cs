@@ -318,8 +318,6 @@ internal sealed class WizardWindow : Form
 
     // ---- 操作选择页（已安装：一键修复或更新） ----
 
-    private Label _actionCardTitle;
-
     private void ShowActionPage()
     {
         var (version, serviceStatus) = _ops.DescribeInstalledState();
@@ -336,40 +334,17 @@ internal sealed class WizardWindow : Form
 
     private void MakeActionCard(int y, string title, string description, bool primary, Action onClick)
     {
-        var card = new Panel
+        // 单一自绘表面（ActionCard，见文件尾）：无子控件，整卡同一命中区，点击不再丢失。
+        // 卡高按描述换行后的实际高度动态计算——固定值在不同 DPI/字数下会裁掉第二行。
+        var u = Math.Max(1, DeviceDpi / 96);
+        var descHeight = TextRenderer.MeasureText(description, InstallerTheme.BaseFont,
+            new Size(BodyWidth - 32 * u, int.MaxValue), TextFormatFlags.WordBreak).Height;
+        var card = new ActionCard(title, description, primary)
         {
             Location = new Point(Pad, y),
-            Size = new Size(BodyWidth, Dpi(62)),
-            BackColor = InstallerTheme.Card,
-            Cursor = Cursors.Hand
+            Size = new Size(BodyWidth, Math.Max(Dpi(68), 36 * u + descHeight + 10 * u))
         };
-        // 点击/悬停必须同时挂在子控件上：WinForms 事件不冒泡，只挂卡片时点在文字上会没反应
-        void Hook(Control control)
-        {
-            control.Click += (_, _) => onClick();
-            control.MouseEnter += (_, _) => card.BackColor = Color.FromArgb(238, 244, 252);
-            control.MouseLeave += (_, _) => card.BackColor = InstallerTheme.Card;
-        }
-
-        var accent = new Panel { Location = new Point(0, 0), Size = new Size(Dpi(4), Dpi(62)), BackColor = primary ? InstallerTheme.Accent : InstallerTheme.CardBorder };
-        var titleLabel = InstallerTheme.MakeLabel(title, InstallerTheme.SectionFont);
-        if (primary) _actionCardTitle = titleLabel;
-        titleLabel.Location = new Point(Dpi(16), Dpi(10));
-        var descLabel = InstallerTheme.MakeLabel(description, color: InstallerTheme.Muted);
-        descLabel.Location = new Point(Dpi(16), Dpi(36));
-        descLabel.MaximumSize = new Size(BodyWidth - Dpi(32), 0);
-        card.Controls.Add(accent);
-        card.Controls.Add(titleLabel);
-        card.Controls.Add(descLabel);
-        card.Paint += (_, e) =>
-        {
-            using var pen = new Pen(InstallerTheme.CardBorder);
-            e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1);
-        };
-        Hook(card);
-        Hook(accent);
-        Hook(titleLabel);
-        Hook(descLabel);
+        card.Activated += onClick;
         _content.Controls.Add(card);
     }
 
