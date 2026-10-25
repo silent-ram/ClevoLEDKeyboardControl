@@ -115,6 +115,29 @@ public partial class AboutPage : UserControl
         }
     }
 
+    /// <summary>被动更新提示（数据来自软件设置页的检查结果）：有新版本时红字显示，点击弹渠道选择。</summary>
+    private string? _updateLatestVersion;
+
+    public void SetUpdateAvailability(string? latestVersion)
+    {
+        _updateLatestVersion = string.IsNullOrWhiteSpace(latestVersion) ? null : latestVersion;
+        if (_updateLatestVersion is null)
+        {
+            UpdateBadgeText.Text = "";
+            UpdateBadgeText.Visibility = Visibility.Collapsed;
+            return;
+        }
+        UpdateBadgeText.Text = AppStrings.Format("menu.updateFound", _updateLatestVersion);
+        UpdateBadgeText.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>直接打开渠道选择弹窗（不重新检查，用已知的最新版本号）。</summary>
+    private void OpenUpdateChannels(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (_updateLatestVersion is null) return;
+        Dialogs.UpdateStatusDialog.ShowAvailable(_updateLatestVersion, ReadVersion());
+    }
+
     private static void OpenUrl(string url) =>
         Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
 }

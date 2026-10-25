@@ -546,6 +546,9 @@ public sealed class SoftwareSettingsPage : UserControl
                 : "";
             _updateAvailable.Visibility = available ? Visibility.Visible : Visibility.Collapsed;
             NavigationBadgeChanged?.Invoke(this, EventArgs.Empty);
+            UpdateAvailableChanged?.Invoke(this, available
+                ? (result!.LatestVersion!.ToString(3), (string?)result!.ReleaseUrl)
+                : (string.Empty, null));
         });
     }
 
@@ -559,6 +562,9 @@ public sealed class SoftwareSettingsPage : UserControl
 
     /// <summary>导航徽标文本（供宿主设置页签上的"新版本"提示）。</summary>
     public string? UpdateBadge => _updateAvailable.Visibility == Visibility.Visible ? AppStrings.Get("set.update.badgeShort") : null;
+
+    /// <summary>更新可用状态变化（Latest 为空表示清除）；关于页的被动提示订阅同一数据。</summary>
+    public event EventHandler<(string Latest, string? ReleaseUrl)>? UpdateAvailableChanged;
 
     // ---- 开机自启动（即时生效）----
 

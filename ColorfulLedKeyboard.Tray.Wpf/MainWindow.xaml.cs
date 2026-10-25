@@ -220,6 +220,8 @@ public partial class MainWindow : Window
         softwarePage.LoadFromStore(new SettingsStore().Load());
 
         var aboutPage = new AboutPage();
+        // 关于页被动提示与软件设置页的检查结果同源（自动检查/打开窗口时的检查都会刷新）
+        softwarePage.UpdateAvailableChanged += (_, info) => aboutPage.SetUpdateAvailability(string.IsNullOrWhiteSpace(info.Latest) ? null : info.Latest);
         _pages.Add(aboutPage);
     }
 

@@ -19,6 +19,10 @@
                                    FontSize="12" Margin="14,0,0,0" Cursor="Hand"
                                    Foreground="{DynamicResource Brush.Primary}"
                                    MouseLeftButtonDown="CheckForUpdates" />
+                        <TextBlock x:Name="UpdateBadgeText" FontSize="12" FontWeight="Bold" Margin="14,0,0,0"
+                                   Cursor="Hand" Visibility="Collapsed"
+                                   Foreground="{DynamicResource Brush.Error}"
+                                   MouseLeftButtonDown="OpenUpdateChannels" />
                     </StackPanel>
                     <TextBlock Text="{DynamicResource str.about.tagline}" FontSize="12"
                                Foreground="{DynamicResource Brush.MutedText}" Margin="0,4,0,0" />
