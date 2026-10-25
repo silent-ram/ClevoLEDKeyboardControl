@@ -66,8 +66,6 @@ public sealed class SoftwareSettingsPage : UserControl
         Margin = new Thickness(0, 0, 0, 4),
         Visibility = Visibility.Collapsed
     };
-    private string? _updateReleaseUrl;
-    private string? _updateLatestVersion;
     private int _checkingUpdates;
 
     private readonly System.Windows.Controls.CheckBox _userImprovementPlanEnabled = MakeCheck("set.telemetry.enable");
@@ -109,13 +107,6 @@ public sealed class SoftwareSettingsPage : UserControl
         _updateInterval.SelectionChanged += (_, _) => MarkDirty();
         _userImprovementPlanEnabled.Checked += (_, _) => MarkDirty();
         _userImprovementPlanEnabled.Unchecked += (_, _) => MarkDirty();
-        _updateAvailable.MouseLeftButtonDown += (_, _) =>
-        {
-            // 渠道选择弹窗（GitHub / 夸克），与托盘、关于页同一形态
-            if (_updateLatestVersion is null) return;
-            Dialogs.UpdateStatusDialog.ShowAvailable(_updateLatestVersion, AssemblyVersion3(),
-                _updateReleaseUrl);
-        };
 
         // 开机自启动是即时生效的系统开关，不参与"保存并应用"（WinForms 语义一致）。
         _startupEnabled.Checked += (_, _) => ApplyStartup();
@@ -140,7 +131,8 @@ public sealed class SoftwareSettingsPage : UserControl
 
         var stack = new StackPanel { Margin = new Thickness(18, 18, 18, 28), MaxWidth = 832 };
         stack.Children.Add(BuildAppearanceCard());
-        stack.Children.Add(MakeCard("set.card.update", Row("set.row.autoCheck", _updateInterval), _updateAvailable));
+        // 更新提示不在此卡展示：统一收敛到关于页的被动红字提示与导航“新版本”徽标（用户指定）
+        stack.Children.Add(MakeCard("set.card.update", Row("set.row.autoCheck", _updateInterval)));
         stack.Children.Add(MakeCard("set.card.telemetry", PlainRow(_userImprovementPlanEnabled), PlainRow(_userPlanDescription)));
         stack.Children.Add(MakeCard("set.card.startup", PlainRow(_startupEnabled), PlainRow(_startupState)));
         stack.Children.Add(MakeCard("set.card.config",
@@ -539,11 +531,11 @@ public sealed class SoftwareSettingsPage : UserControl
         Dispatcher.BeginInvoke(() =>
         {
             var available = result?.Status == UpdateCheckStatus.Available && result!.LatestVersion is not null;
-            _updateReleaseUrl = available ? result!.ReleaseUrl : null;
-            _updateLatestVersion = available ? result!.LatestVersion!.ToString(3) : null;
             _updateAvailable.Text = available
                 ? AppStrings.Format("set.update.badge", result!.LatestVersion!.ToString(3))
                 : "";
+            // 红色强调可点性：灰色说明文字配“点击”文案会让用户不知道能点（用户反馈）
+            _updateAvailable.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Error");
             _updateAvailable.Visibility = available ? Visibility.Visible : Visibility.Collapsed;
             NavigationBadgeChanged?.Invoke(this, EventArgs.Empty);
             UpdateAvailableChanged?.Invoke(this, available
