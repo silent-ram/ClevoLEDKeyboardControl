@@ -42,9 +42,10 @@ internal static class InstallerStrings
         ["action.title"] = ("已安装", "Already installed"),
         ["action.subtitle"] = ("当前版本：{0}　·　服务：{1}", "Current version: {0} · Service: {1}"),
         ["action.repair"] = ("修复或更新", "Repair or update"),
-        ["action.repairDesc"] = ("安装新版本并保留全部设置。卸载请使用“设置 → 应用”或开始菜单中的卸载入口。", "Install the new version and keep all settings. To uninstall, use Windows Settings → Apps or the Start-menu uninstall entry."),
+        ["action.repairDesc"] = ("安装新版本并保留全部设置。", "Install the new version and keep all settings."),
         ["action.uninstall"] = ("卸载", "Uninstall"),
-        ["action.uninstallDesc"] = ("移除程序与后台服务", "Remove the app and the background service"),
+        ["action.uninstallDesc"] = ("从电脑中移除本软件，可选择保留配置。", "Remove this app from the computer; you can keep your settings."),
+        ["act.uninstall.missing"] = ("未检测到已安装的卸载器，请使用“设置 → 应用”卸载。", "The installed uninstaller was not found. Use Windows Settings → Apps to uninstall."),
 
         ["confirm.title"] = ("卸载 {0}", "Uninstall {0}"),
         ["confirm.text"] = ("将卸载程序与后台服务，并默认删除本机配置。", "This removes the app and the background service, and deletes local configuration by default."),

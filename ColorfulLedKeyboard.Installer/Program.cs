@@ -179,7 +179,24 @@ internal static class Program
             Uninstall: (keepSettings, step) => Uninstall(keepSettings, step),
             InstallDoneText: BuildInstallSuccessMessage,
             UninstallDoneText: BuildUninstallSuccessMessage,
-            DescribeInstalledState: DescribeInstalledStateForWizard);
+            DescribeInstalledState: DescribeInstalledStateForWizard,
+            LaunchUninstaller: LaunchInstalledUninstaller);
+    }
+
+    /// <summary>安装界面发起卸载：调起已安装的卸载器（其自带确认页），本进程退出让位。</summary>
+    private static string? LaunchInstalledUninstaller()
+    {
+        if (!File.Exists(UninstallerExe))
+        {
+            return InstallerStrings.Get("act.uninstall.missing");
+        }
+
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(UninstallerExe)
+        {
+            UseShellExecute = true
+        });
+        Application.Exit();
+        return null;
     }
 
     private static (string Version, string ServiceStatus) DescribeInstalledStateForWizard()

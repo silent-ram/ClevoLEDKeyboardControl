@@ -7,12 +7,14 @@ namespace ColorfulLedKeyboard.Installer;
 
 /// <summary>引擎操作委托：由 Program 注入，向导只负责编排页面与展示。
 /// Install 携带安装选项（桌面快捷方式/开机自启动），由标准流程的选项页或静默路径提供。</summary>
+/// <summary>LaunchUninstaller：由安装器发起卸载时调起已安装的卸载器；返回错误文案，null = 已启动。</summary>
 internal sealed record WizardOps(
     Action<Action<string>, bool, bool> Install,
     Action<bool, Action<string>> Uninstall,
     Func<string> InstallDoneText,
     Func<bool, string> UninstallDoneText,
-    Func<(string Version, string ServiceStatus)> DescribeInstalledState);
+    Func<(string Version, string ServiceStatus)> DescribeInstalledState,
+    Func<string?> LaunchUninstaller);
 
 /// <summary>
 /// 经典 NSIS/MUI2 风格安装向导：白底内容区 + 左侧蓝色品牌栏 + 底部「上一步/下一步/取消」。
@@ -82,7 +84,7 @@ internal sealed class WizardWindow : Form
         ClientSize = new Size(Dpi(560), Dpi(416));
         BackColor = InstallerTheme.Window;
         Font = InstallerTheme.BaseFont;
-        ShowInTaskbar = false;
+        ShowInTaskbar = true;
 
         _buttonBar = new Panel { Dock = DockStyle.Bottom, Height = Dpi(52), BackColor = InstallerTheme.Window };
         _content = new Panel { Dock = DockStyle.Fill, BackColor = InstallerTheme.Window };
@@ -326,13 +328,29 @@ internal sealed class WizardWindow : Form
             InstallerStrings.Format("action.subtitle", version, serviceStatus),
             MakeCancelButton());
 
-        MakeActionCard(Dpi(100), InstallerStrings.Get("action.repair"),
+        var repair = MakeActionCard(Dpi(100), InstallerStrings.Get("action.repair"),
             InstallerStrings.Get("action.repairDesc"), primary: true, StartInstall);
 
-        AddLanguageDots(Dpi(196), ShowActionPage);
+        // 卸载入口：调起已安装的卸载器（其自带确认页与“保留设置”勾选）
+        var uninstallTop = Dpi(100) + repair.Height + Dpi(14);
+        var uninstall = MakeActionCard(uninstallTop, InstallerStrings.Get("action.uninstall"),
+            InstallerStrings.Get("action.uninstallDesc"), primary: false, LaunchUninstaller);
+        _ = uninstall;
+
+        AddLanguageDots(uninstallTop + uninstall.Height + Dpi(20), ShowActionPage);
     }
 
-    private void MakeActionCard(int y, string title, string description, bool primary, Action onClick)
+    private void LaunchUninstaller()
+    {
+        var error = _ops.LaunchUninstaller();
+        if (error is not null)
+        {
+            System.Windows.Forms.MessageBox.Show(this, error, InstallerStrings.Get("wizard.title"),
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    private ActionCard MakeActionCard(int y, string title, string description, bool primary, Action onClick)
     {
         // 单一自绘表面（ActionCard，见文件尾）：无子控件，整卡同一命中区，点击不再丢失。
         // 卡高按描述换行后的实际高度动态计算——固定值在不同 DPI/字数下会裁掉第二行。
@@ -346,6 +364,7 @@ internal sealed class WizardWindow : Form
         };
         card.Activated += onClick;
         _content.Controls.Add(card);
+        return card;
     }
 
     private string LanguageSwitchText()
