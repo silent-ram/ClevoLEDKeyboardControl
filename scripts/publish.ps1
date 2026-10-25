@@ -73,6 +73,8 @@ dotnet publish (Join-Path $root "ColorfulLedKeyboard.Service\ColorfulLedKeyboard
     -o $servicePublish `
     @versionArgs
 
+if ($LASTEXITCODE -ne 0) { throw "Service publish failed (exit $LASTEXITCODE)." }
+
 $trayProject = Join-Path $root "ColorfulLedKeyboard.Tray.Wpf\ColorfulLedKeyboard.Tray.Wpf.csproj"
 dotnet publish $trayProject `
     -c $Configuration `
@@ -82,6 +84,10 @@ dotnet publish $trayProject `
     -p:EnableCompressionInSingleFile=true `
     -o $trayPublish `
     @versionArgs
+
+if ($LASTEXITCODE -ne 0) { throw "Tray publish failed (exit $LASTEXITCODE)." }
+$trayOutputCount = (Get-ChildItem -LiteralPath $trayPublish -File -ErrorAction SilentlyContinue | Measure-Object).Count
+if ($trayOutputCount -eq 0) { throw "Tray publish produced no files; refusing to build installer without the tray app." }
 
 if (Test-Path $installerPayload) {
     Remove-Item -LiteralPath $installerPayload -Force
@@ -104,6 +110,9 @@ if ($driverSource) {
 else {
     Write-Warning "$driverDllName was not found. The setup executable will still be built; it will try to copy the driver from the user's OEM Control Center during installation."
 }
+$trayStageCount = (Get-ChildItem -LiteralPath (Join-Path $payloadStage "Tray") -File -Recurse -ErrorAction SilentlyContinue | Measure-Object).Count
+if ($trayStageCount -eq 0) { throw "Payload staging has no Tray files; refusing to package." }
+
 Compress-Archive -Path (Join-Path $payloadStage "*") -DestinationPath $installerPayload -Force
 
 dotnet publish (Join-Path $root "ColorfulLedKeyboard.Installer\ColorfulLedKeyboard.Installer.csproj") `

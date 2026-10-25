@@ -549,11 +549,13 @@ public sealed class SoftwareSettingsPage : UserControl
         });
     }
 
-    private static string AssemblyVersion3() =>
-        (System.Reflection.Assembly.GetExecutingAssembly()
-            .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()
-            ?.InformationalVersion is { } info ? info : "")
-        .Split('+')[0];
+    private static string AssemblyVersion3()
+    {
+        var attributes = System.Reflection.Assembly.GetExecutingAssembly()
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false);
+        var info = attributes.Length > 0 ? ((System.Reflection.AssemblyInformationalVersionAttribute)attributes[0]).InformationalVersion : "";
+        return info.Split('+')[0];
+    }
 
     /// <summary>导航徽标文本（供宿主设置页签上的"新版本"提示）。</summary>
     public string? UpdateBadge => _updateAvailable.Visibility == Visibility.Visible ? AppStrings.Get("set.update.badgeShort") : null;
