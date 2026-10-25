@@ -322,6 +322,7 @@ internal static class AppStrings
         ["ov.status.check"] = ("需要检查", "Needs attention"),
         ["about.tagline"] = ("面向 Clevo 兼容机型的键盘背光灯效控制程序。", "Keyboard backlight control for Clevo-compatible laptops."),
         ["about.repo"] = ("打开 GitHub 仓库", "Open GitHub repository"),
+        ["about.quark"] = ("夸克网盘下载", "Download via Quark"),
         ["about.issues"] = ("反馈问题", "Report an issue"),
 
         // ---- 场景自动化编辑器 ----

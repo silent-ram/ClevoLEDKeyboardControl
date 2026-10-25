@@ -12,6 +12,7 @@ public partial class AboutPage : UserControl
 {
     private const string RepositoryUrl = "https://github.com/silent-ram/ClevoLEDKeyboardControl";
     private const string IssuesUrl = "https://github.com/silent-ram/ClevoLEDKeyboardControl/issues";
+    private const string QuarkShareUrl = "https://pan.quark.cn/s/822575d75c7b";
 
     public AboutPage()
     {
@@ -100,6 +101,8 @@ public partial class AboutPage : UserControl
     }
 
     private void OpenRepository(object sender, RoutedEventArgs e) => OpenUrl(RepositoryUrl);
+
+    private void OpenQuark(object sender, RoutedEventArgs e) => OpenUrl(QuarkShareUrl);
 
     private void OpenIssues(object sender, RoutedEventArgs e) => OpenUrl(IssuesUrl);
 
