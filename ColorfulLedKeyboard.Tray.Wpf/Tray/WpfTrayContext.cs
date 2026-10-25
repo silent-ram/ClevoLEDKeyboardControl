@@ -146,11 +146,25 @@ public sealed class WpfTrayContext : IDisposable
             ? AppStrings.Format("menu.updateFound", _availableUpdate!.LatestVersion?.ToString(3))
             : AppStrings.Get("menu.checkUpdate"), onClick: async () =>
         {
-            if (_availableUpdate?.Status == UpdateCheckStatus.Available && !string.IsNullOrWhiteSpace(_availableUpdate.ReleaseUrl))
-                UpdateChecker.OpenUrl(_availableUpdate.ReleaseUrl);
+            // 有新版本：弹渠道选择（GitHub / 夸克），不再直接跳转
+            if (updateAvailable) ShowUpdateAvailable(_availableUpdate!);
             else await CheckForUpdatesManuallyAsync();
         });
-        if (updateAvailable) update.Foreground = FindBrush("Brush.Error");
+        if (updateAvailable)
+        {
+            update.Foreground = FindBrush("Brush.Error");
+            // 文字右侧附下载图标（Segoe MDL2 Assets 的下载符号）
+            var header = new StackPanel { Orientation = Orientation.Horizontal };
+            header.Children.Add(new TextBlock { Text = update.Header.ToString(), VerticalAlignment = VerticalAlignment.Center });
+            header.Children.Add(new TextBlock
+            {
+                Text = "\uE896",
+                FontFamily = new System.Windows.Media.FontFamily("Segoe MDL2 Assets"),
+                Margin = new Thickness(8, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            });
+            update.Header = header;
+        }
         menu.Items.Add(update);
 
         menu.Items.Add(MakeItem(AppStrings.Get("menu.about"), onClick: OpenAbout));

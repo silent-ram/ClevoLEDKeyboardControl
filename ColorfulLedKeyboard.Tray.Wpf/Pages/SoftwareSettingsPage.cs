@@ -67,6 +67,7 @@ public sealed class SoftwareSettingsPage : UserControl
         Visibility = Visibility.Collapsed
     };
     private string? _updateReleaseUrl;
+    private string? _updateLatestVersion;
     private int _checkingUpdates;
 
     private readonly System.Windows.Controls.CheckBox _userImprovementPlanEnabled = MakeCheck("set.telemetry.enable");
@@ -110,7 +111,10 @@ public sealed class SoftwareSettingsPage : UserControl
         _userImprovementPlanEnabled.Unchecked += (_, _) => MarkDirty();
         _updateAvailable.MouseLeftButtonDown += (_, _) =>
         {
-            if (!string.IsNullOrWhiteSpace(_updateReleaseUrl)) UpdateChecker.OpenUrl(_updateReleaseUrl);
+            // 渠道选择弹窗（GitHub / 夸克），与托盘、关于页同一形态
+            if (_updateLatestVersion is null) return;
+            Dialogs.UpdateStatusDialog.ShowAvailable(_updateLatestVersion, AssemblyVersion3(),
+                _updateReleaseUrl);
         };
 
         // 开机自启动是即时生效的系统开关，不参与"保存并应用"（WinForms 语义一致）。
@@ -536,6 +540,7 @@ public sealed class SoftwareSettingsPage : UserControl
         {
             var available = result?.Status == UpdateCheckStatus.Available && result!.LatestVersion is not null;
             _updateReleaseUrl = available ? result!.ReleaseUrl : null;
+            _updateLatestVersion = available ? result!.LatestVersion!.ToString(3) : null;
             _updateAvailable.Text = available
                 ? AppStrings.Format("set.update.badge", result!.LatestVersion!.ToString(3))
                 : "";
@@ -543,6 +548,12 @@ public sealed class SoftwareSettingsPage : UserControl
             NavigationBadgeChanged?.Invoke(this, EventArgs.Empty);
         });
     }
+
+    private static string AssemblyVersion3() =>
+        (System.Reflection.Assembly.GetExecutingAssembly()
+            .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion is { } info ? info : "")
+        .Split('+')[0];
 
     /// <summary>导航徽标文本（供宿主设置页签上的"新版本"提示）。</summary>
     public string? UpdateBadge => _updateAvailable.Visibility == Visibility.Visible ? AppStrings.Get("set.update.badgeShort") : null;

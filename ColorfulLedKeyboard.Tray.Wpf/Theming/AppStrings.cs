@@ -465,7 +465,7 @@ internal static class AppStrings
         ["set.accent.current"] = ("当前强调色", "Current accent"),
         ["set.tooltip.custom"] = ("自定义颜色...", "Custom color..."),
         ["set.tooltip.remove"] = ("{0}（悬停右上角 ✕ 删除）", "{0} (hover the ✕ in the corner to remove)"),
-        ["set.update.badge"] = ("发现新版本 v{0}，点击打开下载页面", "New version v{0} — click to open the download page"),
+        ["set.update.badge"] = ("发现新版本 v{0}，点击选择下载渠道", "New version v{0} — click to pick a download channel"),
         ["set.update.badgeShort"] = ("新版本", "Update"),
         ["set.startup.fail"] = ("无法修改开机自启动：{0}", "Cannot change launch-at-startup: {0}"),
         ["set.startup.state"] = ("托盘自启：{0} · 灯效服务：{1}", "Tray: {0} · Service: {1}"),
