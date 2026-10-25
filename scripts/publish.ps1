@@ -5,6 +5,13 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
+
+# 防呆：安装器 manifest 必须声明管理员提权（调试时可能临时改成 asInvoker 忘恢复，
+# 打出的包装不上且不易察觉）
+$manifestPath = Join-Path $root "ColorfulLedKeyboard.Installerpp.manifest"
+if (-not (Select-String -LiteralPath $manifestPath -Pattern 'requireAdministrator' -Quiet)) {
+    throw "app.manifest 未声明 requireAdministrator（疑似调试遗留 asInvoker），拒绝打包。"
+}
 $publishRoot = Join-Path $root "publish"
 $servicePublish = Join-Path $publishRoot "Service"
 $trayPublish = Join-Path $publishRoot "Tray"
