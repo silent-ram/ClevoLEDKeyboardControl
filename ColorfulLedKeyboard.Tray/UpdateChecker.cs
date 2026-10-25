@@ -18,6 +18,7 @@ public sealed class UpdateChecker
     private readonly Func<TimeSpan, CancellationToken, Task> _delayAsync;
     private readonly Version _currentVersion;
     public const string ReleasesUrl = "https://github.com/silent-ram/ClevoLEDKeyboardControl/releases";
+    public const string QuarkShareUrl = "https://pan.quark.cn/s/822575d75c7b";
     private const string LatestReleaseUrl = "https://github.com/silent-ram/ClevoLEDKeyboardControl/releases/latest";
     private const string ReleasesFeedUrl = "https://github.com/silent-ram/ClevoLEDKeyboardControl/releases.atom";
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
@@ -190,6 +191,11 @@ public sealed class UpdateChecker
     public static void OpenReleases()
     {
         OpenUrl(ReleasesUrl);
+    }
+
+    public static void OpenQuark()
+    {
+        OpenUrl(QuarkShareUrl);
     }
 
     public static void OpenUrl(string url)

@@ -102,9 +102,18 @@ public partial class AboutPage : UserControl
 
     private void OpenRepository(object sender, RoutedEventArgs e) => OpenUrl(RepositoryUrl);
 
-    private void OpenQuark(object sender, RoutedEventArgs e) => OpenUrl(QuarkShareUrl);
+    private void OpenQuark(object sender, RoutedEventArgs e) => OpenUrl(UpdateChecker.QuarkShareUrl);
 
     private void OpenIssues(object sender, RoutedEventArgs e) => OpenUrl(IssuesUrl);
+
+    /// <summary>手动检查更新：交由宿主窗口回调托盘的检查管线（结果以主题化弹窗呈现）。</summary>
+    private void CheckForUpdates(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (Window.GetWindow(this) is MainWindow host && host.ManualUpdateCheck is { } check)
+        {
+            _ = check();
+        }
+    }
 
     private static void OpenUrl(string url) =>
         Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });

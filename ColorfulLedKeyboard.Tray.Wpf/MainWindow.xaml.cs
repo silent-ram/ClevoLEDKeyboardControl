@@ -157,6 +157,9 @@ public partial class MainWindow : Window
         _ = _softwareSettingsPage?.CheckForUpdatesNowAsync(check);
     }
 
+    /// <summary>关于页“检查更新”回调：由托盘注入手动检查管线（结果以主题化弹窗呈现）。</summary>
+    public Func<System.Threading.Tasks.Task>? ManualUpdateCheck { get; set; }
+
     public void ActivateWindow()
     {
         if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;

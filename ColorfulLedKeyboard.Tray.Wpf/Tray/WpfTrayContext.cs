@@ -489,6 +489,7 @@ public sealed class WpfTrayContext : IDisposable
             RefreshMenu();
             _ = SyncUsageTelemetryAndScheduleAsync();
         };
+        _settingsWindow.ManualUpdateCheck = () => CheckForUpdatesManuallyAsync();
         _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         _settingsWindow.Show();
         _settingsWindow.ActivateWindow();
