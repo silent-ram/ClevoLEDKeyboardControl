@@ -170,7 +170,7 @@ public partial class App : Application
             {
                 _trayContext!.OpenAbout();
                 DoEvents();
-                var about = Current.Windows.OfType<Window>().FirstOrDefault(w => w.Title.StartsWith("关于"));
+                var about = Current.Windows.OfType<Window>().FirstOrDefault(w => w.Title.StartsWith("关于") || w.Title.StartsWith("About"));
                 if (about is not null)
                 {
                     DoEvents();

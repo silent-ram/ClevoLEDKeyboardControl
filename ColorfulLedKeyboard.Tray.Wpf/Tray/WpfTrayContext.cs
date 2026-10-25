@@ -526,9 +526,10 @@ public sealed class WpfTrayContext : IDisposable
         }
         var window = new Window
         {
-            Title = "About ClevoLEDKeyboardControl",
+            Title = AppStrings.Get("win.about.title"),
             WindowStartupLocation = WindowStartupLocation.CenterScreen,
-            Width = 440,
+            // 三个按钮（GitHub/夸克/反馈）+ 卡片边距需要 ~475 逻辑宽，440 会裁掉末位按钮
+            Width = 480,
             SizeToContent = SizeToContent.Height,
             MinWidth = 400,
             Background = (System.Windows.Media.Brush)Application.Current.Resources["Brush.Window"],

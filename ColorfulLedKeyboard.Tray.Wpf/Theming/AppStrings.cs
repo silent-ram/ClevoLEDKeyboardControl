@@ -525,6 +525,7 @@ internal static class AppStrings
         ["win.driver.installed"] = ("已安装", "Installed"),
         ["win.driver.notFound"] = ("未找到", "Not found"),
         ["win.versionPrefix"] = ("版本 v{0}", "Version v{0}"),
+        ["win.about.title"] = ("关于 ClevoLEDKeyboardControl", "About ClevoLEDKeyboardControl"),
         ["upd.upToDate.title"] = ("当前已是最新版本", "You are up to date"),
         ["upd.upToDate.body"] = ("当前版本 v{0}。如需手动获取安装包，请选择下载渠道：", "You are on v{0}. To get the installer manually, pick a download channel:"),
         ["upd.available.title"] = ("发现新版本 v{0}", "New version v{0} found"),
