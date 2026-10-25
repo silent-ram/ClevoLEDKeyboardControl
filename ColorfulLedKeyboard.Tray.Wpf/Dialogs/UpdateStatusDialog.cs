@@ -36,7 +36,7 @@ public static class UpdateStatusDialog
     private static void ShowChannel(string headline, string body, string? releaseUrl, string? laterText)
     {
         var window = CreateWindow();
-        var stack = new StackPanel { Margin = new Thickness(24, 20, 24, 20) };
+        var stack = new StackPanel { Margin = new Thickness(24, 20, 24, 20), MinWidth = 380 };
         stack.Children.Add(Headline(headline));
         stack.Children.Add(AccentRule());
         stack.Children.Add(BodyText(body));
@@ -92,12 +92,13 @@ public static class UpdateStatusDialog
 
     private static Window CreateWindow()
     {
-        // 修复：窗口标题此前写死为“检查更新失败”，已是最新/发现新版本形态全部顶着错误标题
+        // 修复：窗口标题此前写死为“检查更新失败”，已是最新/发现新版本形态全部顶着错误标题；
+        // 宽度随内容自适应（固定 400 时三按钮行溢出，“稍后再说”被裁掉一半）。
         var window = new Window
         {
             Title = AppStrings.Get("upd.window.title") + " - ClevoLEDKeyboardControl",
-            SizeToContent = SizeToContent.Height,
-            Width = 400,
+            SizeToContent = SizeToContent.WidthAndHeight,
+            MinWidth = 360,
             ResizeMode = ResizeMode.NoResize,
             ShowInTaskbar = false,
             Background = (Brush)Application.Current.Resources["Brush.Window"],
