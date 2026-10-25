@@ -140,12 +140,10 @@ public partial class MainWindow : Window
         UpdateSaveBar();
     });
 
-    /// <summary>软件设置页"发现新版本"徽标（WinForms _navigation.SetBadge 对齐）。</summary>
+    /// <summary>导航徽标已按用户要求移除（更新提示统一收敛到关于页红字提示）。</summary>
     public void UpdateNavigationBadge()
     {
-        var badge = _softwareSettingsPage?.UpdateBadge;
-        var items = NavItems.Select(item => new NavItem(NavTitle(item), item.Glyph,
-            item.Key == "nav.settings" ? badge : null)).ToList();
+        var items = NavItems.Select(item => new NavItem(NavTitle(item), item.Glyph)).ToList();
         var selected = Navigation.SelectedIndex;
         Navigation.ItemsSource = items;
         Navigation.SelectedIndex = selected;

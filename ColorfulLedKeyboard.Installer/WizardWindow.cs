@@ -79,7 +79,7 @@ internal sealed class WizardWindow : Form
         StartPosition = FormStartPosition.CenterScreen;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(Dpi(560), Dpi(400));
+        ClientSize = new Size(Dpi(560), Dpi(416));
         BackColor = InstallerTheme.Window;
         Font = InstallerTheme.BaseFont;
         ShowInTaskbar = false;
@@ -583,7 +583,7 @@ internal sealed class WizardWindow : Form
             _content.Controls.Add(marker);
             _content.Controls.Add(text);
             _stepMarkers.Add((key, marker));
-            y += Dpi(30);
+            y += Dpi(28);
         }
 
         _ = RunOperationAsync(operation);

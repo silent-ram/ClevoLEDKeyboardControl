@@ -115,6 +115,22 @@ public partial class AboutPage : UserControl
         }
     }
 
+    /// <summary>托盘独立窗口的精简形态：隐藏检查更新链接、被动提示与夸克按钮（用户指定）。</summary>
+    public bool TrayCompact
+    {
+        get => _trayCompact;
+        set
+        {
+            _trayCompact = value;
+            if (!value) return;
+            CheckUpdateLink.Visibility = Visibility.Collapsed;
+            UpdateBadgeText.Visibility = Visibility.Collapsed;
+            QuarkButton.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private bool _trayCompact;
+
     /// <summary>被动更新提示（数据来自软件设置页的检查结果）：有新版本时红字显示，点击弹渠道选择。</summary>
     private string? _updateLatestVersion;
 

@@ -528,8 +528,8 @@ public sealed class WpfTrayContext : IDisposable
         {
             Title = AppStrings.Get("win.about.title"),
             WindowStartupLocation = WindowStartupLocation.CenterScreen,
-            // 三个按钮（GitHub/夸克/反馈）+ 卡片边距需要 ~475 逻辑宽，440 会裁掉末位按钮
-            Width = 480,
+            // 精简形态（无夸克按钮/检查链接）两个按钮 + 边距 440 足够
+            Width = 440,
             SizeToContent = SizeToContent.Height,
             MinWidth = 400,
             Background = (System.Windows.Media.Brush)Application.Current.Resources["Brush.Window"],
@@ -538,8 +538,8 @@ public sealed class WpfTrayContext : IDisposable
             Foreground = (System.Windows.Media.Brush)Application.Current.Resources["Brush.Text"]
         };
         window.SourceInitialized += (_, _) => WpfThemeManager.ApplyTitleBarMode(window);
-        // 直接复用设置窗口的关于页：内容/按钮与设置窗口完全一致，避免两份实现漂移。
-        window.Content = new Pages.AboutPage();
+        // 复用设置窗口的关于页；托盘独立窗口为精简形态（隐藏检查更新/夸克/被动提示）
+        window.Content = new Pages.AboutPage { TrayCompact = true };
         _aboutWindow = window;
         window.Closed += (_, _) => _aboutWindow = null;
         window.Show();
